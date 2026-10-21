@@ -18,10 +18,15 @@ built and verified.
 
 | Surface | URL |
 | --- | --- |
-| **App demo (real UI, offline store)** | https://kudzimusar.github.io/tengasell-auction/ |
+| **Live application (real node)** | https://tengasell-zw.fly.dev |
+| Static demo (offline store) | https://kudzimusar.github.io/tengasell-auction/ |
 | Written overview | https://kudzimusar.github.io/tengasell-auction/project/ |
 | Repository | https://github.com/kudzimusar/tengasell-auction |
 | CI runs | https://github.com/kudzimusar/tengasell-auction/actions |
+
+The Fly deployment runs the full stack — Next.js, Trailbase (Rust), the six mini-services and the
+gateway — against the marketplace database (`docs/REAL_STACK.md`, `docs/DEPLOY_FLY.md`). The Pages
+site is the static demo: same UI, offline store, no server.
 
 > The Pages deployment runs the **actual marketplace interface**. Because Pages is static, it uses
 the app's built-in offline adapter (`src/lib/tengasell/api/local.ts`) instead of TrailBase: full
