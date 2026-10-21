@@ -4,6 +4,9 @@
 
 import type { MetadataRoute } from "next";
 
+// Emitted at build time (required for `output: export` static builds).
+export const dynamic = "force-static";
+
 const APP_URL = process.env.APP_URL ?? "http://localhost:81";
 
 export default function robots(): MetadataRoute.Robots {

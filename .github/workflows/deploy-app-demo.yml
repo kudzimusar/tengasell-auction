@@ -1,0 +1,87 @@
+name: Deploy app demo to Pages
+
+# Publishes the REAL TengaSell UI as a static site on GitHub Pages.
+#
+# The application is a client-rendered SPA. At boot it probes the TrailBase
+# backend and, when unreachable, falls back to its own offline store
+# (src/lib/tengasell/api/local.ts, seeded from src/data/seed.ts). The build
+# below therefore produces a fully interactive marketplace with no server:
+# browsing, auction rooms, sign-in, bids and checkout all run client-side.
+#
+# Deployment model: the built site is pushed to the `gh-pages` branch, and
+# Pages serves that branch. Branch publishing needs only `contents: write`
+# (no OIDC exchange), and `.nojekyll` is emitted so `_next/` assets survive.
+#
+# The written project overview (docs/preview) is published at /project/, so
+# the product story and the running UI sit side by side.
+#
+# NOTE: demo build only. Real deployments (TrailBase + Node runtime) use the
+# standalone output described in README.md -> Hosting.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Build and publish static demo
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Build application as static demo
+        env:
+          DATABASE_URL: file:${{ github.workspace }}/ci.db
+        run: node scripts/build-static-demo.mjs --base-path="/${GITHUB_REPOSITORY#*/}"
+
+      - name: Add project overview at /project and disable Jekyll
+        run: |
+          mkdir -p out/project
+          cp -R docs/preview/. out/project/
+          touch out/.nojekyll
+
+      - name: Publish build to gh-pages branch
+        run: |
+          set -euo pipefail
+          BUILD_DIR="$GITHUB_WORKSPACE/out"
+          WORKTREE="$(mktemp -d)"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git worktree add --detach "$WORKTREE"
+
+          cd "$WORKTREE"
+          git checkout --orphan gh-pages
+          git rm -rf . >/dev/null 2>&1 || true
+
+          cp -R "$BUILD_DIR/." .
+          touch .nojekyll
+
+          git add -A
+          git commit -q -m "deploy: static demo of ${GITHUB_SHA::7}"
+          git push -f origin gh-pages
+
+          echo "published $(git rev-parse --short HEAD) to gh-pages"

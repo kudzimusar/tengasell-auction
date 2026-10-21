@@ -11,6 +11,10 @@
 
 import type { MetadataRoute } from "next";
 
+// Emitted at build time (required for `output: export` static builds).
+// The TrailBase lookup below then fails fast and the static fallback set is used.
+export const dynamic = "force-static";
+
 const APP_URL = process.env.APP_URL ?? "http://localhost:81";
 
 const POLICY_KEYS = ["tos", "privacy", "aup", "rules", "seller", "refunds", "ip", "accessibility"] as const;

@@ -31,16 +31,37 @@ const securityHeaders = [
   },
 ];
 
+// ── Static demo build (GitHub Pages) ─────────────────────────────────
+// STATIC_DEMO=1 emits a fully static export for GitHub Pages. It removes the
+// need for the API server by using the app's own offline store
+// (src/lib/tengasell/api/index.ts probes TrailBase, then falls back to LocalStore).
+// API routes are excluded by scripts/build-static-demo.mjs because `output: export`
+// cannot include route handlers. Production builds are unchanged.
+const isStaticDemo = process.env.STATIC_DEMO === "1";
+const demoBasePath = process.env.STATIC_DEMO_BASE_PATH || "";
+
 const nextConfig: NextConfig = {
-  output: "standalone",
+  ...(isStaticDemo
+    ? {
+        output: "export" as const,
+        trailingSlash: true,
+        ...(demoBasePath ? { basePath: demoBasePath, assetPrefix: demoBasePath } : {}),
+        images: { unoptimized: true },
+      }
+    : { output: "standalone" as const }),
   /* config options here */
   typescript: {
     ignoreBuildErrors: true,
   },
   reactStrictMode: false,
-  async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
-  },
+  // `headers()` is not supported by static export — omit it in demo builds.
+  ...(isStaticDemo
+    ? {}
+    : {
+        async headers() {
+          return [{ source: "/:path*", headers: securityHeaders }];
+        },
+      }),
 };
 
 export default nextConfig;
