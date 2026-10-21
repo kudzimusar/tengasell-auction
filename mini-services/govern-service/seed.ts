@@ -445,7 +445,16 @@ export function importControls(): number {
   // Idempotent upsert by id. NEVER clobbers admin-managed fields
   // (status/evidence_note/updated_by stay once a human sets them); the
   // /admin/controls/import endpoint applies the same rule.
-  const src = JSON.parse(readFileSync(WORKSHEET_PATH, "utf8")) as {
+  let raw: string;
+  try {
+    raw = readFileSync(WORKSHEET_PATH, "utf8");
+  } catch {
+    // The MSCS worksheet is an optional seed fixture; the governance service
+    // must still boot (policy pages, DSAR, registers) without it.
+    console.warn(`[govern] worksheet not found at ${WORKSHEET_PATH} — skipping control import`);
+    return 0;
+  }
+  const src = JSON.parse(raw) as {
     controls?: {
       id: string; domain: string; name: string; floor: string; criticality: string;
       evidenceFloor?: string; applicability: string; status: string; ownerWave?: string;

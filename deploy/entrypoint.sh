@@ -34,6 +34,22 @@ if [ ! -f "$DATA_DIR/db/custom.db" ] && [ -f /app/seed/platform.db ]; then
   cp /app/seed/platform.db "$DATA_DIR/db/custom.db"
 fi
 
+# ── Service databases (comms / finance / govern / trust) ──────────────
+for svc in comms finance govern trust; do
+  if [ ! -f "$DATA_DIR/db/$svc.db" ] && [ -f "/app/seed/$svc.db" ]; then
+    log "installing $svc database"
+    cp "/app/seed/$svc.db" "$DATA_DIR/db/$svc.db"
+    rm -f "$DATA_DIR/db/$svc.db-wal" "$DATA_DIR/db/$svc.db-shm"
+  fi
+done
+
+# The services default to /home/z/my-project paths from the original sandbox.
+export COMMS_DB_PATH="$DATA_DIR/db/comms.db"
+export FINANCE_DB_PATH="$DATA_DIR/db/finance.db"
+export GOVERN_DB_PATH="$DATA_DIR/db/govern.db"
+export TRUST_DB_PATH="$DATA_DIR/db/trust.db"
+export MSCS_WORKSHEET_PATH="${MSCS_WORKSHEET_PATH:-/app/agent-ctx/mscs-worksheet-12.json}"
+
 # ── Trailbase (Rust) ──────────────────────────────────────────────────
 log "starting trailbase on :3001"
 trail --depot "$DATA_DIR/traildepot" run --address 0.0.0.0:3001 &

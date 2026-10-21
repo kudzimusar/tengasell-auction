@@ -68,6 +68,7 @@ COPY --from=build /app/mini-services/trade-engine/node_modules /app/mini-service
 # Depot template (config + migrations) and optional prebuilt seed databases.
 COPY mini-services/trailbase-db/traildepot /app/depot-template
 COPY deploy/seed /app/seed
+COPY agent-ctx/mscs-worksheet-12.json /app/agent-ctx/mscs-worksheet-12.json
 
 COPY deploy/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh

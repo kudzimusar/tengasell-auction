@@ -2,7 +2,8 @@
 // DSAR export bundles, and the canonical MSCS worksheet path (controls import).
 
 export const PORT = 3008;
-export const DB_PATH = "/home/z/my-project/db/govern.db";
+export const DB_PATH =
+  process.env.GOVERN_DB_PATH ?? "/home/z/my-project/db/govern.db";
 
 /** TrailBase (Rust backend) — same env conventions as the trade engine. */
 export const TRAILBASE = process.env.TRAILBASE_URL ?? "http://localhost:3001";

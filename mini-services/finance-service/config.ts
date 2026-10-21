@@ -5,7 +5,8 @@
 // managed via GET/POST /admin/config.
 
 export const PORT = 3006;
-export const DB_PATH = "/home/z/my-project/db/finance.db";
+export const DB_PATH =
+  process.env.FINANCE_DB_PATH ?? "/home/z/my-project/db/finance.db";
 
 export const TRAILBASE = process.env.TRAILBASE_URL ?? "http://localhost:3001";
 export const ADMIN_USERNAME = process.env.ADMIN_USERNAME ?? "admin";

@@ -2,7 +2,8 @@
 // (hexes extracted verbatim from the Next app's src/app/globals.css :root tokens).
 
 export const PORT = 3005;
-export const DB_PATH = "/home/z/my-project/db/comms.db";
+export const DB_PATH =
+  process.env.COMMS_DB_PATH ?? "/home/z/my-project/db/comms.db";
 
 /** Public app origin used for deep links + unsubscribe URLs (BFF rewrites as needed). */
 export const APP_URL = process.env.APP_URL ?? "http://localhost:81";

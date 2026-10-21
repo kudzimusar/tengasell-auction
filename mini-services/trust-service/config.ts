@@ -1,7 +1,8 @@
 // Trust-service configuration — hardcoded port + paths (mirror comms config).
 
 export const PORT = 3007;
-export const DB_PATH = "/home/z/my-project/db/trust.db";
+export const DB_PATH =
+  process.env.TRUST_DB_PATH ?? "/home/z/my-project/db/trust.db";
 
 /** TrailBase (Rust backend) origin + admin credentials (same as trade-engine). */
 export const TRAILBASE = process.env.TRAILBASE_URL ?? "http://localhost:3001";
