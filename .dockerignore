@@ -1,0 +1,29 @@
+# Build context exclusions — keep the image small and builds fast.
+.git
+.github
+.tools
+node_modules
+.next
+out
+coverage
+*.log
+docs/preview/assets
+screenshots
+upload
+backups
+db
+*.db
+*.db-wal
+*.db-shm
+# …but the seed databases must reach the image
+!deploy/seed/*.db
+.env
+.env.*
+!.env.example
+ci.db
+static-demo-build.log
+build.log
+rebuild.log
+npm-install.log
+smoke-server.log
+tengasell-auction.zip

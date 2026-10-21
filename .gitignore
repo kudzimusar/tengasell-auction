@@ -85,3 +85,6 @@ server.log
 # local tool binaries (Trailbase is downloaded, never committed)
 /.tools/
 *.zip
+
+# Seed databases shipped in the image (demo data, no live credentials)
+!deploy/seed/*.db

@@ -1,0 +1,48 @@
+# Fly.io configuration for the real TengaSell node.
+#
+# One machine runs Trailbase, the Next app, the six mini-services and the
+# gateway. SQLite lives on the mounted volume, so the machine must stay a
+# single instance until the database moves to Postgres.
+#
+#   fly launch --copy-config --name <app> --region jnb
+#   fly volumes create tengasell_data --size 1 --region jnb
+#   fly deploy
+
+app = "tengasell-zw"
+primary_region = "jnb"          # Johannesburg — closest to Zimbabwe
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  TGS_DATA_DIR = "/data"
+  TRAILBASE_URL = "http://127.0.0.1:3001"
+  DATABASE_URL = "file:/data/db/custom.db"
+  APP_URL = "https://tengasell-zw.fly.dev"
+  NODE_ENV = "production"
+  # Seeded staff account (change before sharing the URL)
+  ADMIN_USERNAME = "admin"
+  ADMIN_PASSWORD = "Tengasell#2025"
+
+[[mounts]]
+  source = "tengasell_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "10s"
+    grace_period = "60s"
+    method = "GET"
+    path = "/"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
