@@ -32,7 +32,7 @@ Checked through the gateway:
 | `GET /api/records/v1/auctions?count=true&XTransformPort=3001` | 200, **55 auctions** |
 | `GET /api/records/v1/bids?count=true&XTransformPort=3001` | 200, **443 bids** |
 | `GET /api/records/v1/offers?XTransformPort=3001` | 200 (Gap-8 table exists) |
-| `POST /api/auth/v1/login?XTransformPort=3001` (`admin` / `Tengasell#2025`) | 200, token issued |
+| `POST /api/auth/v1/login?XTransformPort=3001` (staff credentials from the vault) | 200, token issued |
 
 ---
 
