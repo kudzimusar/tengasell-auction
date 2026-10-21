@@ -61,6 +61,9 @@ WORKDIR /app
 COPY --from=build /app/out/app /app
 COPY scripts/gateway.mjs /app/gateway.mjs
 COPY mini-services /app/mini-services
+# The trade engine needs its installed dependency (socket.io); node_modules are
+# excluded from the build context, so bring them over from the build stage.
+COPY --from=build /app/mini-services/trade-engine/node_modules /app/mini-services/trade-engine/node_modules
 
 # Depot template (config + migrations) and optional prebuilt seed databases.
 COPY mini-services/trailbase-db/traildepot /app/depot-template
