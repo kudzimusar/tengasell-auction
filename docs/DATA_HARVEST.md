@@ -134,3 +134,29 @@ sqlite3 main.db "select count(*) from offers;" 2>/dev/null          # table must
 git --git-dir=.git tag | grep export-github                          # tag must exist
 sha256sum -c CHECKSUMS.sha256                                        # archives must verify
 ```
+
+---
+
+## Recovery update — 2026-10-21 (supersedes the gaps above)
+
+A re-export from z.ai supplied the missing live database
+(`backups/2026-10-21T01-50-25-188Z/trailbase.db` in the new workspace archive).
+
+| Item | Earlier archive | Recovered |
+| --- | --- | --- |
+| Orders | 18 | **24** |
+| Auctions | 55 | 55 |
+| Bids | 443 | 443 |
+| Profiles | 17 | 17 |
+| Tables | 18 | **25** (incl. `offers`, `saved_searches`, `live_sessions`) |
+
+Order states in the recovered database: 19 `pending_payment`, 2 `completed`, 1 `paid`,
+1 `shipped`, 1 `cancelled`.
+
+**Correction to the earlier report:** the Gap-8 *rows* were never missing. z.ai's live database
+also holds **0 rows** in `offers`, `saved_searches` and `live_sessions` — the tables exist and the
+features were exercised during UAT, but no records were left behind. There is nothing to recover
+for those three tables; they are empty by state, not by export failure.
+
+The recovered database is now the seed (`deploy/seed/trailbase-main.db`) and is running on the
+Fly deployment.
