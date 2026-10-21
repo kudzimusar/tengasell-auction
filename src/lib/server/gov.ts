@@ -53,13 +53,21 @@ async function govHealthy(timeoutMs = 1500): Promise<boolean> {
 
 /** Ensure the govern-service answers /health, lazily spawning it when down. */
 export async function ensureGovernService(): Promise<boolean> {
-  if (await govHealthy()) return true;
-  try {
-    await ensureService(GOV_SPEC as unknown as Parameters<typeof ensureService>[0]);
-  } catch (err) {
-    console.error("[api/gov] spawn failed:", err);
+  // The container boots the service itself; on a cold start (Fly resume) it can
+  // be a few seconds behind the app. Poll briefly instead of failing the first
+  // request with "Governance service is starting up".
+  for (let attempt = 0; attempt < 10; attempt++) {
+    if (await govHealthy(800)) return true;
+    if (attempt === 0) {
+      try {
+        await ensureService(GOV_SPEC as unknown as Parameters<typeof ensureService>[0]);
+      } catch (err) {
+        console.error("[api/gov] spawn failed:", err);
+      }
+    }
+    await new Promise((r) => setTimeout(r, 400));
   }
-  return govHealthy(3000);
+  return false;
 }
 
 interface ProxyOpts {
