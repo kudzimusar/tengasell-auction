@@ -74,8 +74,13 @@ function useInterval(fn: () => void, ms: number) {
 
 function RouteView() {
   const { route } = useRouter();
+  // Pages fetch on mount. If they mount while the API is still probing (demo),
+  // they keep showing offline-store data even after the probe succeeds. Keying
+  // the view by mode forces one remount when demo flips to live, so every page
+  // refetches against Trailbase instead of the seed.
+  const { mode } = useAuth();
   const seg = route.segments;
-  const key = route.full;
+  const key = `${route.full}:${mode}`;
 
   // demo-mode sweep keeps local auction endings honest
   useInterval(demoSweep, 30_000);
