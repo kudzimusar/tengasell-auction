@@ -1,0 +1,12 @@
+{
+  "name": "tengasell-trailbase",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Tengasell Rust backend — TrailBase v0.35 (SQLite) on port 3001",
+  "scripts": {
+    "dev": "/home/z/.local/bin/trail --depot ./traildepot run --address 0.0.0.0:3001",
+    "seed": "bun run seed.ts",
+    "gen-sql": "bun run gen-sql.ts",
+    "openapi": "/home/z/.local/bin/trail openapi > openapi.json"
+  }
+}

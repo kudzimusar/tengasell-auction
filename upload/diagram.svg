@@ -1,0 +1,93 @@
+<svg class="light" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 735.9 182" width="735.9" height="182">
+  <style>:root, .light {
+    --_lm: ;
+    --_dm: initial;
+    --bg: #ffffff;
+    --fg: #1f1f1f;
+    --line: #545454;
+    --accent: #1a73e8;
+    --surface: #f8f9fa;
+    --border: #747775;
+  }
+
+  .dark {
+    --_lm: initial;
+    --_dm: ;
+    --bg: #1f1f1f;
+    --fg: #e3e3e3;
+    --line: #bfbfbf;
+    --accent: #8ab4f8;
+    --surface: #2d2e30;
+    --border: #8e918f;
+  }
+  @import url('https://fonts.googleapis.com/css2?family=Google+Sans+Mono:wght@400;500;600;700&amp;display=swap');
+  text { font-family: 'Google Sans Mono', sans-serif; }
+  svg {
+    --_text:          var(--primaryTextColor, var(--fg));
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--lineColor, var(--defaultLinkColor, var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)))));
+    --_arrow:         var(--_line);
+    --_node-fill:     var(--primaryColor, var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg))));
+    --_node-stroke:   var(--primaryBorderColor, var(--nodeBorder, var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)))));
+    --_group-fill:    var(--surface, var(--bg));
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  var(--_node-stroke);
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }</style>
+  <defs>
+    <style>text { font-family: "Google Sans Mono", monospace; font-size: 13px; dominant-baseline: central; white-space: pre; }
+.outer-box { fill: color-mix(in srgb, var(--fg) 6%, transparent); stroke: var(--primaryBorderColor, var(--nodeBorder, var(--border, var(--_node-stroke)))); stroke-width: 1.75px; }
+.rect-pill { fill: var(--bg); stroke: var(--primaryBorderColor, var(--nodeBorder, var(--border, var(--_node-stroke)))); stroke-width: 1.5px; }
+.stadium-pill { fill: var(--bg); stroke: var(--primaryBorderColor, var(--nodeBorder, var(--border, var(--_node-stroke)))); stroke-width: 1.5px; }
+.hex-pill { fill: var(--bg); stroke: var(--primaryBorderColor, var(--nodeBorder, var(--border, var(--_node-stroke)))); stroke-width: 1.5px; stroke-linejoin: round; stroke-linecap: round; }
+.diamond-box { fill: color-mix(in srgb, var(--fg) 9%, transparent); stroke: var(--primaryBorderColor, var(--nodeBorder, var(--border, var(--_node-stroke)))); stroke-width: 1.5px; stroke-linejoin: round; stroke-linecap: round; }
+.header-text { font-size: 14px; font-weight: 600; fill: var(--_text); }
+.label-text { font-size: 13px; font-weight: 500; fill: var(--_text); }
+.annotation-text { font-size: 12px; font-weight: 500; fill: var(--_text); }
+.arrow-line, .bus-line { stroke: var(--_line); stroke-width: 1.5px; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+.divider-line { stroke: var(--primaryBorderColor, var(--nodeBorder, var(--border, var(--_node-stroke)))); stroke-width: 1.0px; stroke-opacity: 0.75; }</style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 1 L 10 5 L 0 9 Z" fill="var(--_arrow)"/>
+    </marker>
+    <marker id="arrow-left" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 Z" fill="var(--_arrow)"/>
+    </marker>
+  </defs>
+  <g class="shape inner">
+    <rect x="15" y="15" width="157.5" height="20" rx="3" ry="3" class="rect-pill"/>
+    <text x="93.75" y="25" class="label-text" text-anchor="middle" dominant-baseline="central">Customer Checkout</text>
+  </g>
+  <g class="shape inner">
+    <rect x="223" y="15" width="192" height="20" rx="10" ry="10" class="stadium-pill"/>
+    <text x="319" y="25" class="label-text" text-anchor="middle" dominant-baseline="central">Photon/Nominatim API</text>
+  </g>
+  <g class="shape inner">
+    <rect x="15" y="81" width="166" height="20" rx="3" ry="3" class="rect-pill"/>
+    <text x="98" y="91" class="label-text" text-anchor="middle" dominant-baseline="central">Logistics Dispatch</text>
+  </g>
+  <g class="shape inner">
+    <rect x="223" y="81" width="192" height="20" rx="10" ry="10" class="stadium-pill"/>
+    <text x="319" y="91" class="label-text" text-anchor="middle" dominant-baseline="central">OSRM/GraphHopper API</text>
+  </g>
+  <g class="shape inner">
+    <rect x="15" y="147" width="166" height="20" rx="3" ry="3" class="rect-pill"/>
+    <text x="98" y="157" class="label-text" text-anchor="middle" dominant-baseline="central">Customer Dashboard</text>
+  </g>
+  <g class="shape inner">
+    <rect x="221.95" y="147" width="168.6" height="20" rx="10" ry="10" class="stadium-pill"/>
+    <text x="306.25" y="157" class="label-text" text-anchor="middle" dominant-baseline="central">TileServer GL API</text>
+  </g>
+  <line x1="172.5" y1="25" x2="221" y2="25" class="arrow-line" marker-end="url(#arrow)"/>
+  <line x1="415" y1="25" x2="453" y2="25" class="arrow-line" marker-end="url(#arrow)"/>
+  <line x1="181" y1="91" x2="221" y2="91" class="arrow-line" marker-end="url(#arrow)"/>
+  <line x1="415" y1="91" x2="453" y2="91" class="arrow-line" marker-end="url(#arrow)"/>
+  <line x1="181" y1="157" x2="219.95" y2="157" class="arrow-line" marker-end="url(#arrow)"/>
+  <line x1="390.55" y1="157" x2="444.5" y2="157" class="arrow-line" marker-end="url(#arrow)"/>
+  <line x1="297.75" y1="35" x2="297.75" y2="79" class="arrow-line" marker-end="url(#arrow)"/>
+  <line x1="297.75" y1="101" x2="297.75" y2="145" class="arrow-line" marker-end="url(#arrow)"/>
+  <text x="463.5" y="25" class="annotation-text" text-anchor="start" dominant-baseline="central">Resolves Address Coordinates</text>
+  <text x="463.5" y="91" class="annotation-text" text-anchor="start" dominant-baseline="central">Computes Distance &amp; Dispatch Fees</text>
+  <text x="455" y="157" class="annotation-text" text-anchor="start" dominant-baseline="central">Renders Tracking Map</text>
+</svg>

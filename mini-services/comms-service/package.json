@@ -1,0 +1,11 @@
+{
+  "name": "comms-service",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "description": "Tengasell Unified Communications System (TUCS) core — multi-channel comms (email/telegram/whatsapp/messenger), mediated relay with moderation, notification fan-out, campaign engine and mock channel simulators on port 3005.",
+  "scripts": {
+    "dev": "bun --hot index.ts",
+    "start": "bun index.ts"
+  }
+}

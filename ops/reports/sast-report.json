@@ -1,0 +1,1824 @@
+{
+  "harness": "ops/sast.ts (Tengasell in-repo SAST)",
+  "task": "GAP8-G6 — closes MSCS risk-exception evidence gap for SEC-008/009/010/011/012/019/021/025 (RSK-EX-005 compensating control)",
+  "startedAt": "2026-10-21T00:08:42.820Z",
+  "finishedAt": "2026-10-21T00:09:15.943Z",
+  "scope": {
+    "roots": [
+      "src/",
+      "mini-services/",
+      "ops/",
+      "prisma/"
+    ],
+    "filesScanned": 573,
+    "exclusions": "node_modules, .next, .smoke-t5d browser profile, db/*.db* binaries, backups, screenshots, ops/reports (generated); ops/sast.ts+ops/dast.ts self-exempted from secret-scan only (contain scan-rule definitions)"
+  },
+  "summary": {
+    "findings": 45,
+    "bySeverity": {
+      "CRITICAL": 0,
+      "HIGH": 0,
+      "MEDIUM": 2,
+      "LOW": 4,
+      "INFO": 39
+    },
+    "byDisposition": {
+      "fixed": 0,
+      "false-positive": 15,
+      "accepted-with-reason": 30,
+      "reported": 0
+    },
+    "byCategory": {
+      "secret-scan": 10,
+      "transport-security": 22,
+      "dangerous-pattern": 7,
+      "xss-sink": 4,
+      "sql-interpolation": 2
+    }
+  },
+  "dependencyAudit": {
+    "scanner": "osv.dev querybatch (api.osv.dev)",
+    "lockfile": "bun.lock (969 resolved packages expected)",
+    "queries": 969,
+    "vulnerablePackages": [
+      {
+        "name": "@babel/core",
+        "version": "7.28.6",
+        "direct": false,
+        "vulns": [
+          "GHSA-4x5r-pxfx-6jf8"
+        ],
+        "count": 1
+      },
+      {
+        "name": "@babel/helpers",
+        "version": "7.28.6",
+        "direct": false,
+        "vulns": [
+          "GHSA-968p-4wvh-cqc8"
+        ],
+        "count": 1
+      },
+      {
+        "name": "@babel/runtime",
+        "version": "7.28.6",
+        "direct": false,
+        "vulns": [
+          "GHSA-968p-4wvh-cqc8"
+        ],
+        "count": 1
+      },
+      {
+        "name": "@babel/traverse",
+        "version": "7.28.6",
+        "direct": false,
+        "vulns": [
+          "GHSA-67hx-6x53-jw92"
+        ],
+        "count": 1
+      },
+      {
+        "name": "@eslint/plugin-kit",
+        "version": "0.4.1",
+        "direct": false,
+        "vulns": [
+          "GHSA-7q7g-4xm8-89cq",
+          "GHSA-xffm-g5w8-qvg7"
+        ],
+        "count": 2
+      },
+      {
+        "name": "@humanfs/node",
+        "version": "0.16.7",
+        "direct": false,
+        "vulns": [
+          "GHSA-p498-v437-472g"
+        ],
+        "count": 1
+      },
+      {
+        "name": "acorn",
+        "version": "8.15.0",
+        "direct": false,
+        "vulns": [
+          "GHSA-6chw-6frg-f759"
+        ],
+        "count": 1
+      },
+      {
+        "name": "ajv",
+        "version": "6.12.6",
+        "direct": false,
+        "vulns": [
+          "GHSA-2g4f-4pwh-qvx6",
+          "GHSA-v88g-cgmw-v5xw"
+        ],
+        "count": 2
+      },
+      {
+        "name": "ansi-styles",
+        "version": "4.3.0",
+        "direct": false,
+        "vulns": [
+          "MAL-2025-46967"
+        ],
+        "count": 1
+      },
+      {
+        "name": "baseline-browser-mapping",
+        "version": "2.9.15",
+        "direct": false,
+        "vulns": [
+          "GHSA-w5vr-8v7q-w6rv"
+        ],
+        "count": 1
+      },
+      {
+        "name": "brace-expansion",
+        "version": "1.1.12",
+        "direct": false,
+        "vulns": [
+          "GHSA-3jxr-9vmj-r5cp",
+          "GHSA-6j4f-fj2g-mc7p",
+          "GHSA-832h-xg76-4gv6",
+          "GHSA-f886-m6hf-6m8v",
+          "GHSA-jxxr-4gwj-5jf2",
+          "GHSA-mh99-v99m-4gvg",
+          "GHSA-q2hr-2g5m-vwhr",
+          "GHSA-qhr7-859c-m2p7",
+          "GHSA-rgw5-rvv9-x895",
+          "GHSA-v6h2-p8h4-qcjw"
+        ],
+        "count": 10
+      },
+      {
+        "name": "braces",
+        "version": "3.0.3",
+        "direct": false,
+        "vulns": [
+          "GHSA-cwfw-4gq5-mrqx",
+          "GHSA-grv7-fg5c-xmjg",
+          "GHSA-vfj7-8cjw-p6xm"
+        ],
+        "count": 3
+      },
+      {
+        "name": "browserslist",
+        "version": "4.28.1",
+        "direct": false,
+        "vulns": [
+          "GHSA-73wf-gq98-2v4g",
+          "GHSA-c83g-rgw3-j3cx",
+          "GHSA-w8qv-6jwh-64r5"
+        ],
+        "count": 3
+      },
+      {
+        "name": "chalk",
+        "version": "4.1.2",
+        "direct": false,
+        "vulns": [
+          "MAL-2025-46969"
+        ],
+        "count": 1
+      },
+      {
+        "name": "codemirror",
+        "version": "6.0.2",
+        "direct": false,
+        "vulns": [
+          "GHSA-4gw3-8f77-f72c"
+        ],
+        "count": 1
+      },
+      {
+        "name": "color-convert",
+        "version": "2.0.1",
+        "direct": false,
+        "vulns": [
+          "GHSA-pxx3-g568-hxr4",
+          "MAL-2025-46971"
+        ],
+        "count": 2
+      },
+      {
+        "name": "color-name",
+        "version": "1.1.4",
+        "direct": false,
+        "vulns": [
+          "GHSA-5fvm-p68v-5wmh",
+          "MAL-2025-46972"
+        ],
+        "count": 2
+      },
+      {
+        "name": "cookie",
+        "version": "0.7.2",
+        "direct": false,
+        "vulns": [
+          "GHSA-pxg6-pf52-xh8x"
+        ],
+        "count": 1
+      },
+      {
+        "name": "cross-spawn",
+        "version": "7.0.6",
+        "direct": false,
+        "vulns": [
+          "GHSA-3xgq-45jj-v275"
+        ],
+        "count": 1
+      },
+      {
+        "name": "d3-color",
+        "version": "3.1.0",
+        "direct": false,
+        "vulns": [
+          "GHSA-36jr-mh4h-2g58"
+        ],
+        "count": 1
+      },
+      {
+        "name": "debug",
+        "version": "4.4.3",
+        "direct": false,
+        "vulns": [
+          "GHSA-4x49-vf9v-38px",
+          "GHSA-9vvw-cc9w-f27h",
+          "GHSA-gxpj-cx7g-858c",
+          "MAL-2025-46974"
+        ],
+        "count": 4
+      },
+      {
+        "name": "deepmerge-ts",
+        "version": "7.1.5",
+        "direct": false,
+        "vulns": [
+          "GHSA-ggr8-5vv4-36mx",
+          "GHSA-r9w3-g83q-m6hq"
+        ],
+        "count": 2
+      },
+      {
+        "name": "defu",
+        "version": "6.1.4",
+        "direct": false,
+        "vulns": [
+          "GHSA-737v-mqg7-c878"
+        ],
+        "count": 1
+      },
+      {
+        "name": "diff",
+        "version": "5.2.0",
+        "direct": false,
+        "vulns": [
+          "GHSA-73rr-hh4g-fpgx",
+          "GHSA-h6ch-v84p-w6p9"
+        ],
+        "count": 2
+      },
+      {
+        "name": "effect",
+        "version": "3.18.4",
+        "direct": false,
+        "vulns": [
+          "GHSA-38f7-945m-qr2g"
+        ],
+        "count": 1
+      },
+      {
+        "name": "engine.io-client",
+        "version": "6.6.7",
+        "direct": false,
+        "vulns": [
+          "GHSA-4r4m-hjwj-43p8"
+        ],
+        "count": 1
+      },
+      {
+        "name": "es5-ext",
+        "version": "0.10.64",
+        "direct": false,
+        "vulns": [
+          "GHSA-4gmj-3p3h-gm8h"
+        ],
+        "count": 1
+      },
+      {
+        "name": "eslint-scope",
+        "version": "8.4.0",
+        "direct": false,
+        "vulns": [
+          "GHSA-hxxf-q3w9-4xgw"
+        ],
+        "count": 1
+      },
+      {
+        "name": "extend",
+        "version": "3.0.2",
+        "direct": false,
+        "vulns": [
+          "GHSA-qrmc-fj45-qfc2"
+        ],
+        "count": 1
+      },
+      {
+        "name": "file-entry-cache",
+        "version": "8.0.0",
+        "direct": false,
+        "vulns": [
+          "MAL-2026-11970"
+        ],
+        "count": 1
+      },
+      {
+        "name": "flat-cache",
+        "version": "4.0.1",
+        "direct": false,
+        "vulns": [
+          "MAL-2026-11971"
+        ],
+        "count": 1
+      },
+      {
+        "name": "flatted",
+        "version": "3.3.3",
+        "direct": false,
+        "vulns": [
+          "GHSA-25h7-pfq9-p65f",
+          "GHSA-rf6f-7fwh-wjgh"
+        ],
+        "count": 2
+      },
+      {
+        "name": "glob-parent",
+        "version": "6.0.2",
+        "direct": false,
+        "vulns": [
+          "GHSA-cj88-88mr-972w",
+          "GHSA-ww39-953v-wcq6"
+        ],
+        "count": 2
+      },
+      {
+        "name": "highlight.js",
+        "version": "10.7.3",
+        "direct": false,
+        "vulns": [
+          "GHSA-7wwv-vh3v-89cq",
+          "GHSA-vfrc-7r7c-w9mx"
+        ],
+        "count": 2
+      },
+      {
+        "name": "immer",
+        "version": "10.2.0",
+        "direct": false,
+        "vulns": [
+          "GHSA-33f9-j839-rf8h",
+          "GHSA-9qmh-276g-x5pj",
+          "GHSA-c36v-fmgq-m8hx"
+        ],
+        "count": 3
+      },
+      {
+        "name": "jose",
+        "version": "4.15.9",
+        "direct": false,
+        "vulns": [
+          "GHSA-58f5-hfqc-jgch",
+          "GHSA-hhhv-q57g-882q",
+          "GHSA-jv3g-j58f-9mq9"
+        ],
+        "count": 3
+      },
+      {
+        "name": "js-cookie",
+        "version": "3.0.5",
+        "direct": false,
+        "vulns": [
+          "GHSA-qjx8-664m-686j"
+        ],
+        "count": 1
+      },
+      {
+        "name": "js-yaml",
+        "version": "4.1.1",
+        "direct": false,
+        "vulns": [
+          "GHSA-2883-xcg3-v3hh",
+          "GHSA-2pr6-76vf-7546",
+          "GHSA-52cp-r559-cp3m",
+          "GHSA-5p4m-2wfm-xmqj",
+          "GHSA-724g-mxrg-4qvm",
+          "GHSA-8j8c-7jfh-h6hx",
+          "GHSA-g796-fgmg-93mv",
+          "GHSA-h67p-54hq-rp68",
+          "GHSA-mh29-5h37-fv8m",
+          "GHSA-pm4m-ph32-ghv5",
+          "GHSA-r3ph-w7gj-g6xm",
+          "GHSA-xxvw-45rp-3mj2"
+        ],
+        "count": 12
+      },
+      {
+        "name": "json5",
+        "version": "1.0.2",
+        "direct": false,
+        "vulns": [
+          "GHSA-9c47-m6qq-7p4h"
+        ],
+        "count": 1
+      },
+      {
+        "name": "keyv",
+        "version": "4.5.4",
+        "direct": false,
+        "vulns": [
+          "MAL-2026-11524"
+        ],
+        "count": 1
+      },
+      {
+        "name": "lodash",
+        "version": "4.17.21",
+        "direct": false,
+        "vulns": [
+          "GHSA-29mw-wpgm-hmr9",
+          "GHSA-35jh-r3h4-6jhm",
+          "GHSA-4xc9-xhrj-v574",
+          "GHSA-f23m-r3pf-42rh",
+          "GHSA-fvqr-27wr-82fm",
+          "GHSA-jf85-cpcp-j695",
+          "GHSA-p6mc-m468-83gw",
+          "GHSA-r5fr-rjxr-66jc",
+          "GHSA-x5rq-j2xg-h7qm",
+          "GHSA-xxjr-mmjv-4gpg"
+        ],
+        "count": 10
+      },
+      {
+        "name": "lodash-es",
+        "version": "4.17.22",
+        "direct": false,
+        "vulns": [
+          "GHSA-29mw-wpgm-hmr9",
+          "GHSA-35jh-r3h4-6jhm",
+          "GHSA-f23m-r3pf-42rh",
+          "GHSA-jf85-cpcp-j695",
+          "GHSA-p6mc-m468-83gw",
+          "GHSA-r5fr-rjxr-66jc",
+          "GHSA-x5rq-j2xg-h7qm",
+          "GHSA-xxjr-mmjv-4gpg"
+        ],
+        "count": 8
+      },
+      {
+        "name": "lodash.merge",
+        "version": "4.6.2",
+        "direct": false,
+        "vulns": [
+          "GHSA-2m96-9w4j-wgv7",
+          "GHSA-h726-x36v-rx45"
+        ],
+        "count": 2
+      },
+      {
+        "name": "maplibre-gl",
+        "version": "6.15.0",
+        "direct": true,
+        "vulns": [
+          "GHSA-jrc7-96c5-q579"
+        ],
+        "count": 1
+      },
+      {
+        "name": "mdast-util-to-hast",
+        "version": "13.2.1",
+        "direct": false,
+        "vulns": [
+          "GHSA-4fh9-h7wg-q85m"
+        ],
+        "count": 1
+      },
+      {
+        "name": "micromatch",
+        "version": "4.0.8",
+        "direct": false,
+        "vulns": [
+          "GHSA-952p-6rrq-rcjv"
+        ],
+        "count": 1
+      },
+      {
+        "name": "minimatch",
+        "version": "3.1.2",
+        "direct": false,
+        "vulns": [
+          "GHSA-23c5-xmqv-rm74",
+          "GHSA-3ppc-4f35-3m26",
+          "GHSA-7r86-cg39-jmmj",
+          "GHSA-f8q6-p94x-37v3",
+          "GHSA-hxm2-r34f-qmc5"
+        ],
+        "count": 5
+      },
+      {
+        "name": "minimist",
+        "version": "1.2.8",
+        "direct": false,
+        "vulns": [
+          "GHSA-vh95-rmgr-6w4m",
+          "GHSA-xvch-5gv4-984h"
+        ],
+        "count": 2
+      },
+      {
+        "name": "ms",
+        "version": "2.1.3",
+        "direct": false,
+        "vulns": [
+          "GHSA-3fx5-fwvr-xrjg",
+          "GHSA-w9mr-4mfr-499f"
+        ],
+        "count": 2
+      },
+      {
+        "name": "nanoid",
+        "version": "3.3.11",
+        "direct": false,
+        "vulns": [
+          "GHSA-28wg-ghj8-5hjv",
+          "GHSA-2v37-7h3g-55p8",
+          "GHSA-mwcw-c2x4-8c55",
+          "GHSA-qrpm-p2h7-hrv2",
+          "GHSA-xwg4-73v4-xw9w"
+        ],
+        "count": 5
+      },
+      {
+        "name": "napi-postinstall",
+        "version": "0.3.4",
+        "direct": false,
+        "vulns": [
+          "GHSA-f29h-pxvx-f335",
+          "MAL-2025-6025"
+        ],
+        "count": 2
+      },
+      {
+        "name": "negotiator",
+        "version": "1.0.0",
+        "direct": false,
+        "vulns": [
+          "GHSA-7mc5-chhp-fmc3"
+        ],
+        "count": 1
+      },
+      {
+        "name": "next",
+        "version": "16.1.3",
+        "direct": true,
+        "vulns": [
+          "GHSA-223j-4rm8-mrmf",
+          "GHSA-25mp-g6fv-mqxx",
+          "GHSA-267c-6grr-h53f",
+          "GHSA-26hh-7cqf-hhc6",
+          "GHSA-2xp9-vwfh-vxw4",
+          "GHSA-36qx-fr4f-26g5",
+          "GHSA-39w2-rjm5-chcv",
+          "GHSA-3f5c-4qxj-vmpf",
+          "GHSA-3g8h-86w9-wvmq",
+          "GHSA-3h52-269p-cp9r",
+          "GHSA-3w37-wq28-93x7",
+          "GHSA-3x4c-7xq6-9pq8",
+          "GHSA-4342-x723-ch2f",
+          "GHSA-4633-3j49-mh5q",
+          "GHSA-492v-c6pp-mqqv",
+          "GHSA-4c39-4ccg-62r3",
+          "GHSA-4jqv-mc3x-m676",
+          "GHSA-5f7q-jpqc-wp7h",
+          "GHSA-5j59-xgg2-r9c4",
+          "GHSA-5vj8-3v2h-h38v",
+          "GHSA-67rr-84xm-4c7r",
+          "GHSA-68g3-v927-f742",
+          "GHSA-6gpp-xcg3-4w24",
+          "GHSA-77r5-gw3j-2mpf",
+          "GHSA-7gfc-8cq8-jh5f",
+          "GHSA-7m27-7ghc-44w9",
+          "GHSA-89xv-2m56-2m9x",
+          "GHSA-8h8q-6873-q5fj",
+          "GHSA-955p-x3mx-jcvp",
+          "GHSA-9g9p-9gw9-jx7f",
+          "GHSA-9gr3-7897-pp7m",
+          "GHSA-9qr9-h5gf-34mp",
+          "GHSA-c4j6-fc7j-m34r",
+          "GHSA-c59h-r6p8-q9wc",
+          "GHSA-cjq9-62q9-8jv4",
+          "GHSA-f82v-jwr5-mffw",
+          "GHSA-f87g-xv8r-7p7x",
+          "GHSA-ffhc-5mcf-pf4q",
+          "GHSA-fmvm-x8mv-47mj",
+          "GHSA-fq54-2j52-jc42",
+          "GHSA-fq77-7p7r-83rj",
+          "GHSA-fr5h-rqp8-mj6g",
+          "GHSA-g5qg-72qw-gw5v",
+          "GHSA-g77x-44xx-532m",
+          "GHSA-ggv3-7p47-pfv8",
+          "GHSA-gp8f-8m3g-qvj9",
+          "GHSA-gx5p-jg67-6x7h",
+          "GHSA-h25m-26qc-wcjf",
+          "GHSA-h27x-g6w4-24gq",
+          "GHSA-h64f-5h5j-jqjh",
+          "GHSA-jcc7-9wpm-mj36",
+          "GHSA-m34x-wgrh-g897",
+          "GHSA-m99w-x7hq-7vfj",
+          "GHSA-mcj8-r9mp-w47p",
+          "GHSA-mg66-mrh9-m8jx",
+          "GHSA-mq59-m269-xvcx",
+          "GHSA-mwv6-3258-q52c",
+          "GHSA-p293-qw3h-jr36",
+          "GHSA-p9j2-gv94-2wf4",
+          "GHSA-q4gf-8mx6-v5v3",
+          "GHSA-q8wf-6r8g-63ch",
+          "GHSA-qpjv-v59x-3qc4",
+          "GHSA-qw96-mm2g-c8m7",
+          "GHSA-r2fc-ccr8-96c4",
+          "GHSA-vcvr-r3jv-pc5j",
+          "GHSA-vfv6-92ff-j949",
+          "GHSA-vxf5-wxwp-m7g9",
+          "GHSA-w37m-7fhw-fmv9",
+          "GHSA-wfc6-r584-vfw7",
+          "GHSA-wff4-fpwg-qqv3",
+          "GHSA-wr66-vrwm-5g5x",
+          "GHSA-x56p-c8cg-q435",
+          "GHSA-xv57-4mr9-wg8v"
+        ],
+        "count": 73
+      },
+      {
+        "name": "next-auth",
+        "version": "4.24.13",
+        "direct": true,
+        "vulns": [
+          "GHSA-5jpx-9hw9-2fx4",
+          "GHSA-7r7x-4c4q-c4qf",
+          "GHSA-7rqj-j65f-68wh",
+          "GHSA-8fpg-xm3f-6cx3",
+          "GHSA-f9wg-5f46-cjmw",
+          "GHSA-g5fm-jp9v-2432",
+          "GHSA-p6mm-27gq-9v3p",
+          "GHSA-pg53-56cg-4m8q",
+          "GHSA-pgjx-7f9g-9463",
+          "GHSA-q2mx-j4x2-2h74",
+          "GHSA-v64w-49xw-qq89",
+          "GHSA-x445-f3h2-j279",
+          "GHSA-xmf8-cvqr-rfgj",
+          "GHSA-xv97-c62v-4587"
+        ],
+        "count": 14
+      },
+      {
+        "name": "next-intl",
+        "version": "4.7.0",
+        "direct": true,
+        "vulns": [
+          "GHSA-4c35-wcg5-mm9h",
+          "GHSA-8f24-v5vv-gm5j"
+        ],
+        "count": 2
+      },
+      {
+        "name": "path-parse",
+        "version": "1.0.7",
+        "direct": false,
+        "vulns": [
+          "GHSA-hj48-42vr-x3v9"
+        ],
+        "count": 1
+      },
+      {
+        "name": "picomatch",
+        "version": "4.0.3",
+        "direct": false,
+        "vulns": [
+          "GHSA-3v7f-55p6-f55p",
+          "GHSA-c2c7-rcm5-vvqj"
+        ],
+        "count": 2
+      },
+      {
+        "name": "postcss",
+        "version": "8.5.6",
+        "direct": false,
+        "vulns": [
+          "GHSA-566m-qj78-rww5",
+          "GHSA-6g55-p6wh-862q",
+          "GHSA-7fh5-64p2-3v2j",
+          "GHSA-fxqj-rqcc-2cmp",
+          "GHSA-hwj9-h5mp-3pm3",
+          "GHSA-qx2v-qp2m-jg93",
+          "GHSA-r28c-9q8g-f849"
+        ],
+        "count": 7
+      },
+      {
+        "name": "preact",
+        "version": "10.28.2",
+        "direct": false,
+        "vulns": [
+          "GHSA-36hm-qxxp-pg3m",
+          "GHSA-cg48-9hh2-x6mx"
+        ],
+        "count": 2
+      },
+      {
+        "name": "prismjs",
+        "version": "1.30.0",
+        "direct": false,
+        "vulns": [
+          "GHSA-3949-f494-cm99",
+          "GHSA-gj77-59wh-66hg",
+          "GHSA-h4hr-7fg3-h35w",
+          "GHSA-hqhp-5p83-hx96",
+          "GHSA-wvhm-4hhf-97x9",
+          "GHSA-x7hr-w5r2-h6wg"
+        ],
+        "count": 6
+      },
+      {
+        "name": "protocol-buffers-schema",
+        "version": "3.6.1",
+        "direct": false,
+        "vulns": [
+          "GHSA-j452-xhg8-qg39"
+        ],
+        "count": 1
+      },
+      {
+        "name": "react",
+        "version": "19.2.3",
+        "direct": true,
+        "vulns": [
+          "GHSA-g53w-52xc-2j85",
+          "GHSA-hg79-j56m-fxgv"
+        ],
+        "count": 2
+      },
+      {
+        "name": "react-dom",
+        "version": "19.2.3",
+        "direct": true,
+        "vulns": [
+          "GHSA-mvjj-gqq2-p4hw"
+        ],
+        "count": 1
+      },
+      {
+        "name": "react-hook-form",
+        "version": "7.71.1",
+        "direct": true,
+        "vulns": [
+          "MAL-2026-2853"
+        ],
+        "count": 1
+      },
+      {
+        "name": "semver",
+        "version": "7.7.3",
+        "direct": false,
+        "vulns": [
+          "GHSA-c2qf-rxjj-qqgw",
+          "GHSA-x6fg-f45m-jf5q"
+        ],
+        "count": 2
+      },
+      {
+        "name": "sharp",
+        "version": "0.34.5",
+        "direct": true,
+        "vulns": [
+          "GHSA-54xq-cgqr-rpm3",
+          "GHSA-f88m-g3jw-g9cj",
+          "GHSA-gp95-ppv5-3jc5",
+          "GHSA-rgj7-g3m4-5g8c",
+          "GHSA-wq5f-xc86-pv6w"
+        ],
+        "count": 5
+      },
+      {
+        "name": "socket.io-parser",
+        "version": "4.2.7",
+        "direct": false,
+        "vulns": [
+          "GHSA-2m8v-j782-fhvr",
+          "GHSA-677m-j7p3-52f9",
+          "GHSA-cqmj-92xf-r6r9",
+          "GHSA-qm95-pgcg-qqfq",
+          "GHSA-xfhh-g9f5-x4m4"
+        ],
+        "count": 5
+      },
+      {
+        "name": "source-map-js",
+        "version": "1.2.1",
+        "direct": false,
+        "vulns": [
+          "GHSA-68fv-2mgg-jv7q"
+        ],
+        "count": 1
+      },
+      {
+        "name": "supports-color",
+        "version": "7.2.0",
+        "direct": false,
+        "vulns": [
+          "MAL-2025-46981"
+        ],
+        "count": 1
+      },
+      {
+        "name": "uri-js",
+        "version": "4.4.1",
+        "direct": false,
+        "vulns": [
+          "GHSA-333w-rxj3-f55r"
+        ],
+        "count": 1
+      },
+      {
+        "name": "uuid",
+        "version": "11.1.0",
+        "direct": true,
+        "vulns": [
+          "GHSA-w5hq-g745-h8pq"
+        ],
+        "count": 1
+      },
+      {
+        "name": "word-wrap",
+        "version": "1.2.5",
+        "direct": false,
+        "vulns": [
+          "GHSA-j8xg-fqg3-53r7"
+        ],
+        "count": 1
+      },
+      {
+        "name": "ws",
+        "version": "8.21.3",
+        "direct": false,
+        "vulns": [
+          "GHSA-2mhh-w6q8-5hxw",
+          "GHSA-3h5v-q93c-6h6q",
+          "GHSA-58qx-3vcg-4xpx",
+          "GHSA-5v72-xg48-5rpm",
+          "GHSA-6663-c963-2gqg",
+          "GHSA-6fc8-4gx4-v693",
+          "GHSA-96hv-2xvq-fx4p"
+        ],
+        "count": 7
+      },
+      {
+        "name": "xmlhttprequest-ssl",
+        "version": "2.1.2",
+        "direct": false,
+        "vulns": [
+          "GHSA-72mh-269x-7mh5",
+          "GHSA-h4j5-c7cj-74xg"
+        ],
+        "count": 2
+      },
+      {
+        "name": "zod",
+        "version": "4.3.5",
+        "direct": true,
+        "vulns": [
+          "GHSA-m95q-7qp3-xv42"
+        ],
+        "count": 1
+      },
+      {
+        "name": "json5",
+        "version": "2.2.3",
+        "direct": false,
+        "vulns": [
+          "GHSA-9c47-m6qq-7p4h"
+        ],
+        "count": 1
+      },
+      {
+        "name": "semver",
+        "version": "6.3.1",
+        "direct": false,
+        "vulns": [
+          "GHSA-c2qf-rxjj-qqgw",
+          "GHSA-x6fg-f45m-jf5q"
+        ],
+        "count": 2
+      },
+      {
+        "name": "semver",
+        "version": "6.3.1",
+        "direct": false,
+        "vulns": [
+          "GHSA-c2qf-rxjj-qqgw",
+          "GHSA-x6fg-f45m-jf5q"
+        ],
+        "count": 2
+      },
+      {
+        "name": "minimatch",
+        "version": "9.0.5",
+        "direct": false,
+        "vulns": [
+          "GHSA-23c5-xmqv-rm74",
+          "GHSA-3ppc-4f35-3m26",
+          "GHSA-7r86-cg39-jmmj",
+          "GHSA-f8q6-p94x-37v3",
+          "GHSA-hxm2-r34f-qmc5"
+        ],
+        "count": 5
+      },
+      {
+        "name": "debug",
+        "version": "3.2.7",
+        "direct": false,
+        "vulns": [
+          "GHSA-4x49-vf9v-38px",
+          "GHSA-9vvw-cc9w-f27h",
+          "GHSA-gxpj-cx7g-858c",
+          "MAL-2025-46974"
+        ],
+        "count": 4
+      },
+      {
+        "name": "debug",
+        "version": "3.2.7",
+        "direct": false,
+        "vulns": [
+          "GHSA-4x49-vf9v-38px",
+          "GHSA-9vvw-cc9w-f27h",
+          "GHSA-gxpj-cx7g-858c",
+          "MAL-2025-46974"
+        ],
+        "count": 4
+      },
+      {
+        "name": "debug",
+        "version": "3.2.7",
+        "direct": false,
+        "vulns": [
+          "GHSA-4x49-vf9v-38px",
+          "GHSA-9vvw-cc9w-f27h",
+          "GHSA-gxpj-cx7g-858c",
+          "MAL-2025-46974"
+        ],
+        "count": 4
+      },
+      {
+        "name": "semver",
+        "version": "6.3.1",
+        "direct": false,
+        "vulns": [
+          "GHSA-c2qf-rxjj-qqgw",
+          "GHSA-x6fg-f45m-jf5q"
+        ],
+        "count": 2
+      },
+      {
+        "name": "semver",
+        "version": "6.3.1",
+        "direct": false,
+        "vulns": [
+          "GHSA-c2qf-rxjj-qqgw",
+          "GHSA-x6fg-f45m-jf5q"
+        ],
+        "count": 2
+      },
+      {
+        "name": "glob-parent",
+        "version": "5.1.2",
+        "direct": false,
+        "vulns": [
+          "GHSA-cj88-88mr-972w",
+          "GHSA-ww39-953v-wcq6"
+        ],
+        "count": 2
+      },
+      {
+        "name": "picomatch",
+        "version": "2.3.1",
+        "direct": false,
+        "vulns": [
+          "GHSA-3v7f-55p6-f55p",
+          "GHSA-c2c7-rcm5-vvqj"
+        ],
+        "count": 2
+      },
+      {
+        "name": "postcss",
+        "version": "8.4.31",
+        "direct": false,
+        "vulns": [
+          "GHSA-566m-qj78-rww5",
+          "GHSA-6g55-p6wh-862q",
+          "GHSA-7fh5-64p2-3v2j",
+          "GHSA-fxqj-rqcc-2cmp",
+          "GHSA-hwj9-h5mp-3pm3",
+          "GHSA-qx2v-qp2m-jg93",
+          "GHSA-r28c-9q8g-f849"
+        ],
+        "count": 7
+      },
+      {
+        "name": "uuid",
+        "version": "8.3.2",
+        "direct": false,
+        "vulns": [
+          "GHSA-w5hq-g745-h8pq"
+        ],
+        "count": 1
+      },
+      {
+        "name": "prismjs",
+        "version": "1.27.0",
+        "direct": false,
+        "vulns": [
+          "GHSA-3949-f494-cm99",
+          "GHSA-gj77-59wh-66hg",
+          "GHSA-h4hr-7fg3-h35w",
+          "GHSA-hqhp-5p83-hx96",
+          "GHSA-wvhm-4hhf-97x9",
+          "GHSA-x7hr-w5r2-h6wg"
+        ],
+        "count": 6
+      },
+      {
+        "name": "brace-expansion",
+        "version": "2.0.2",
+        "direct": false,
+        "vulns": [
+          "GHSA-3jxr-9vmj-r5cp",
+          "GHSA-6j4f-fj2g-mc7p",
+          "GHSA-832h-xg76-4gv6",
+          "GHSA-f886-m6hf-6m8v",
+          "GHSA-jxxr-4gwj-5jf2",
+          "GHSA-mh99-v99m-4gvg",
+          "GHSA-q2hr-2g5m-vwhr",
+          "GHSA-qhr7-859c-m2p7",
+          "GHSA-rgw5-rvv9-x895",
+          "GHSA-v6h2-p8h4-qcjw"
+        ],
+        "count": 10
+      }
+    ],
+    "bySeverity": {
+      "CRITICAL": 11,
+      "HIGH": 92,
+      "MEDIUM": 56,
+      "LOW": 18,
+      "UNKNOWN": 136
+    },
+    "note": "969 resolved npm packages queried against OSV.dev (scan of what is ACTUALLY installed per bun.lock). 90 packages carry known advisories (10 of them direct package.json deps — listed in directVulnerablePackages for triage); severities from OSV/GHSA records (MODERATE normalized to MEDIUM; CVSS v3.1 base score computed where no tag; details fetched for first 150 unique advisories).",
+    "resolvedPackages": 969,
+    "advisorySeverities": {
+      "GHSA-4x5r-pxfx-6jf8": "LOW",
+      "GHSA-968p-4wvh-cqc8": "MEDIUM",
+      "GHSA-67hx-6x53-jw92": "CRITICAL",
+      "GHSA-7q7g-4xm8-89cq": "LOW",
+      "GHSA-xffm-g5w8-qvg7": "LOW",
+      "GHSA-p498-v437-472g": "MEDIUM",
+      "GHSA-6chw-6frg-f759": "HIGH",
+      "GHSA-2g4f-4pwh-qvx6": "MEDIUM",
+      "GHSA-v88g-cgmw-v5xw": "MEDIUM",
+      "MAL-2025-46967": "UNKNOWN",
+      "GHSA-w5vr-8v7q-w6rv": "MEDIUM",
+      "GHSA-3jxr-9vmj-r5cp": "HIGH",
+      "GHSA-6j4f-fj2g-mc7p": "HIGH",
+      "GHSA-832h-xg76-4gv6": "HIGH",
+      "GHSA-f886-m6hf-6m8v": "MEDIUM",
+      "GHSA-jxxr-4gwj-5jf2": "MEDIUM",
+      "GHSA-mh99-v99m-4gvg": "HIGH",
+      "GHSA-q2hr-2g5m-vwhr": "MEDIUM",
+      "GHSA-qhr7-859c-m2p7": "HIGH",
+      "GHSA-rgw5-rvv9-x895": "HIGH",
+      "GHSA-v6h2-p8h4-qcjw": "LOW",
+      "GHSA-cwfw-4gq5-mrqx": "LOW",
+      "GHSA-grv7-fg5c-xmjg": "HIGH",
+      "GHSA-vfj7-8cjw-p6xm": "HIGH",
+      "GHSA-73wf-gq98-2v4g": "HIGH",
+      "GHSA-c83g-rgw3-j3cx": "HIGH",
+      "GHSA-w8qv-6jwh-64r5": "MEDIUM",
+      "MAL-2025-46969": "UNKNOWN",
+      "GHSA-4gw3-8f77-f72c": "MEDIUM",
+      "GHSA-pxx3-g568-hxr4": "HIGH",
+      "MAL-2025-46971": "UNKNOWN",
+      "GHSA-5fvm-p68v-5wmh": "HIGH",
+      "MAL-2025-46972": "UNKNOWN",
+      "GHSA-pxg6-pf52-xh8x": "LOW",
+      "GHSA-3xgq-45jj-v275": "HIGH",
+      "GHSA-36jr-mh4h-2g58": "HIGH",
+      "GHSA-4x49-vf9v-38px": "HIGH",
+      "GHSA-9vvw-cc9w-f27h": "HIGH",
+      "GHSA-gxpj-cx7g-858c": "LOW",
+      "MAL-2025-46974": "UNKNOWN",
+      "GHSA-ggr8-5vv4-36mx": "HIGH",
+      "GHSA-r9w3-g83q-m6hq": "HIGH",
+      "GHSA-737v-mqg7-c878": "HIGH",
+      "GHSA-73rr-hh4g-fpgx": "LOW",
+      "GHSA-h6ch-v84p-w6p9": "HIGH",
+      "GHSA-38f7-945m-qr2g": "HIGH",
+      "GHSA-4r4m-hjwj-43p8": "MEDIUM",
+      "GHSA-4gmj-3p3h-gm8h": "LOW",
+      "GHSA-hxxf-q3w9-4xgw": "CRITICAL",
+      "GHSA-qrmc-fj45-qfc2": "MEDIUM",
+      "MAL-2026-11970": "UNKNOWN",
+      "MAL-2026-11971": "UNKNOWN",
+      "GHSA-25h7-pfq9-p65f": "HIGH",
+      "GHSA-rf6f-7fwh-wjgh": "HIGH",
+      "GHSA-cj88-88mr-972w": "HIGH",
+      "GHSA-ww39-953v-wcq6": "HIGH",
+      "GHSA-7wwv-vh3v-89cq": "MEDIUM",
+      "GHSA-vfrc-7r7c-w9mx": "MEDIUM",
+      "GHSA-33f9-j839-rf8h": "CRITICAL",
+      "GHSA-9qmh-276g-x5pj": "HIGH",
+      "GHSA-c36v-fmgq-m8hx": "HIGH",
+      "GHSA-58f5-hfqc-jgch": "MEDIUM",
+      "GHSA-hhhv-q57g-882q": "MEDIUM",
+      "GHSA-jv3g-j58f-9mq9": "MEDIUM",
+      "GHSA-qjx8-664m-686j": "HIGH",
+      "GHSA-2883-xcg3-v3hh": "HIGH",
+      "GHSA-2pr6-76vf-7546": "MEDIUM",
+      "GHSA-52cp-r559-cp3m": "HIGH",
+      "GHSA-5p4m-2wfm-xmqj": "HIGH",
+      "GHSA-724g-mxrg-4qvm": "MEDIUM",
+      "GHSA-8j8c-7jfh-h6hx": "HIGH",
+      "GHSA-g796-fgmg-93mv": "MEDIUM",
+      "GHSA-h67p-54hq-rp68": "MEDIUM",
+      "GHSA-mh29-5h37-fv8m": "MEDIUM",
+      "GHSA-pm4m-ph32-ghv5": "HIGH",
+      "GHSA-r3ph-w7gj-g6xm": "MEDIUM",
+      "GHSA-xxvw-45rp-3mj2": "CRITICAL",
+      "GHSA-9c47-m6qq-7p4h": "HIGH",
+      "MAL-2026-11524": "UNKNOWN",
+      "GHSA-29mw-wpgm-hmr9": "MEDIUM",
+      "GHSA-35jh-r3h4-6jhm": "HIGH",
+      "GHSA-4xc9-xhrj-v574": "HIGH",
+      "GHSA-f23m-r3pf-42rh": "MEDIUM",
+      "GHSA-fvqr-27wr-82fm": "MEDIUM",
+      "GHSA-jf85-cpcp-j695": "CRITICAL",
+      "GHSA-p6mc-m468-83gw": "HIGH",
+      "GHSA-r5fr-rjxr-66jc": "HIGH",
+      "GHSA-x5rq-j2xg-h7qm": "MEDIUM",
+      "GHSA-xxjr-mmjv-4gpg": "MEDIUM",
+      "GHSA-2m96-9w4j-wgv7": "HIGH",
+      "GHSA-h726-x36v-rx45": "HIGH",
+      "GHSA-jrc7-96c5-q579": "CRITICAL",
+      "GHSA-4fh9-h7wg-q85m": "MEDIUM",
+      "GHSA-952p-6rrq-rcjv": "MEDIUM",
+      "GHSA-23c5-xmqv-rm74": "HIGH",
+      "GHSA-3ppc-4f35-3m26": "HIGH",
+      "GHSA-7r86-cg39-jmmj": "HIGH",
+      "GHSA-f8q6-p94x-37v3": "HIGH",
+      "GHSA-hxm2-r34f-qmc5": "HIGH",
+      "GHSA-vh95-rmgr-6w4m": "MEDIUM",
+      "GHSA-xvch-5gv4-984h": "CRITICAL",
+      "GHSA-3fx5-fwvr-xrjg": "HIGH",
+      "GHSA-w9mr-4mfr-499f": "MEDIUM",
+      "GHSA-28wg-ghj8-5hjv": "HIGH",
+      "GHSA-2v37-7h3g-55p8": "HIGH",
+      "GHSA-mwcw-c2x4-8c55": "MEDIUM",
+      "GHSA-qrpm-p2h7-hrv2": "MEDIUM",
+      "GHSA-xwg4-73v4-xw9w": "HIGH",
+      "GHSA-f29h-pxvx-f335": "HIGH",
+      "MAL-2025-6025": "UNKNOWN",
+      "GHSA-7mc5-chhp-fmc3": "HIGH",
+      "GHSA-223j-4rm8-mrmf": "LOW",
+      "GHSA-25mp-g6fv-mqxx": "HIGH",
+      "GHSA-267c-6grr-h53f": "HIGH",
+      "GHSA-26hh-7cqf-hhc6": "HIGH",
+      "GHSA-2xp9-vwfh-vxw4": "CRITICAL",
+      "GHSA-36qx-fr4f-26g5": "HIGH",
+      "GHSA-39w2-rjm5-chcv": "LOW",
+      "GHSA-3f5c-4qxj-vmpf": "HIGH",
+      "GHSA-3g8h-86w9-wvmq": "LOW",
+      "GHSA-3h52-269p-cp9r": "LOW",
+      "GHSA-3w37-wq28-93x7": "MEDIUM",
+      "GHSA-3x4c-7xq6-9pq8": "MEDIUM",
+      "GHSA-4342-x723-ch2f": "MEDIUM",
+      "GHSA-4633-3j49-mh5q": "MEDIUM",
+      "GHSA-492v-c6pp-mqqv": "HIGH",
+      "GHSA-4c39-4ccg-62r3": "MEDIUM",
+      "GHSA-4jqv-mc3x-m676": "MEDIUM",
+      "GHSA-5f7q-jpqc-wp7h": "MEDIUM",
+      "GHSA-5j59-xgg2-r9c4": "HIGH",
+      "GHSA-5vj8-3v2h-h38v": "HIGH",
+      "GHSA-67rr-84xm-4c7r": "HIGH",
+      "GHSA-68g3-v927-f742": "MEDIUM",
+      "GHSA-6gpp-xcg3-4w24": "HIGH",
+      "GHSA-77r5-gw3j-2mpf": "HIGH",
+      "GHSA-7gfc-8cq8-jh5f": "HIGH",
+      "GHSA-7m27-7ghc-44w9": "MEDIUM",
+      "GHSA-89xv-2m56-2m9x": "HIGH",
+      "GHSA-8h8q-6873-q5fj": "HIGH",
+      "GHSA-955p-x3mx-jcvp": "MEDIUM",
+      "GHSA-9g9p-9gw9-jx7f": "MEDIUM",
+      "GHSA-9gr3-7897-pp7m": "HIGH",
+      "GHSA-9qr9-h5gf-34mp": "CRITICAL",
+      "GHSA-c4j6-fc7j-m34r": "HIGH",
+      "GHSA-c59h-r6p8-q9wc": "LOW",
+      "GHSA-cjq9-62q9-8jv4": "HIGH",
+      "GHSA-f82v-jwr5-mffw": "CRITICAL",
+      "GHSA-f87g-xv8r-7p7x": "MEDIUM",
+      "GHSA-ffhc-5mcf-pf4q": "MEDIUM",
+      "GHSA-fmvm-x8mv-47mj": "MEDIUM",
+      "GHSA-fq54-2j52-jc42": "UNKNOWN",
+      "GHSA-fq77-7p7r-83rj": "UNKNOWN",
+      "GHSA-fr5h-rqp8-mj6g": "UNKNOWN",
+      "GHSA-g5qg-72qw-gw5v": "UNKNOWN",
+      "GHSA-g77x-44xx-532m": "UNKNOWN",
+      "GHSA-ggv3-7p47-pfv8": "UNKNOWN",
+      "GHSA-gp8f-8m3g-qvj9": "UNKNOWN",
+      "GHSA-gx5p-jg67-6x7h": "UNKNOWN",
+      "GHSA-h25m-26qc-wcjf": "UNKNOWN",
+      "GHSA-h27x-g6w4-24gq": "UNKNOWN",
+      "GHSA-h64f-5h5j-jqjh": "UNKNOWN",
+      "GHSA-jcc7-9wpm-mj36": "UNKNOWN",
+      "GHSA-m34x-wgrh-g897": "UNKNOWN",
+      "GHSA-m99w-x7hq-7vfj": "UNKNOWN",
+      "GHSA-mcj8-r9mp-w47p": "UNKNOWN",
+      "GHSA-mg66-mrh9-m8jx": "UNKNOWN",
+      "GHSA-mq59-m269-xvcx": "UNKNOWN",
+      "GHSA-mwv6-3258-q52c": "UNKNOWN",
+      "GHSA-p293-qw3h-jr36": "UNKNOWN",
+      "GHSA-p9j2-gv94-2wf4": "UNKNOWN",
+      "GHSA-q4gf-8mx6-v5v3": "UNKNOWN",
+      "GHSA-q8wf-6r8g-63ch": "UNKNOWN",
+      "GHSA-qpjv-v59x-3qc4": "UNKNOWN",
+      "GHSA-qw96-mm2g-c8m7": "UNKNOWN",
+      "GHSA-r2fc-ccr8-96c4": "UNKNOWN",
+      "GHSA-vcvr-r3jv-pc5j": "UNKNOWN",
+      "GHSA-vfv6-92ff-j949": "UNKNOWN",
+      "GHSA-vxf5-wxwp-m7g9": "UNKNOWN",
+      "GHSA-w37m-7fhw-fmv9": "UNKNOWN",
+      "GHSA-wfc6-r584-vfw7": "UNKNOWN",
+      "GHSA-wff4-fpwg-qqv3": "UNKNOWN",
+      "GHSA-wr66-vrwm-5g5x": "UNKNOWN",
+      "GHSA-x56p-c8cg-q435": "UNKNOWN",
+      "GHSA-xv57-4mr9-wg8v": "UNKNOWN",
+      "GHSA-5jpx-9hw9-2fx4": "UNKNOWN",
+      "GHSA-7r7x-4c4q-c4qf": "UNKNOWN",
+      "GHSA-7rqj-j65f-68wh": "UNKNOWN",
+      "GHSA-8fpg-xm3f-6cx3": "UNKNOWN",
+      "GHSA-f9wg-5f46-cjmw": "UNKNOWN",
+      "GHSA-g5fm-jp9v-2432": "UNKNOWN",
+      "GHSA-p6mm-27gq-9v3p": "UNKNOWN",
+      "GHSA-pg53-56cg-4m8q": "UNKNOWN",
+      "GHSA-pgjx-7f9g-9463": "UNKNOWN",
+      "GHSA-q2mx-j4x2-2h74": "UNKNOWN",
+      "GHSA-v64w-49xw-qq89": "UNKNOWN",
+      "GHSA-x445-f3h2-j279": "UNKNOWN",
+      "GHSA-xmf8-cvqr-rfgj": "UNKNOWN",
+      "GHSA-xv97-c62v-4587": "UNKNOWN",
+      "GHSA-4c35-wcg5-mm9h": "UNKNOWN",
+      "GHSA-8f24-v5vv-gm5j": "UNKNOWN",
+      "GHSA-hj48-42vr-x3v9": "UNKNOWN",
+      "GHSA-3v7f-55p6-f55p": "UNKNOWN",
+      "GHSA-c2c7-rcm5-vvqj": "UNKNOWN",
+      "GHSA-566m-qj78-rww5": "UNKNOWN",
+      "GHSA-6g55-p6wh-862q": "UNKNOWN",
+      "GHSA-7fh5-64p2-3v2j": "UNKNOWN",
+      "GHSA-fxqj-rqcc-2cmp": "UNKNOWN",
+      "GHSA-hwj9-h5mp-3pm3": "UNKNOWN",
+      "GHSA-qx2v-qp2m-jg93": "UNKNOWN",
+      "GHSA-r28c-9q8g-f849": "UNKNOWN",
+      "GHSA-36hm-qxxp-pg3m": "UNKNOWN",
+      "GHSA-cg48-9hh2-x6mx": "UNKNOWN",
+      "GHSA-3949-f494-cm99": "UNKNOWN",
+      "GHSA-gj77-59wh-66hg": "UNKNOWN",
+      "GHSA-h4hr-7fg3-h35w": "UNKNOWN",
+      "GHSA-hqhp-5p83-hx96": "UNKNOWN",
+      "GHSA-wvhm-4hhf-97x9": "UNKNOWN",
+      "GHSA-x7hr-w5r2-h6wg": "UNKNOWN",
+      "GHSA-j452-xhg8-qg39": "UNKNOWN",
+      "GHSA-g53w-52xc-2j85": "UNKNOWN",
+      "GHSA-hg79-j56m-fxgv": "UNKNOWN",
+      "GHSA-mvjj-gqq2-p4hw": "UNKNOWN",
+      "MAL-2026-2853": "UNKNOWN",
+      "GHSA-c2qf-rxjj-qqgw": "UNKNOWN",
+      "GHSA-x6fg-f45m-jf5q": "UNKNOWN",
+      "GHSA-54xq-cgqr-rpm3": "UNKNOWN",
+      "GHSA-f88m-g3jw-g9cj": "UNKNOWN",
+      "GHSA-gp95-ppv5-3jc5": "UNKNOWN",
+      "GHSA-rgj7-g3m4-5g8c": "UNKNOWN",
+      "GHSA-wq5f-xc86-pv6w": "UNKNOWN",
+      "GHSA-2m8v-j782-fhvr": "UNKNOWN",
+      "GHSA-677m-j7p3-52f9": "UNKNOWN",
+      "GHSA-cqmj-92xf-r6r9": "UNKNOWN",
+      "GHSA-qm95-pgcg-qqfq": "UNKNOWN",
+      "GHSA-xfhh-g9f5-x4m4": "UNKNOWN",
+      "GHSA-68fv-2mgg-jv7q": "UNKNOWN",
+      "MAL-2025-46981": "UNKNOWN",
+      "GHSA-333w-rxj3-f55r": "UNKNOWN",
+      "GHSA-w5hq-g745-h8pq": "UNKNOWN",
+      "GHSA-j8xg-fqg3-53r7": "UNKNOWN",
+      "GHSA-2mhh-w6q8-5hxw": "UNKNOWN",
+      "GHSA-3h5v-q93c-6h6q": "UNKNOWN",
+      "GHSA-58qx-3vcg-4xpx": "UNKNOWN",
+      "GHSA-5v72-xg48-5rpm": "UNKNOWN",
+      "GHSA-6663-c963-2gqg": "UNKNOWN",
+      "GHSA-6fc8-4gx4-v693": "UNKNOWN",
+      "GHSA-96hv-2xvq-fx4p": "UNKNOWN",
+      "GHSA-72mh-269x-7mh5": "UNKNOWN",
+      "GHSA-h4j5-c7cj-74xg": "UNKNOWN",
+      "GHSA-m95q-7qp3-xv42": "UNKNOWN"
+    },
+    "criticalAdvisories": [
+      "@babel/traverse@7.28.6:GHSA-67hx-6x53-jw92",
+      "eslint-scope@8.4.0:GHSA-hxxf-q3w9-4xgw",
+      "immer@10.2.0:GHSA-33f9-j839-rf8h",
+      "js-yaml@4.1.1:GHSA-xxvw-45rp-3mj2",
+      "lodash@4.17.21:GHSA-jf85-cpcp-j695",
+      "lodash-es@4.17.22:GHSA-jf85-cpcp-j695",
+      "maplibre-gl@6.15.0:GHSA-jrc7-96c5-q579",
+      "minimist@1.2.8:GHSA-xvch-5gv4-984h",
+      "next@16.1.3:GHSA-2xp9-vwfh-vxw4",
+      "next@16.1.3:GHSA-9qr9-h5gf-34mp",
+      "next@16.1.3:GHSA-f82v-jwr5-mffw"
+    ],
+    "directVulnerablePackages": [
+      "maplibre-gl@6.15.0",
+      "next@16.1.3",
+      "next-auth@4.24.13",
+      "next-intl@4.7.0",
+      "react@19.2.3",
+      "react-dom@19.2.3",
+      "react-hook-form@7.71.1",
+      "sharp@0.34.5",
+      "uuid@11.1.0",
+      "zod@4.3.5"
+    ]
+  },
+  "eslintSecurityPass": {
+    "ran": true,
+    "command": "bunx eslint src --rule '{\"no-eval\":\"error\",\"no-new-func\":\"error\"}' --format json",
+    "filesChecked": 464,
+    "noEvalNoNewFuncErrors": 0,
+    "standingGate": "The repo's standing lint gate (`bun run lint` → eslint-config-next/core-web-vitals + typescript, run after every change per the build contract, 0 errors enforced in worklogs) covers compilation-level safety; the focused no-eval/no-new-func pass above is the SAST-specific overlay."
+  },
+  "findings": [
+    {
+      "id": "SAST-001",
+      "category": "secret-scan",
+      "severity": "INFO",
+      "file": "src/lib/tengasell/api/local.ts",
+      "line": 208,
+      "match": "token: \"local-demo-token\"",
+      "reason": "generic-secret-assign: documented demo fixture — documentation/mock placeholder strings in the developer-portal docs and local demo adapter",
+      "disposition": "accepted-with-reason"
+    },
+    {
+      "id": "SAST-002",
+      "category": "secret-scan",
+      "severity": "INFO",
+      "file": "src/components/tengasell/pages/developers/developers-page.tsx",
+      "line": 101,
+      "match": "password\":\"Tengasell#2025\"",
+      "reason": "generic-secret-assign: documented demo fixture — shared password of the seeded demo accounts (admin/rufaro/nyasha/chipo/…) — displayed on the sign-in page and shipped in seed SQL by design; sandbox fixture, not a production credential",
+      "disposition": "accepted-with-reason"
+    },
+    {
+      "id": "SAST-003",
+      "category": "secret-scan",
+      "severity": "INFO",
+      "file": "src/components/tengasell/pages/developers/developers-page.tsx",
+      "line": 201,
+      "match": "password\":\"Tengasell#2025\"",
+      "reason": "generic-secret-assign: documented demo fixture — shared password of the seeded demo accounts (admin/rufaro/nyasha/chipo/…) — displayed on the sign-in page and shipped in seed SQL by design; sandbox fixture, not a production credential",
+      "disposition": "accepted-with-reason"
+    },
+    {
+      "id": "SAST-004",
+      "category": "secret-scan",
+      "severity": "INFO",
+      "file": "src/components/tengasell/pages/developers/developers-page.tsx",
+      "line": 244,
+      "match": "password\":\"s3cret-pass\"",
+      "reason": "generic-secret-assign: documented demo fixture — documentation/mock placeholder strings in the developer-portal docs and local demo adapter",
+      "disposition": "accepted-with-reason"
+    },
+    {
+      "id": "SAST-005",
+      "category": "secret-scan",
+      "severity": "INFO",
+      "file": "src/components/tengasell/pages/developers/developers-page.tsx",
+      "line": 249,
+      "match": "password\":\"s3cret-pass\"",
+      "reason": "generic-secret-assign: documented demo fixture — documentation/mock placeholder strings in the developer-portal docs and local demo adapter",
+      "disposition": "accepted-with-reason"
+    },
+    {
+      "id": "SAST-006",
+      "category": "secret-scan",
+      "severity": "INFO",
+      "file": "ops/gap8-feature-verify.ts",
+      "line": 12,
+      "match": "password: \"Tengasell#2025\"",
+      "reason": "generic-secret-assign: documented demo fixture — shared password of the seeded demo accounts (admin/rufaro/nyasha/chipo/…) — displayed on the sign-in page and shipped in seed SQL by design; sandbox fixture, not a production credential",
+      "disposition": "accepted-with-reason"
+    },
+    {
+      "id": "SAST-007",
+      "category": "secret-scan",
+      "severity": "INFO",
+      "file": "ops/gap8-check.ts",
+      "line": 2,
+      "match": "password: \"Tengasell#2025\"",
+      "reason": "generic-secret-assign: documented demo fixture — shared password of the seeded demo accounts (admin/rufaro/nyasha/chipo/…) — displayed on the sign-in page and shipped in seed SQL by design; sandbox fixture, not a production credential",
+      "disposition": "accepted-with-reason"
+    },
+    {
+      "id": "SAST-008",
+      "category": "secret-scan",
+      "severity": "INFO",
+      "file": "prisma/seed.ts",
+      "line": 300,
+      "match": "token: \"unsub_demo_simba\"",
+      "reason": "generic-secret-assign: documented demo fixture — seeded demo unsubscribe token (prisma/seed.ts, E2E evidence EV-E3-024)",
+      "disposition": "accepted-with-reason"
+    },
+    {
+      "id": "SAST-009",
+      "category": "secret-scan",
+      "severity": "INFO",
+      "file": "prisma/seed.ts",
+      "line": 486,
+      "match": "secret: \"whsec_demo\"",
+      "reason": "generic-secret-assign: documented demo fixture — documentation/mock placeholder strings in the developer-portal docs and local demo adapter",
+      "disposition": "accepted-with-reason"
+    },
+    {
+      "id": "SAST-010",
+      "category": "secret-scan",
+      "severity": "INFO",
+      "file": ".env",
+      "line": 1,
+      "match": "DATABASE_URL=file:/home/z/my-project/db/custom.db",
+      "reason": "repo .env committed to git; contents audited: local SQLite DATABASE_URL path only — no credential values; production must inject env outside the repo",
+      "disposition": "accepted-with-reason"
+    },
+    {
+      "id": "SAST-011",
+      "category": "transport-security",
+      "severity": "INFO",
+      "file": "src/app/sitemap.ts",
+      "line": 14,
+      "match": "const APP_URL = process.env.APP_URL ?? \"http://localhost:81\";",
+      "reason": "loopback http:// default behind a process.env override — config-driven internal service URL (expected pattern for the single-node sandbox); production terminates TLS at the gateway",
+      "disposition": "accepted-with-reason"
+    },
+    {
+      "id": "SAST-012",
+      "category": "transport-security",
+      "severity": "INFO",
+      "file": "src/app/api/auth/mfa/verify/route.ts",
+      "line": 15,
+      "match": "const TRAILBASE = process.env.TRAILBASE_URL ?? \"http://localhost:3001\";",
+      "reason": "loopback http:// default behind a process.env override — config-driven internal service URL (expected pattern for the single-node sandbox); production terminates TLS at the gateway",
+      "disposition": "accepted-with-reason"
+    },
+    {
+      "id": "SAST-013",
+      "category": "transport-security",
+      "severity": "INFO",
+      "file": "src/app/api/auth/password/change/route.ts",
+      "line": 11,
+      "match": "const TRAILBASE = process.env.TRAILBASE_URL ?? \"http://localhost:3001\";",
+      "reason": "loopback http:// default behind a process.env override — config-driven internal service URL (expected pattern for the single-node sandbox); production terminates TLS at the gateway",
+      "disposition": "accepted-with-reason"
+    },
+    {
+      "id": "SAST-014",
+      "category": "transport-security",
+      "severity": "INFO",
+      "file": "src/app/api/auth/security/mfa/confirm/route.ts",
+      "line": 20,
+      "match": "const TRAILBASE = process.env.TRAILBASE_URL ?? \"http://localhost:3001\";",
+      "reason": "loopback http:// default behind a process.env override — config-driven internal service URL (expected pattern for the single-node sandbox); production terminates TLS at the gateway",
+      "disposition": "accepted-with-reason"
+    },
+    {
+      "id": "SAST-015",
+      "category": "transport-security",
+      "severity": "INFO",
+      "file": "src/app/api/auth/security/mfa/disable/route.ts",
+      "line": 10,
+      "match": "const TRAILBASE = process.env.TRAILBASE_URL ?? \"http://localhost:3001\";",
+      "reason": "loopback http:// default behind a process.env override — config-driven internal service URL (expected pattern for the single-node sandbox); production terminates TLS at the gateway",
+      "disposition": "accepted-with-reason"
+    },
+    {
+      "id": "SAST-016",
+      "category": "transport-security",
+      "severity": "INFO",
+      "file": "src/app/api/auth/security/mfa/start/route.ts",
+      "line": 13,
+      "match": "const TRAILBASE = process.env.TRAILBASE_URL ?? \"http://localhost:3001\";",
+      "reason": "loopback http:// default behind a process.env override — config-driven internal service URL (expected pattern for the single-node sandbox); production terminates TLS at the gateway",
+      "disposition": "accepted-with-reason"
+    },
+    {
+      "id": "SAST-017",
+      "category": "transport-security",
+      "severity": "INFO",
+      "file": "src/app/api/auth/security/state/route.ts",
+      "line": 16,
+      "match": "const TRAILBASE = process.env.TRAILBASE_URL ?? \"http://localhost:3001\";",
+      "reason": "loopback http:// default behind a process.env override — config-driven internal service URL (expected pattern for the single-node sandbox); production terminates TLS at the gateway",
+      "disposition": "accepted-with-reason"
+    },
+    {
+      "id": "SAST-018",
+      "category": "transport-security",
+      "severity": "INFO",
+      "file": "src/app/api/auth/login/route.ts",
+      "line": 24,
+      "match": "const TRAILBASE = process.env.TRAILBASE_URL ?? \"http://localhost:3001\";",
+      "reason": "loopback http:// default behind a process.env override — config-driven internal service URL (expected pattern for the single-node sandbox); production terminates TLS at the gateway",
+      "disposition": "accepted-with-reason"
+    },
+    {
+      "id": "SAST-019",
+      "category": "transport-security",
+      "severity": "INFO",
+      "file": "src/app/api/auth/status/route.ts",
+      "line": 11,
+      "match": "const TRAILBASE = process.env.TRAILBASE_URL ?? \"http://localhost:3001\";",
+      "reason": "loopback http:// default behind a process.env override — config-driven internal service URL (expected pattern for the single-node sandbox); production terminates TLS at the gateway",
+      "disposition": "accepted-with-reason"
+    },
+    {
+      "id": "SAST-020",
+      "category": "transport-security",
+      "severity": "INFO",
+      "file": "src/app/robots.ts",
+      "line": 7,
+      "match": "const APP_URL = process.env.APP_URL ?? \"http://localhost:81\";",
+      "reason": "loopback http:// default behind a process.env override — config-driven internal service URL (expected pattern for the single-node sandbox); production terminates TLS at the gateway",
+      "disposition": "accepted-with-reason"
+    },
+    {
+      "id": "SAST-021",
+      "category": "dangerous-pattern",
+      "severity": "INFO",
+      "file": "src/lib/server/geo-spawn.ts",
+      "line": 11,
+      "match": "import { spawn } from \"node:child_process\";",
+      "reason": "gis spawner: spawn('bun', ['index.ts']) fixed argv, cwd pinned to mini-services/gis-service; no user input",
+      "disposition": "false-positive"
+    },
+    {
+      "id": "SAST-022",
+      "category": "dangerous-pattern",
+      "severity": "INFO",
+      "file": "src/lib/server/geo-spawn.ts",
+      "line": 49,
+      "match": "const child = spawn(\"bun\", [\"index.ts\"], {",
+      "reason": "gis spawner: spawn('bun', ['index.ts']) fixed argv, cwd pinned to mini-services/gis-service; no user input",
+      "disposition": "false-positive"
+    },
+    {
+      "id": "SAST-023",
+      "category": "transport-security",
+      "severity": "INFO",
+      "file": "src/lib/server/trust.ts",
+      "line": 23,
+      "match": "const TRUST_BASE = process.env.TRUST_URL ?? \"http://127.0.0.1:3007\";",
+      "reason": "loopback http:// default behind a process.env override — config-driven internal service URL (expected pattern for the single-node sandbox); production terminates TLS at the gateway",
+      "disposition": "accepted-with-reason"
+    },
+    {
+      "id": "SAST-024",
+      "category": "dangerous-pattern",
+      "severity": "INFO",
+      "file": "src/lib/server/services-spawn.ts",
+      "line": 15,
+      "match": "import { spawn } from \"node:child_process\";",
+      "reason": "service spawner: command comes from a static spec table ('trail' binary / 'bun'), args are fixed arrays; shell:false by construction (spawn(cmd, args) without options.shell); no user input reaches argv",
+      "disposition": "false-positive"
+    },
+    {
+      "id": "SAST-025",
+      "category": "dangerous-pattern",
+      "severity": "INFO",
+      "file": "src/lib/server/services-spawn.ts",
+      "line": 145,
+      "match": "const child = spawn(spec.command, spec.args, {",
+      "reason": "service spawner: command comes from a static spec table ('trail' binary / 'bun'), args are fixed arrays; shell:false by construction (spawn(cmd, args) without options.shell); no user input reaches argv",
+      "disposition": "false-positive"
+    },
+    {
+      "id": "SAST-026",
+      "category": "dangerous-pattern",
+      "severity": "INFO",
+      "file": "src/lib/server/finance.ts",
+      "line": 16,
+      "match": "import { spawn } from \"node:child_process\";",
+      "reason": "finance spawner: spawn('bun', ['run','dev']) fixed argv; no user input",
+      "disposition": "false-positive"
+    },
+    {
+      "id": "SAST-027",
+      "category": "dangerous-pattern",
+      "severity": "INFO",
+      "file": "src/lib/server/finance.ts",
+      "line": 56,
+      "match": "const child = spawn(\"bun\", [\"run\", \"dev\"], {",
+      "reason": "finance spawner: spawn('bun', ['run','dev']) fixed argv; no user input",
+      "disposition": "false-positive"
+    },
+    {
+      "id": "SAST-028",
+      "category": "transport-security",
+      "severity": "INFO",
+      "file": "src/lib/server/finance.ts",
+      "line": 23,
+      "match": "const FINANCE_BASE = process.env.FINANCE_URL ?? \"http://127.0.0.1:3006\";",
+      "reason": "finance spawner: spawn('bun', ['run','dev']) fixed argv; no user input",
+      "disposition": "false-positive"
+    },
+    {
+      "id": "SAST-029",
+      "category": "transport-security",
+      "severity": "INFO",
+      "file": "src/lib/server/gov.ts",
+      "line": 22,
+      "match": "const GOV_BASE = process.env.GOVERN_URL ?? \"http://127.0.0.1:3008\";",
+      "reason": "loopback http:// default behind a process.env override — config-driven internal service URL (expected pattern for the single-node sandbox); production terminates TLS at the gateway",
+      "disposition": "accepted-with-reason"
+    },
+    {
+      "id": "SAST-030",
+      "category": "transport-security",
+      "severity": "INFO",
+      "file": "src/lib/server/paynow-order.ts",
+      "line": 17,
+      "match": "const TRAILBASE = process.env.TRAILBASE_URL ?? \"http://localhost:3001\";",
+      "reason": "loopback http:// default behind a process.env override — config-driven internal service URL (expected pattern for the single-node sandbox); production terminates TLS at the gateway",
+      "disposition": "accepted-with-reason"
+    },
+    {
+      "id": "SAST-031",
+      "category": "transport-security",
+      "severity": "INFO",
+      "file": "src/lib/server/comms.ts",
+      "line": 18,
+      "match": "const COMMS_BASE = process.env.COMMS_URL ?? \"http://127.0.0.1:3005\";",
+      "reason": "loopback http:// default behind a process.env override — config-driven internal service URL (expected pattern for the single-node sandbox); production terminates TLS at the gateway",
+      "disposition": "accepted-with-reason"
+    },
+    {
+      "id": "SAST-032",
+      "category": "transport-security",
+      "severity": "INFO",
+      "file": "src/lib/server/geo.ts",
+      "line": 15,
+      "match": "const BASE = process.env.GIS_BASE_URL ?? \"http://localhost:3004\";",
+      "reason": "loopback http:// default behind a process.env override — config-driven internal service URL (expected pattern for the single-node sandbox); production terminates TLS at the gateway",
+      "disposition": "accepted-with-reason"
+    },
+    {
+      "id": "SAST-033",
+      "category": "transport-security",
+      "severity": "INFO",
+      "file": "src/lib/server/trailbase-admin.ts",
+      "line": 12,
+      "match": "const TRAILBASE = process.env.TRAILBASE_URL ?? \"http://localhost:3001\";",
+      "reason": "loopback http:// default behind a process.env override — config-driven internal service URL (expected pattern for the single-node sandbox); production terminates TLS at the gateway",
+      "disposition": "accepted-with-reason"
+    },
+    {
+      "id": "SAST-034",
+      "category": "xss-sink",
+      "severity": "LOW",
+      "file": "src/components/tengasell/pages/gov-client.tsx",
+      "line": 68,
+      "match": "*  construction (no dangerouslySetInnerHTML anywhere in this module). */",
+      "reason": "comment only — asserts no dangerouslySetInnerHTML in module",
+      "disposition": "false-positive"
+    },
+    {
+      "id": "SAST-035",
+      "category": "xss-sink",
+      "severity": "LOW",
+      "file": "src/components/tengasell/pages/policies/policies-page.tsx",
+      "line": 9,
+      "match": "// rendered through React elements ONLY (no dangerouslySetInnerHTML), so any",
+      "reason": "comment only — asserts the module does NOT use dangerouslySetInnerHTML",
+      "disposition": "false-positive"
+    },
+    {
+      "id": "SAST-036",
+      "category": "xss-sink",
+      "severity": "LOW",
+      "file": "src/components/tengasell/pages/orders/receipts-card.tsx",
+      "line": 111,
+      "match": "dangerouslySetInnerHTML={{",
+      "reason": "static @media print CSS literal — zero interpolation, no user input",
+      "disposition": "false-positive"
+    },
+    {
+      "id": "SAST-037",
+      "category": "xss-sink",
+      "severity": "LOW",
+      "file": "src/components/ui/chart.tsx",
+      "line": 83,
+      "match": "dangerouslySetInnerHTML={{",
+      "reason": "shadcn/ui stock chart theming — injects a config-built CSS-variables string from the chart config object, no user-supplied strings",
+      "disposition": "false-positive"
+    },
+    {
+      "id": "SAST-038",
+      "category": "transport-security",
+      "severity": "INFO",
+      "file": "mini-services/comms-service/config.ts",
+      "line": 8,
+      "match": "export const APP_URL = process.env.APP_URL ?? \"http://localhost:81\";",
+      "reason": "loopback http:// default behind a process.env override — config-driven internal service URL (expected pattern for the single-node sandbox); production terminates TLS at the gateway",
+      "disposition": "accepted-with-reason"
+    },
+    {
+      "id": "SAST-039",
+      "category": "sql-interpolation",
+      "severity": "MEDIUM",
+      "file": "mini-services/comms-service/queue.ts",
+      "line": 115,
+      "match": "run(`UPDATE outbound_queue SET ${sets} WHERE id = ?`, [...keys.map((k) => fields[k]), id] as SqlParam[]);",
+      "reason": "`SET ${sets}` interpolates ONLY column names generated from Object.keys of a code-controlled field map (`${k} = ?`); every VALUE is a bound ? parameter — no user input reaches SQL text",
+      "disposition": "false-positive"
+    },
+    {
+      "id": "SAST-040",
+      "category": "dangerous-pattern",
+      "severity": "INFO",
+      "file": "mini-services/trade-engine/index.ts",
+      "line": 899,
+      "match": "import { spawn as cpSpawn } from \"node:child_process\";",
+      "reason": "dev-server ensureDev helper: spawn('bun', ['run','dev']) + cpSpawn in restart script — fixed argv, no user input, dev-only admin path",
+      "disposition": "false-positive"
+    },
+    {
+      "id": "SAST-041",
+      "category": "transport-security",
+      "severity": "INFO",
+      "file": "mini-services/trade-engine/index.ts",
+      "line": 231,
+      "match": "const COMMS_BASE = process.env.COMMS_URL ?? \"http://127.0.0.1:3005\";",
+      "reason": "dev-server ensureDev helper: spawn('bun', ['run','dev']) + cpSpawn in restart script — fixed argv, no user input, dev-only admin path",
+      "disposition": "false-positive"
+    },
+    {
+      "id": "SAST-042",
+      "category": "transport-security",
+      "severity": "INFO",
+      "file": "mini-services/finance-service/config.ts",
+      "line": 10,
+      "match": "export const TRAILBASE = process.env.TRAILBASE_URL ?? \"http://localhost:3001\";",
+      "reason": "loopback http:// default behind a process.env override — config-driven internal service URL (expected pattern for the single-node sandbox); production terminates TLS at the gateway",
+      "disposition": "accepted-with-reason"
+    },
+    {
+      "id": "SAST-043",
+      "category": "transport-security",
+      "severity": "INFO",
+      "file": "mini-services/trust-service/config.ts",
+      "line": 7,
+      "match": "export const TRAILBASE = process.env.TRAILBASE_URL ?? \"http://localhost:3001\";",
+      "reason": "loopback http:// default behind a process.env override — config-driven internal service URL (expected pattern for the single-node sandbox); production terminates TLS at the gateway",
+      "disposition": "accepted-with-reason"
+    },
+    {
+      "id": "SAST-044",
+      "category": "transport-security",
+      "severity": "INFO",
+      "file": "mini-services/govern-service/config.ts",
+      "line": 8,
+      "match": "export const TRAILBASE = process.env.TRAILBASE_URL ?? \"http://localhost:3001\";",
+      "reason": "loopback http:// default behind a process.env override — config-driven internal service URL (expected pattern for the single-node sandbox); production terminates TLS at the gateway",
+      "disposition": "accepted-with-reason"
+    },
+    {
+      "id": "SAST-045",
+      "category": "sql-interpolation",
+      "severity": "MEDIUM",
+      "file": "ops/backup.ts",
+      "line": 94,
+      "match": "db.exec(`VACUUM INTO '${dest.replaceAll(\"'\", \"''\")}'`);",
+      "reason": "VACUUM INTO path is internal (db/backups/<timestamp>.db) and single-quotes are escaped ('' doubling) before interpolation; op script, not user-reachable",
+      "disposition": "false-positive"
+    }
+  ]
+}

@@ -1,0 +1,5487 @@
+{
+ "parsed": "2026-10-20T01:47:29.203Z",
+ "total": 609,
+ "controls": [
+  {
+   "id": "STR-001",
+   "domain": "STR",
+   "name": "Product mission defined",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "STR"
+  },
+  {
+   "id": "STR-002",
+   "domain": "STR",
+   "name": "Target user definition",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "STR"
+  },
+  {
+   "id": "STR-003",
+   "domain": "STR",
+   "name": "Business model",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "STR"
+  },
+  {
+   "id": "STR-004",
+   "domain": "STR",
+   "name": "Revenue model",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "STR"
+  },
+  {
+   "id": "STR-005",
+   "domain": "STR",
+   "name": "Market positioning",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "STR"
+  },
+  {
+   "id": "STR-006",
+   "domain": "STR",
+   "name": "Product roadmap",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "STR"
+  },
+  {
+   "id": "STR-007",
+   "domain": "STR",
+   "name": "KPI framework",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "STR"
+  },
+  {
+   "id": "STR-008",
+   "domain": "STR",
+   "name": "Portfolio governance",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "STR"
+  },
+  {
+   "id": "STR-009",
+   "domain": "STR",
+   "name": "Regulatory market-entry assessment",
+   "floor": "M4",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4+E5",
+   "domainName": "STR"
+  },
+  {
+   "id": "EXP-001",
+   "domain": "EXP",
+   "name": "Registration",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "EXP"
+  },
+  {
+   "id": "EXP-002",
+   "domain": "EXP",
+   "name": "Login",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "EXP"
+  },
+  {
+   "id": "EXP-003",
+   "domain": "EXP",
+   "name": "Account recovery",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "EXP"
+  },
+  {
+   "id": "EXP-004",
+   "domain": "EXP",
+   "name": "User profile",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "EXP"
+  },
+  {
+   "id": "EXP-005",
+   "domain": "EXP",
+   "name": "User preferences",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "EXP"
+  },
+  {
+   "id": "EXP-006",
+   "domain": "EXP",
+   "name": "Navigation",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "EXP"
+  },
+  {
+   "id": "EXP-007",
+   "domain": "EXP",
+   "name": "Responsive UI",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "EXP"
+  },
+  {
+   "id": "EXP-008",
+   "domain": "EXP",
+   "name": "Mobile experience",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "EXP"
+  },
+  {
+   "id": "EXP-009",
+   "domain": "EXP",
+   "name": "User onboarding",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "EXP"
+  },
+  {
+   "id": "EXP-010",
+   "domain": "EXP",
+   "name": "Self-service account management",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "EXP"
+  },
+  {
+   "id": "EXP-011",
+   "domain": "EXP",
+   "name": "Error handling",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "EXP"
+  },
+  {
+   "id": "EXP-012",
+   "domain": "EXP",
+   "name": "Offline / degraded-state UX",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "EXP"
+  },
+  {
+   "id": "EXP-013",
+   "domain": "EXP",
+   "name": "Account termination",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "EXP"
+  },
+  {
+   "id": "EXP-014",
+   "domain": "EXP",
+   "name": "Help access",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "EXP"
+  },
+  {
+   "id": "EXP-015",
+   "domain": "EXP",
+   "name": "User feedback",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "EXP"
+  },
+  {
+   "id": "IAM-001",
+   "domain": "IAM",
+   "name": "User identity",
+   "floor": "M1",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3",
+   "domainName": "IAM"
+  },
+  {
+   "id": "IAM-002",
+   "domain": "IAM",
+   "name": "Authentication",
+   "floor": "M1",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3",
+   "domainName": "IAM"
+  },
+  {
+   "id": "IAM-003",
+   "domain": "IAM",
+   "name": "Password security",
+   "floor": "M1",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3",
+   "domainName": "IAM"
+  },
+  {
+   "id": "IAM-004",
+   "domain": "IAM",
+   "name": "MFA",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "IAM"
+  },
+  {
+   "id": "IAM-005",
+   "domain": "IAM",
+   "name": "Passkeys",
+   "floor": "M3",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "IAM"
+  },
+  {
+   "id": "IAM-006",
+   "domain": "IAM",
+   "name": "Session management",
+   "floor": "M1",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3",
+   "domainName": "IAM"
+  },
+  {
+   "id": "IAM-007",
+   "domain": "IAM",
+   "name": "Account recovery authority",
+   "floor": "M1",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3",
+   "domainName": "IAM"
+  },
+  {
+   "id": "IAM-008",
+   "domain": "IAM",
+   "name": "RBAC",
+   "floor": "M1",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3",
+   "domainName": "IAM"
+  },
+  {
+   "id": "IAM-009",
+   "domain": "IAM",
+   "name": "ABAC",
+   "floor": "M3",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "IAM"
+  },
+  {
+   "id": "IAM-010",
+   "domain": "IAM",
+   "name": "Privileged access",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "IAM"
+  },
+  {
+   "id": "IAM-011",
+   "domain": "IAM",
+   "name": "Service identities",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "IAM"
+  },
+  {
+   "id": "IAM-012",
+   "domain": "IAM",
+   "name": "OAuth",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "IAM"
+  },
+  {
+   "id": "IAM-013",
+   "domain": "IAM",
+   "name": "SSO",
+   "floor": "M3",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "IAM"
+  },
+  {
+   "id": "IAM-014",
+   "domain": "IAM",
+   "name": "SCIM",
+   "floor": "M3",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "IAM"
+  },
+  {
+   "id": "IAM-015",
+   "domain": "IAM",
+   "name": "Access reviews",
+   "floor": "M3",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "IAM"
+  },
+  {
+   "id": "IAM-016",
+   "domain": "IAM",
+   "name": "Credential revocation",
+   "floor": "M1",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3",
+   "domainName": "IAM"
+  },
+  {
+   "id": "IAM-017",
+   "domain": "IAM",
+   "name": "Device / session inventory",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "IAM"
+  },
+  {
+   "id": "ORG-001",
+   "domain": "ORG",
+   "name": "Organization entity",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "ORG"
+  },
+  {
+   "id": "ORG-002",
+   "domain": "ORG",
+   "name": "Membership",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "ORG"
+  },
+  {
+   "id": "ORG-003",
+   "domain": "ORG",
+   "name": "Invitations",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "ORG"
+  },
+  {
+   "id": "ORG-004",
+   "domain": "ORG",
+   "name": "Teams",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "ORG"
+  },
+  {
+   "id": "ORG-005",
+   "domain": "ORG",
+   "name": "Departments",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "ORG"
+  },
+  {
+   "id": "ORG-006",
+   "domain": "ORG",
+   "name": "Tenant boundaries",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "ORG"
+  },
+  {
+   "id": "ORG-007",
+   "domain": "ORG",
+   "name": "Tenant configuration",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "ORG"
+  },
+  {
+   "id": "ORG-008",
+   "domain": "ORG",
+   "name": "Delegated administration",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "ORG"
+  },
+  {
+   "id": "ORG-009",
+   "domain": "ORG",
+   "name": "Tenant billing",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "ORG"
+  },
+  {
+   "id": "ORG-010",
+   "domain": "ORG",
+   "name": "Tenant analytics",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "ORG"
+  },
+  {
+   "id": "ORG-011",
+   "domain": "ORG",
+   "name": "Tenant data export",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "ORG"
+  },
+  {
+   "id": "ORG-012",
+   "domain": "ORG",
+   "name": "Tenant deletion",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "ORG"
+  },
+  {
+   "id": "MKT-001",
+   "domain": "MKT",
+   "name": "Seller registration",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "MKT"
+  },
+  {
+   "id": "MKT-002",
+   "domain": "MKT",
+   "name": "Seller identity",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "MKT"
+  },
+  {
+   "id": "MKT-003",
+   "domain": "MKT",
+   "name": "Seller business verification",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "MKT"
+  },
+  {
+   "id": "MKT-004",
+   "domain": "MKT",
+   "name": "Seller approval",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "MKT"
+  },
+  {
+   "id": "MKT-005",
+   "domain": "MKT",
+   "name": "Seller suspension",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "MKT"
+  },
+  {
+   "id": "MKT-006",
+   "domain": "MKT",
+   "name": "Seller profile",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "MKT"
+  },
+  {
+   "id": "MKT-007",
+   "domain": "MKT",
+   "name": "Listing creation",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "MKT"
+  },
+  {
+   "id": "MKT-008",
+   "domain": "MKT",
+   "name": "Listing moderation",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "MKT"
+  },
+  {
+   "id": "MKT-009",
+   "domain": "MKT",
+   "name": "Listing versioning",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "MKT"
+  },
+  {
+   "id": "MKT-010",
+   "domain": "MKT",
+   "name": "Catalog classification",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "MKT"
+  },
+  {
+   "id": "MKT-011",
+   "domain": "MKT",
+   "name": "Inventory",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "MKT"
+  },
+  {
+   "id": "MKT-012",
+   "domain": "MKT",
+   "name": "Availability",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "MKT"
+  },
+  {
+   "id": "MKT-013",
+   "domain": "MKT",
+   "name": "Buyer discovery",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "MKT"
+  },
+  {
+   "id": "MKT-014",
+   "domain": "MKT",
+   "name": "Marketplace search",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "MKT"
+  },
+  {
+   "id": "MKT-015",
+   "domain": "MKT",
+   "name": "Buyer-seller communication",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "MKT"
+  },
+  {
+   "id": "MKT-016",
+   "domain": "MKT",
+   "name": "Transaction initiation",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MKT"
+  },
+  {
+   "id": "MKT-017",
+   "domain": "MKT",
+   "name": "Order lifecycle",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MKT"
+  },
+  {
+   "id": "MKT-018",
+   "domain": "MKT",
+   "name": "Seller fulfilment",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MKT"
+  },
+  {
+   "id": "MKT-019",
+   "domain": "MKT",
+   "name": "Buyer confirmation",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MKT"
+  },
+  {
+   "id": "MKT-020",
+   "domain": "MKT",
+   "name": "Reviews",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MKT"
+  },
+  {
+   "id": "MKT-021",
+   "domain": "MKT",
+   "name": "Ratings",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MKT"
+  },
+  {
+   "id": "MKT-022",
+   "domain": "MKT",
+   "name": "Complaints",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MKT"
+  },
+  {
+   "id": "MKT-023",
+   "domain": "MKT",
+   "name": "Returns",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MKT"
+  },
+  {
+   "id": "MKT-024",
+   "domain": "MKT",
+   "name": "Disputes",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MKT"
+  },
+  {
+   "id": "MKT-025",
+   "domain": "MKT",
+   "name": "Seller analytics",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MKT"
+  },
+  {
+   "id": "MKT-026",
+   "domain": "MKT",
+   "name": "Seller account health",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MKT"
+  },
+  {
+   "id": "MKT-027",
+   "domain": "MKT",
+   "name": "Marketplace policy",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MKT"
+  },
+  {
+   "id": "MKT-028",
+   "domain": "MKT",
+   "name": "Seller appeals",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MKT"
+  },
+  {
+   "id": "MKT-029",
+   "domain": "MKT",
+   "name": "Prohibited goods / services controls",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MKT"
+  },
+  {
+   "id": "MKT-030",
+   "domain": "MKT",
+   "name": "Marketplace fraud controls",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MKT"
+  },
+  {
+   "id": "COM-001",
+   "domain": "COM",
+   "name": "Pricing",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "COM"
+  },
+  {
+   "id": "COM-002",
+   "domain": "COM",
+   "name": "Taxes",
+   "floor": "M1",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3",
+   "domainName": "COM"
+  },
+  {
+   "id": "COM-003",
+   "domain": "COM",
+   "name": "Discounts",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "COM"
+  },
+  {
+   "id": "COM-004",
+   "domain": "COM",
+   "name": "Coupons",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "COM"
+  },
+  {
+   "id": "COM-005",
+   "domain": "COM",
+   "name": "Cart",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "COM"
+  },
+  {
+   "id": "COM-006",
+   "domain": "COM",
+   "name": "Checkout",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "COM"
+  },
+  {
+   "id": "COM-007",
+   "domain": "COM",
+   "name": "Payment authorization",
+   "floor": "M1",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3",
+   "domainName": "COM"
+  },
+  {
+   "id": "COM-008",
+   "domain": "COM",
+   "name": "Payment capture",
+   "floor": "M1",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3",
+   "domainName": "COM"
+  },
+  {
+   "id": "COM-009",
+   "domain": "COM",
+   "name": "Payment failure",
+   "floor": "M1",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3",
+   "domainName": "COM"
+  },
+  {
+   "id": "COM-010",
+   "domain": "COM",
+   "name": "Refund",
+   "floor": "M1",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3",
+   "domainName": "COM"
+  },
+  {
+   "id": "COM-011",
+   "domain": "COM",
+   "name": "Partial refund",
+   "floor": "M1",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3",
+   "domainName": "COM"
+  },
+  {
+   "id": "COM-012",
+   "domain": "COM",
+   "name": "Cancellation",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "COM"
+  },
+  {
+   "id": "COM-013",
+   "domain": "COM",
+   "name": "Platform fee",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "COM"
+  },
+  {
+   "id": "COM-014",
+   "domain": "COM",
+   "name": "Seller commission",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "COM"
+  },
+  {
+   "id": "COM-015",
+   "domain": "COM",
+   "name": "Split settlement",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "COM"
+  },
+  {
+   "id": "COM-016",
+   "domain": "COM",
+   "name": "Wallet / balance",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "COM"
+  },
+  {
+   "id": "COM-017",
+   "domain": "COM",
+   "name": "Payout",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "COM"
+  },
+  {
+   "id": "COM-018",
+   "domain": "COM",
+   "name": "Payout reversal",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "COM"
+  },
+  {
+   "id": "COM-019",
+   "domain": "COM",
+   "name": "Invoice",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "COM"
+  },
+  {
+   "id": "COM-020",
+   "domain": "COM",
+   "name": "Receipt",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "COM"
+  },
+  {
+   "id": "COM-021",
+   "domain": "COM",
+   "name": "Subscription",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "COM"
+  },
+  {
+   "id": "COM-022",
+   "domain": "COM",
+   "name": "Renewal",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "COM"
+  },
+  {
+   "id": "COM-023",
+   "domain": "COM",
+   "name": "Chargeback",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "COM"
+  },
+  {
+   "id": "COM-024",
+   "domain": "COM",
+   "name": "Reconciliation",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "COM"
+  },
+  {
+   "id": "CMS-001",
+   "domain": "CMS",
+   "name": "Content models",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "CMS"
+  },
+  {
+   "id": "CMS-002",
+   "domain": "CMS",
+   "name": "Content types",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "CMS"
+  },
+  {
+   "id": "CMS-003",
+   "domain": "CMS",
+   "name": "Fields",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "CMS"
+  },
+  {
+   "id": "CMS-004",
+   "domain": "CMS",
+   "name": "Taxonomy",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "CMS"
+  },
+  {
+   "id": "CMS-005",
+   "domain": "CMS",
+   "name": "Authoring",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "CMS"
+  },
+  {
+   "id": "CMS-006",
+   "domain": "CMS",
+   "name": "Rich content",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "CMS"
+  },
+  {
+   "id": "CMS-007",
+   "domain": "CMS",
+   "name": "Media",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "CMS"
+  },
+  {
+   "id": "CMS-008",
+   "domain": "CMS",
+   "name": "Drafts",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "CMS"
+  },
+  {
+   "id": "CMS-009",
+   "domain": "CMS",
+   "name": "Autosave",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "CMS"
+  },
+  {
+   "id": "CMS-010",
+   "domain": "CMS",
+   "name": "Preview",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "CMS"
+  },
+  {
+   "id": "CMS-011",
+   "domain": "CMS",
+   "name": "Editorial workflow",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "CMS"
+  },
+  {
+   "id": "CMS-012",
+   "domain": "CMS",
+   "name": "Review",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "CMS"
+  },
+  {
+   "id": "CMS-013",
+   "domain": "CMS",
+   "name": "Approval",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "CMS"
+  },
+  {
+   "id": "CMS-014",
+   "domain": "CMS",
+   "name": "Publishing",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "CMS"
+  },
+  {
+   "id": "CMS-015",
+   "domain": "CMS",
+   "name": "Scheduling",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "CMS"
+  },
+  {
+   "id": "CMS-016",
+   "domain": "CMS",
+   "name": "Embargo",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CMS"
+  },
+  {
+   "id": "CMS-017",
+   "domain": "CMS",
+   "name": "Unpublishing",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CMS"
+  },
+  {
+   "id": "CMS-018",
+   "domain": "CMS",
+   "name": "Version history",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CMS"
+  },
+  {
+   "id": "CMS-019",
+   "domain": "CMS",
+   "name": "Rollback",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CMS"
+  },
+  {
+   "id": "CMS-020",
+   "domain": "CMS",
+   "name": "Corrections",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CMS"
+  },
+  {
+   "id": "CMS-021",
+   "domain": "CMS",
+   "name": "Localization",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CMS"
+  },
+  {
+   "id": "CMS-022",
+   "domain": "CMS",
+   "name": "Syndication",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CMS"
+  },
+  {
+   "id": "CMS-023",
+   "domain": "CMS",
+   "name": "Rights management",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CMS"
+  },
+  {
+   "id": "CMS-024",
+   "domain": "CMS",
+   "name": "Asset licensing",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CMS"
+  },
+  {
+   "id": "CMS-025",
+   "domain": "CMS",
+   "name": "Author management",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CMS"
+  },
+  {
+   "id": "CMS-026",
+   "domain": "CMS",
+   "name": "Content audit log",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CMS"
+  },
+  {
+   "id": "CMS-027",
+   "domain": "CMS",
+   "name": "Management API",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CMS"
+  },
+  {
+   "id": "CMS-028",
+   "domain": "CMS",
+   "name": "Delivery API",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CMS"
+  },
+  {
+   "id": "CMS-029",
+   "domain": "CMS",
+   "name": "Preview API",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CMS"
+  },
+  {
+   "id": "CMS-030",
+   "domain": "CMS",
+   "name": "Webhooks",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CMS"
+  },
+  {
+   "id": "SRC-001",
+   "domain": "SRC",
+   "name": "Search index",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "SRC"
+  },
+  {
+   "id": "SRC-002",
+   "domain": "SRC",
+   "name": "Search query",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "SRC"
+  },
+  {
+   "id": "SRC-003",
+   "domain": "SRC",
+   "name": "Filters",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "SRC"
+  },
+  {
+   "id": "SRC-004",
+   "domain": "SRC",
+   "name": "Sorting",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "SRC"
+  },
+  {
+   "id": "SRC-005",
+   "domain": "SRC",
+   "name": "Taxonomy / facets",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "SRC"
+  },
+  {
+   "id": "SRC-006",
+   "domain": "SRC",
+   "name": "Autocomplete",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "SRC"
+  },
+  {
+   "id": "SRC-007",
+   "domain": "SRC",
+   "name": "Relevance ranking",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "SRC"
+  },
+  {
+   "id": "SRC-008",
+   "domain": "SRC",
+   "name": "Recommendations",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "SRC"
+  },
+  {
+   "id": "SRC-009",
+   "domain": "SRC",
+   "name": "Saved searches",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "SRC"
+  },
+  {
+   "id": "SRC-010",
+   "domain": "SRC",
+   "name": "Recent searches",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "SRC"
+  },
+  {
+   "id": "SRC-011",
+   "domain": "SRC",
+   "name": "Zero-result handling",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "SRC"
+  },
+  {
+   "id": "SRC-012",
+   "domain": "SRC",
+   "name": "Search quality analytics",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "SRC"
+  },
+  {
+   "id": "MSG-001",
+   "domain": "MSG",
+   "name": "Transactional email",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "MSG"
+  },
+  {
+   "id": "MSG-002",
+   "domain": "MSG",
+   "name": "SMS",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "MSG"
+  },
+  {
+   "id": "MSG-003",
+   "domain": "MSG",
+   "name": "Push notifications",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "MSG"
+  },
+  {
+   "id": "MSG-004",
+   "domain": "MSG",
+   "name": "In-app notifications",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "MSG"
+  },
+  {
+   "id": "MSG-005",
+   "domain": "MSG",
+   "name": "Inbox / message centre",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "MSG"
+  },
+  {
+   "id": "MSG-006",
+   "domain": "MSG",
+   "name": "Notification preferences",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MSG"
+  },
+  {
+   "id": "MSG-007",
+   "domain": "MSG",
+   "name": "Template management",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MSG"
+  },
+  {
+   "id": "MSG-008",
+   "domain": "MSG",
+   "name": "Localization",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MSG"
+  },
+  {
+   "id": "MSG-009",
+   "domain": "MSG",
+   "name": "Delivery status",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MSG"
+  },
+  {
+   "id": "MSG-010",
+   "domain": "MSG",
+   "name": "Retry / failure handling",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MSG"
+  },
+  {
+   "id": "MSG-011",
+   "domain": "MSG",
+   "name": "Unsubscribe / suppression",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MSG"
+  },
+  {
+   "id": "MSG-012",
+   "domain": "MSG",
+   "name": "Communication audit",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MSG"
+  },
+  {
+   "id": "MSG-013",
+   "domain": "MSG",
+   "name": "Campaign segmentation",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MSG"
+  },
+  {
+   "id": "MSG-014",
+   "domain": "MSG",
+   "name": "Provider health",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MSG"
+  },
+  {
+   "id": "MSG-015",
+   "domain": "MSG",
+   "name": "Emergency notifications",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MSG"
+  },
+  {
+   "id": "CTL-001",
+   "domain": "CTL",
+   "name": "Admin authentication",
+   "floor": "M1",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3",
+   "domainName": "CTL"
+  },
+  {
+   "id": "CTL-002",
+   "domain": "CTL",
+   "name": "Admin RBAC",
+   "floor": "M1",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3",
+   "domainName": "CTL"
+  },
+  {
+   "id": "CTL-003",
+   "domain": "CTL",
+   "name": "User lookup",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "CTL"
+  },
+  {
+   "id": "CTL-004",
+   "domain": "CTL",
+   "name": "User account inspection",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "CTL"
+  },
+  {
+   "id": "CTL-005",
+   "domain": "CTL",
+   "name": "User suspension",
+   "floor": "M1",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3",
+   "domainName": "CTL"
+  },
+  {
+   "id": "CTL-006",
+   "domain": "CTL",
+   "name": "User restoration",
+   "floor": "M1",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3",
+   "domainName": "CTL"
+  },
+  {
+   "id": "CTL-007",
+   "domain": "CTL",
+   "name": "Role administration",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "CTL"
+  },
+  {
+   "id": "CTL-008",
+   "domain": "CTL",
+   "name": "Seller administration",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "CTL"
+  },
+  {
+   "id": "CTL-009",
+   "domain": "CTL",
+   "name": "Marketplace administration",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "CTL"
+  },
+  {
+   "id": "CTL-010",
+   "domain": "CTL",
+   "name": "Transaction inspection",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "CTL"
+  },
+  {
+   "id": "CTL-011",
+   "domain": "CTL",
+   "name": "Refund authority",
+   "floor": "M1",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3",
+   "domainName": "CTL"
+  },
+  {
+   "id": "CTL-012",
+   "domain": "CTL",
+   "name": "Dispute administration",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "CTL"
+  },
+  {
+   "id": "CTL-013",
+   "domain": "CTL",
+   "name": "CMS administration",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CTL"
+  },
+  {
+   "id": "CTL-014",
+   "domain": "CTL",
+   "name": "Configuration management",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CTL"
+  },
+  {
+   "id": "CTL-015",
+   "domain": "CTL",
+   "name": "Feature flags",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CTL"
+  },
+  {
+   "id": "CTL-016",
+   "domain": "CTL",
+   "name": "Business rules",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CTL"
+  },
+  {
+   "id": "CTL-017",
+   "domain": "CTL",
+   "name": "Moderation queue",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CTL"
+  },
+  {
+   "id": "CTL-018",
+   "domain": "CTL",
+   "name": "Audit log",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "CTL"
+  },
+  {
+   "id": "CTL-019",
+   "domain": "CTL",
+   "name": "Administrative reason codes",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CTL"
+  },
+  {
+   "id": "CTL-020",
+   "domain": "CTL",
+   "name": "Sensitive-action confirmation",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CTL"
+  },
+  {
+   "id": "CTL-021",
+   "domain": "CTL",
+   "name": "Dual approval",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "CTL"
+  },
+  {
+   "id": "CTL-022",
+   "domain": "CTL",
+   "name": "Emergency controls",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "CTL"
+  },
+  {
+   "id": "CTL-023",
+   "domain": "CTL",
+   "name": "System health view",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CTL"
+  },
+  {
+   "id": "CTL-024",
+   "domain": "CTL",
+   "name": "Admin activity monitoring",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CTL"
+  },
+  {
+   "id": "CTL-025",
+   "domain": "CTL",
+   "name": "Export / reporting",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CTL"
+  },
+  {
+   "id": "SUP-001",
+   "domain": "SUP",
+   "name": "Customer record",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "SUP"
+  },
+  {
+   "id": "SUP-002",
+   "domain": "SUP",
+   "name": "Contact history",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "SUP"
+  },
+  {
+   "id": "SUP-003",
+   "domain": "SUP",
+   "name": "Ticketing",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "SUP"
+  },
+  {
+   "id": "SUP-004",
+   "domain": "SUP",
+   "name": "Assignment",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "SUP"
+  },
+  {
+   "id": "SUP-005",
+   "domain": "SUP",
+   "name": "Escalation",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "SUP"
+  },
+  {
+   "id": "SUP-006",
+   "domain": "SUP",
+   "name": "SLA",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "SUP"
+  },
+  {
+   "id": "SUP-007",
+   "domain": "SUP",
+   "name": "Internal notes",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "SUP"
+  },
+  {
+   "id": "SUP-008",
+   "domain": "SUP",
+   "name": "Templates",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "SUP"
+  },
+  {
+   "id": "SUP-009",
+   "domain": "SUP",
+   "name": "Attachments",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "SUP"
+  },
+  {
+   "id": "SUP-010",
+   "domain": "SUP",
+   "name": "Identity verification",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "SUP"
+  },
+  {
+   "id": "SUP-011",
+   "domain": "SUP",
+   "name": "Refund support",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "SUP"
+  },
+  {
+   "id": "SUP-012",
+   "domain": "SUP",
+   "name": "Knowledge base",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "SUP"
+  },
+  {
+   "id": "SUP-013",
+   "domain": "SUP",
+   "name": "Complaint handling",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "SUP"
+  },
+  {
+   "id": "SUP-014",
+   "domain": "SUP",
+   "name": "Customer satisfaction",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "SUP"
+  },
+  {
+   "id": "SUP-015",
+   "domain": "SUP",
+   "name": "Channel integration",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "SUP"
+  },
+  {
+   "id": "TNS-001",
+   "domain": "TNS",
+   "name": "Abuse reports",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "TNS"
+  },
+  {
+   "id": "TNS-002",
+   "domain": "TNS",
+   "name": "Fraud reports",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "TNS"
+  },
+  {
+   "id": "TNS-003",
+   "domain": "TNS",
+   "name": "Illegal-content reports",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "TNS"
+  },
+  {
+   "id": "TNS-004",
+   "domain": "TNS",
+   "name": "Scam detection",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "TNS"
+  },
+  {
+   "id": "TNS-005",
+   "domain": "TNS",
+   "name": "Risk scoring",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "TNS"
+  },
+  {
+   "id": "TNS-006",
+   "domain": "TNS",
+   "name": "Moderation queue",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "TNS"
+  },
+  {
+   "id": "TNS-007",
+   "domain": "TNS",
+   "name": "Evidence retention",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "TNS"
+  },
+  {
+   "id": "TNS-008",
+   "domain": "TNS",
+   "name": "Warning",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "TNS"
+  },
+  {
+   "id": "TNS-009",
+   "domain": "TNS",
+   "name": "Restriction",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "TNS"
+  },
+  {
+   "id": "TNS-010",
+   "domain": "TNS",
+   "name": "Suspension",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "TNS"
+  },
+  {
+   "id": "TNS-011",
+   "domain": "TNS",
+   "name": "Ban",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "TNS"
+  },
+  {
+   "id": "TNS-012",
+   "domain": "TNS",
+   "name": "Appeal",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "TNS"
+  },
+  {
+   "id": "TNS-013",
+   "domain": "TNS",
+   "name": "Reinstatement",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "TNS"
+  },
+  {
+   "id": "TNS-014",
+   "domain": "TNS",
+   "name": "Policy enforcement audit",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "TNS"
+  },
+  {
+   "id": "FIN-001",
+   "domain": "FIN",
+   "name": "Chart of accounts integration",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "FIN"
+  },
+  {
+   "id": "FIN-002",
+   "domain": "FIN",
+   "name": "Accounts receivable",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "FIN"
+  },
+  {
+   "id": "FIN-003",
+   "domain": "FIN",
+   "name": "Accounts payable",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "FIN"
+  },
+  {
+   "id": "FIN-004",
+   "domain": "FIN",
+   "name": "Invoice",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "FIN"
+  },
+  {
+   "id": "FIN-005",
+   "domain": "FIN",
+   "name": "Credit note",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "FIN"
+  },
+  {
+   "id": "FIN-006",
+   "domain": "FIN",
+   "name": "Platform revenue",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "FIN"
+  },
+  {
+   "id": "FIN-007",
+   "domain": "FIN",
+   "name": "Seller liability",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "FIN"
+  },
+  {
+   "id": "FIN-008",
+   "domain": "FIN",
+   "name": "Settlement",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "FIN"
+  },
+  {
+   "id": "FIN-009",
+   "domain": "FIN",
+   "name": "Reconciliation",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "FIN"
+  },
+  {
+   "id": "FIN-010",
+   "domain": "FIN",
+   "name": "Bank reconciliation",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "FIN"
+  },
+  {
+   "id": "FIN-011",
+   "domain": "FIN",
+   "name": "Refund accounting",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "FIN"
+  },
+  {
+   "id": "FIN-012",
+   "domain": "FIN",
+   "name": "Tax accounting",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "FIN"
+  },
+  {
+   "id": "FIN-013",
+   "domain": "FIN",
+   "name": "Revenue recognition",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "FIN"
+  },
+  {
+   "id": "FIN-014",
+   "domain": "FIN",
+   "name": "Currency handling",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "FIN"
+  },
+  {
+   "id": "FIN-015",
+   "domain": "FIN",
+   "name": "Expense management",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "FIN"
+  },
+  {
+   "id": "FIN-016",
+   "domain": "FIN",
+   "name": "Cost centres",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "FIN"
+  },
+  {
+   "id": "FIN-017",
+   "domain": "FIN",
+   "name": "Forecast",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "FIN"
+  },
+  {
+   "id": "FIN-018",
+   "domain": "FIN",
+   "name": "Monthly close",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "FIN"
+  },
+  {
+   "id": "FIN-019",
+   "domain": "FIN",
+   "name": "Financial reporting",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "FIN"
+  },
+  {
+   "id": "FIN-020",
+   "domain": "FIN",
+   "name": "Audit export",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "FIN"
+  },
+  {
+   "id": "CORP-001",
+   "domain": "CORP",
+   "name": "Legal entity registry",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CORP"
+  },
+  {
+   "id": "CORP-002",
+   "domain": "CORP",
+   "name": "Ownership register",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CORP"
+  },
+  {
+   "id": "CORP-003",
+   "domain": "CORP",
+   "name": "Director register",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CORP"
+  },
+  {
+   "id": "CORP-004",
+   "domain": "CORP",
+   "name": "Corporate policies",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CORP"
+  },
+  {
+   "id": "CORP-005",
+   "domain": "CORP",
+   "name": "Delegated authority",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CORP"
+  },
+  {
+   "id": "CORP-006",
+   "domain": "CORP",
+   "name": "Contracts",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CORP"
+  },
+  {
+   "id": "CORP-007",
+   "domain": "CORP",
+   "name": "Employee lifecycle",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CORP"
+  },
+  {
+   "id": "CORP-008",
+   "domain": "CORP",
+   "name": "Contractor lifecycle",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CORP"
+  },
+  {
+   "id": "CORP-009",
+   "domain": "CORP",
+   "name": "Asset management",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CORP"
+  },
+  {
+   "id": "CORP-010",
+   "domain": "CORP",
+   "name": "Software licences",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CORP"
+  },
+  {
+   "id": "CORP-011",
+   "domain": "CORP",
+   "name": "Domain ownership",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CORP"
+  },
+  {
+   "id": "CORP-012",
+   "domain": "CORP",
+   "name": "Insurance",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CORP"
+  },
+  {
+   "id": "CORP-013",
+   "domain": "CORP",
+   "name": "Procurement",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CORP"
+  },
+  {
+   "id": "CORP-014",
+   "domain": "CORP",
+   "name": "Vendor records",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CORP"
+  },
+  {
+   "id": "CORP-015",
+   "domain": "CORP",
+   "name": "Corporate approvals",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "CORP"
+  },
+  {
+   "id": "GRW-001",
+   "domain": "GRW",
+   "name": "CRM",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "GRW"
+  },
+  {
+   "id": "GRW-002",
+   "domain": "GRW",
+   "name": "Leads",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "GRW"
+  },
+  {
+   "id": "GRW-003",
+   "domain": "GRW",
+   "name": "Opportunities",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "GRW"
+  },
+  {
+   "id": "GRW-004",
+   "domain": "GRW",
+   "name": "Campaigns",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "GRW"
+  },
+  {
+   "id": "GRW-005",
+   "domain": "GRW",
+   "name": "Attribution",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "GRW"
+  },
+  {
+   "id": "GRW-006",
+   "domain": "GRW",
+   "name": "Landing pages",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "GRW"
+  },
+  {
+   "id": "GRW-007",
+   "domain": "GRW",
+   "name": "SEO",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "GRW"
+  },
+  {
+   "id": "GRW-008",
+   "domain": "GRW",
+   "name": "ASO",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "GRW"
+  },
+  {
+   "id": "GRW-009",
+   "domain": "GRW",
+   "name": "Lifecycle email",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "GRW"
+  },
+  {
+   "id": "GRW-010",
+   "domain": "GRW",
+   "name": "Push campaigns",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "GRW"
+  },
+  {
+   "id": "GRW-011",
+   "domain": "GRW",
+   "name": "Referrals",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "GRW"
+  },
+  {
+   "id": "GRW-012",
+   "domain": "GRW",
+   "name": "Affiliates",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "GRW"
+  },
+  {
+   "id": "GRW-013",
+   "domain": "GRW",
+   "name": "Experiments",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "GRW"
+  },
+  {
+   "id": "GRW-014",
+   "domain": "GRW",
+   "name": "Consent",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "GRW"
+  },
+  {
+   "id": "GRW-015",
+   "domain": "GRW",
+   "name": "Unsubscribe",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "GRW"
+  },
+  {
+   "id": "GRW-016",
+   "domain": "GRW",
+   "name": "Campaign analytics",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "GRW"
+  },
+  {
+   "id": "PRT-001",
+   "domain": "PRT",
+   "name": "Partner registry",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "PRT"
+  },
+  {
+   "id": "PRT-002",
+   "domain": "PRT",
+   "name": "Partner onboarding",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "PRT"
+  },
+  {
+   "id": "PRT-003",
+   "domain": "PRT",
+   "name": "Contracts",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "PRT"
+  },
+  {
+   "id": "PRT-004",
+   "domain": "PRT",
+   "name": "Partner credentials",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "PRT"
+  },
+  {
+   "id": "PRT-005",
+   "domain": "PRT",
+   "name": "Certification",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "PRT"
+  },
+  {
+   "id": "PRT-006",
+   "domain": "PRT",
+   "name": "API access",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "PRT"
+  },
+  {
+   "id": "PRT-007",
+   "domain": "PRT",
+   "name": "Partner billing",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "PRT"
+  },
+  {
+   "id": "PRT-008",
+   "domain": "PRT",
+   "name": "Revenue sharing",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "PRT"
+  },
+  {
+   "id": "PRT-009",
+   "domain": "PRT",
+   "name": "Vendor risk",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "PRT"
+  },
+  {
+   "id": "PRT-010",
+   "domain": "PRT",
+   "name": "Renewal tracking",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "PRT"
+  },
+  {
+   "id": "PRT-011",
+   "domain": "PRT",
+   "name": "Subprocessors",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "PRT"
+  },
+  {
+   "id": "PRT-012",
+   "domain": "PRT",
+   "name": "Partner offboarding",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "PRT"
+  },
+  {
+   "id": "DAT-001",
+   "domain": "DAT",
+   "name": "Data architecture",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "DAT"
+  },
+  {
+   "id": "DAT-002",
+   "domain": "DAT",
+   "name": "Schema governance",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "DAT"
+  },
+  {
+   "id": "DAT-003",
+   "domain": "DAT",
+   "name": "Data ownership",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "DAT"
+  },
+  {
+   "id": "DAT-004",
+   "domain": "DAT",
+   "name": "Data dictionary",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "DAT"
+  },
+  {
+   "id": "DAT-005",
+   "domain": "DAT",
+   "name": "Data classification",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "DAT"
+  },
+  {
+   "id": "DAT-006",
+   "domain": "DAT",
+   "name": "Data lineage",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "DAT"
+  },
+  {
+   "id": "DAT-007",
+   "domain": "DAT",
+   "name": "Data quality",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "DAT"
+  },
+  {
+   "id": "DAT-008",
+   "domain": "DAT",
+   "name": "Master data",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "DAT"
+  },
+  {
+   "id": "DAT-009",
+   "domain": "DAT",
+   "name": "Data retention",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "DAT"
+  },
+  {
+   "id": "DAT-010",
+   "domain": "DAT",
+   "name": "Data deletion",
+   "floor": "M1",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3",
+   "domainName": "DAT"
+  },
+  {
+   "id": "DAT-011",
+   "domain": "DAT",
+   "name": "Data export",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "DAT"
+  },
+  {
+   "id": "DAT-012",
+   "domain": "DAT",
+   "name": "Backup",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "DAT"
+  },
+  {
+   "id": "DAT-013",
+   "domain": "DAT",
+   "name": "Restore",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "DAT"
+  },
+  {
+   "id": "DAT-014",
+   "domain": "DAT",
+   "name": "Archive",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "DAT"
+  },
+  {
+   "id": "DAT-015",
+   "domain": "DAT",
+   "name": "Data residency",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "DAT"
+  },
+  {
+   "id": "DAT-016",
+   "domain": "DAT",
+   "name": "Encryption",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "DAT"
+  },
+  {
+   "id": "DAT-017",
+   "domain": "DAT",
+   "name": "Warehouse / lake",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "DAT"
+  },
+  {
+   "id": "DAT-018",
+   "domain": "DAT",
+   "name": "Search indexing",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "DAT"
+  },
+  {
+   "id": "DAT-019",
+   "domain": "DAT",
+   "name": "Queue / event storage",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "DAT"
+  },
+  {
+   "id": "DAT-020",
+   "domain": "DAT",
+   "name": "Data access audit",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "DAT"
+  },
+  {
+   "id": "BI-001",
+   "domain": "BI",
+   "name": "Product analytics",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "DAT"
+  },
+  {
+   "id": "BI-002",
+   "domain": "BI",
+   "name": "Marketplace analytics",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "DAT"
+  },
+  {
+   "id": "BI-003",
+   "domain": "BI",
+   "name": "Revenue analytics",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "DAT"
+  },
+  {
+   "id": "BI-004",
+   "domain": "BI",
+   "name": "Customer analytics",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "DAT"
+  },
+  {
+   "id": "BI-005",
+   "domain": "BI",
+   "name": "Content analytics",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "DAT"
+  },
+  {
+   "id": "BI-006",
+   "domain": "BI",
+   "name": "Operational analytics",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "DAT"
+  },
+  {
+   "id": "BI-007",
+   "domain": "BI",
+   "name": "Executive dashboards",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "DAT"
+  },
+  {
+   "id": "BI-008",
+   "domain": "BI",
+   "name": "Metric dictionary",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "DAT"
+  },
+  {
+   "id": "BI-009",
+   "domain": "BI",
+   "name": "Funnel analysis",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "DAT"
+  },
+  {
+   "id": "BI-010",
+   "domain": "BI",
+   "name": "Retention",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "DAT"
+  },
+  {
+   "id": "BI-011",
+   "domain": "BI",
+   "name": "Cohort analysis",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "DAT"
+  },
+  {
+   "id": "BI-012",
+   "domain": "BI",
+   "name": "Forecasting",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "DAT"
+  },
+  {
+   "id": "BI-013",
+   "domain": "BI",
+   "name": "Data freshness monitoring",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "DAT"
+  },
+  {
+   "id": "API-001",
+   "domain": "API",
+   "name": "API gateway",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "API"
+  },
+  {
+   "id": "API-002",
+   "domain": "API",
+   "name": "Authentication",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "API"
+  },
+  {
+   "id": "API-003",
+   "domain": "API",
+   "name": "Authorization",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "API"
+  },
+  {
+   "id": "API-004",
+   "domain": "API",
+   "name": "Scopes",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "API"
+  },
+  {
+   "id": "API-005",
+   "domain": "API",
+   "name": "Versioning",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "API"
+  },
+  {
+   "id": "API-006",
+   "domain": "API",
+   "name": "Pagination",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "API"
+  },
+  {
+   "id": "API-007",
+   "domain": "API",
+   "name": "Rate limits",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "API"
+  },
+  {
+   "id": "API-008",
+   "domain": "API",
+   "name": "Quotas",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "API"
+  },
+  {
+   "id": "API-009",
+   "domain": "API",
+   "name": "Idempotency",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "API"
+  },
+  {
+   "id": "API-010",
+   "domain": "API",
+   "name": "Validation",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "API"
+  },
+  {
+   "id": "API-011",
+   "domain": "API",
+   "name": "Error model",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "API"
+  },
+  {
+   "id": "API-012",
+   "domain": "API",
+   "name": "Request IDs",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "API"
+  },
+  {
+   "id": "API-013",
+   "domain": "API",
+   "name": "OpenAPI",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "API"
+  },
+  {
+   "id": "API-014",
+   "domain": "API",
+   "name": "API logs",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "API"
+  },
+  {
+   "id": "API-015",
+   "domain": "API",
+   "name": "API monitoring",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "API"
+  },
+  {
+   "id": "API-016",
+   "domain": "API",
+   "name": "Deprecation",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "API"
+  },
+  {
+   "id": "API-017",
+   "domain": "API",
+   "name": "Webhooks",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "API"
+  },
+  {
+   "id": "API-018",
+   "domain": "API",
+   "name": "Webhook signing",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "API"
+  },
+  {
+   "id": "API-019",
+   "domain": "API",
+   "name": "Webhook retries",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "API"
+  },
+  {
+   "id": "API-020",
+   "domain": "API",
+   "name": "API sandbox",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "API"
+  },
+  {
+   "id": "DEV-001",
+   "domain": "DEV",
+   "name": "Developer registration",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "DEV"
+  },
+  {
+   "id": "DEV-002",
+   "domain": "DEV",
+   "name": "Developer organization",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "DEV"
+  },
+  {
+   "id": "DEV-003",
+   "domain": "DEV",
+   "name": "Application registration",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "DEV"
+  },
+  {
+   "id": "DEV-004",
+   "domain": "DEV",
+   "name": "API credentials",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "DEV"
+  },
+  {
+   "id": "DEV-005",
+   "domain": "DEV",
+   "name": "OAuth client",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "DEV"
+  },
+  {
+   "id": "DEV-006",
+   "domain": "DEV",
+   "name": "Credential rotation",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "DEV"
+  },
+  {
+   "id": "DEV-007",
+   "domain": "DEV",
+   "name": "Sandbox",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "DEV"
+  },
+  {
+   "id": "DEV-008",
+   "domain": "DEV",
+   "name": "API explorer",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "DEV"
+  },
+  {
+   "id": "DEV-009",
+   "domain": "DEV",
+   "name": "Usage dashboard",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "DEV"
+  },
+  {
+   "id": "DEV-010",
+   "domain": "DEV",
+   "name": "Logs",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "DEV"
+  },
+  {
+   "id": "DEV-011",
+   "domain": "DEV",
+   "name": "Quotas",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "DEV"
+  },
+  {
+   "id": "DEV-012",
+   "domain": "DEV",
+   "name": "SDKs",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "DEV"
+  },
+  {
+   "id": "DEV-013",
+   "domain": "DEV",
+   "name": "Documentation",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "DEV"
+  },
+  {
+   "id": "DEV-014",
+   "domain": "DEV",
+   "name": "Tutorials",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "DEV"
+  },
+  {
+   "id": "DEV-015",
+   "domain": "DEV",
+   "name": "Sample applications",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "DEV"
+  },
+  {
+   "id": "DEV-016",
+   "domain": "DEV",
+   "name": "Changelog",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "DEV"
+  },
+  {
+   "id": "DEV-017",
+   "domain": "DEV",
+   "name": "Migration guides",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "DEV"
+  },
+  {
+   "id": "DEV-018",
+   "domain": "DEV",
+   "name": "Developer support",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "DEV"
+  },
+  {
+   "id": "DEV-019",
+   "domain": "DEV",
+   "name": "App review",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "DEV"
+  },
+  {
+   "id": "DEV-020",
+   "domain": "DEV",
+   "name": "Integration marketplace",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "DEV"
+  },
+  {
+   "id": "MCP-001",
+   "domain": "MCP",
+   "name": "MCP server registry",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MCP"
+  },
+  {
+   "id": "MCP-002",
+   "domain": "MCP",
+   "name": "Tool registry",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MCP"
+  },
+  {
+   "id": "MCP-003",
+   "domain": "MCP",
+   "name": "Resource registry",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MCP"
+  },
+  {
+   "id": "MCP-004",
+   "domain": "MCP",
+   "name": "Prompt registry",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MCP"
+  },
+  {
+   "id": "MCP-005",
+   "domain": "MCP",
+   "name": "Agent identity",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MCP"
+  },
+  {
+   "id": "MCP-006",
+   "domain": "MCP",
+   "name": "User authorization",
+   "floor": "M3",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "MCP"
+  },
+  {
+   "id": "MCP-007",
+   "domain": "MCP",
+   "name": "OAuth",
+   "floor": "M3",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "MCP"
+  },
+  {
+   "id": "MCP-008",
+   "domain": "MCP",
+   "name": "Tool scopes",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MCP"
+  },
+  {
+   "id": "MCP-009",
+   "domain": "MCP",
+   "name": "Resource scopes",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MCP"
+  },
+  {
+   "id": "MCP-010",
+   "domain": "MCP",
+   "name": "Consent",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MCP"
+  },
+  {
+   "id": "MCP-011",
+   "domain": "MCP",
+   "name": "Human approval",
+   "floor": "M4",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4+E5",
+   "domainName": "MCP"
+  },
+  {
+   "id": "MCP-012",
+   "domain": "MCP",
+   "name": "Execution limits",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MCP"
+  },
+  {
+   "id": "MCP-013",
+   "domain": "MCP",
+   "name": "Rate limits",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MCP"
+  },
+  {
+   "id": "MCP-014",
+   "domain": "MCP",
+   "name": "Tool audit",
+   "floor": "M4",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4+E5",
+   "domainName": "MCP"
+  },
+  {
+   "id": "MCP-015",
+   "domain": "MCP",
+   "name": "Agent audit",
+   "floor": "M4",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4+E5",
+   "domainName": "MCP"
+  },
+  {
+   "id": "MCP-016",
+   "domain": "MCP",
+   "name": "Secret isolation",
+   "floor": "M3",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "MCP"
+  },
+  {
+   "id": "MCP-017",
+   "domain": "MCP",
+   "name": "Data-loss prevention",
+   "floor": "M4",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4+E5",
+   "domainName": "MCP"
+  },
+  {
+   "id": "MCP-018",
+   "domain": "MCP",
+   "name": "Sandbox",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MCP"
+  },
+  {
+   "id": "MCP-019",
+   "domain": "MCP",
+   "name": "Tool versioning",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MCP"
+  },
+  {
+   "id": "MCP-020",
+   "domain": "MCP",
+   "name": "Compatibility",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MCP"
+  },
+  {
+   "id": "MCP-021",
+   "domain": "MCP",
+   "name": "Tool revocation",
+   "floor": "M3",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "MCP"
+  },
+  {
+   "id": "MCP-022",
+   "domain": "MCP",
+   "name": "Server disconnection",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MCP"
+  },
+  {
+   "id": "MCP-023",
+   "domain": "MCP",
+   "name": "Long-running task control",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MCP"
+  },
+  {
+   "id": "MCP-024",
+   "domain": "MCP",
+   "name": "Agent observability",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "MCP"
+  },
+  {
+   "id": "MCP-025",
+   "domain": "MCP",
+   "name": "AI policy enforcement",
+   "floor": "M4",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4+E5",
+   "domainName": "MCP"
+  },
+  {
+   "id": "INT-001",
+   "domain": "INT",
+   "name": "Integration registry",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INT"
+  },
+  {
+   "id": "INT-002",
+   "domain": "INT",
+   "name": "OAuth integrations",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INT"
+  },
+  {
+   "id": "INT-003",
+   "domain": "INT",
+   "name": "Incoming webhooks",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INT"
+  },
+  {
+   "id": "INT-004",
+   "domain": "INT",
+   "name": "Outgoing webhooks",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INT"
+  },
+  {
+   "id": "INT-005",
+   "domain": "INT",
+   "name": "Event bus",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INT"
+  },
+  {
+   "id": "INT-006",
+   "domain": "INT",
+   "name": "Queues",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INT"
+  },
+  {
+   "id": "INT-007",
+   "domain": "INT",
+   "name": "Retry handling",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INT"
+  },
+  {
+   "id": "INT-008",
+   "domain": "INT",
+   "name": "Dead-letter queues",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INT"
+  },
+  {
+   "id": "INT-009",
+   "domain": "INT",
+   "name": "Imports",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INT"
+  },
+  {
+   "id": "INT-010",
+   "domain": "INT",
+   "name": "Exports",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INT"
+  },
+  {
+   "id": "INT-011",
+   "domain": "INT",
+   "name": "CSV",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INT"
+  },
+  {
+   "id": "INT-012",
+   "domain": "INT",
+   "name": "SFTP",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INT"
+  },
+  {
+   "id": "INT-013",
+   "domain": "INT",
+   "name": "Third-party health",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INT"
+  },
+  {
+   "id": "INT-014",
+   "domain": "INT",
+   "name": "Integration ownership",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INT"
+  },
+  {
+   "id": "INT-015",
+   "domain": "INT",
+   "name": "Integration SLA",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INT"
+  },
+  {
+   "id": "INT-016",
+   "domain": "INT",
+   "name": "Version compatibility",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INT"
+  },
+  {
+   "id": "SEC-001",
+   "domain": "SEC",
+   "name": "Security governance",
+   "floor": "M1",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3",
+   "domainName": "SEC"
+  },
+  {
+   "id": "SEC-002",
+   "domain": "SEC",
+   "name": "Threat modeling",
+   "floor": "M1",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3",
+   "domainName": "SEC"
+  },
+  {
+   "id": "SEC-003",
+   "domain": "SEC",
+   "name": "Secure authentication",
+   "floor": "M1",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3",
+   "domainName": "SEC"
+  },
+  {
+   "id": "SEC-004",
+   "domain": "SEC",
+   "name": "Authorization",
+   "floor": "M1",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3",
+   "domainName": "SEC"
+  },
+  {
+   "id": "SEC-005",
+   "domain": "SEC",
+   "name": "Encryption at rest",
+   "floor": "M1",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3",
+   "domainName": "SEC"
+  },
+  {
+   "id": "SEC-006",
+   "domain": "SEC",
+   "name": "Encryption in transit",
+   "floor": "M1",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3",
+   "domainName": "SEC"
+  },
+  {
+   "id": "SEC-007",
+   "domain": "SEC",
+   "name": "Secrets management",
+   "floor": "M1",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3",
+   "domainName": "SEC"
+  },
+  {
+   "id": "SEC-008",
+   "domain": "SEC",
+   "name": "Key rotation",
+   "floor": "M1",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3",
+   "domainName": "SEC"
+  },
+  {
+   "id": "SEC-009",
+   "domain": "SEC",
+   "name": "Dependency scanning",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "SEC"
+  },
+  {
+   "id": "SEC-010",
+   "domain": "SEC",
+   "name": "SAST",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "SEC"
+  },
+  {
+   "id": "SEC-011",
+   "domain": "SEC",
+   "name": "DAST",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "SEC"
+  },
+  {
+   "id": "SEC-012",
+   "domain": "SEC",
+   "name": "Vulnerability management",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "SEC"
+  },
+  {
+   "id": "SEC-013",
+   "domain": "SEC",
+   "name": "Cloud IAM",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "SEC"
+  },
+  {
+   "id": "SEC-014",
+   "domain": "SEC",
+   "name": "Network segmentation",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "SEC"
+  },
+  {
+   "id": "SEC-015",
+   "domain": "SEC",
+   "name": "WAF",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "SEC"
+  },
+  {
+   "id": "SEC-016",
+   "domain": "SEC",
+   "name": "DDoS protection",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "SEC"
+  },
+  {
+   "id": "SEC-017",
+   "domain": "SEC",
+   "name": "Security logging",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "SEC"
+  },
+  {
+   "id": "SEC-018",
+   "domain": "SEC",
+   "name": "SIEM",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "SEC"
+  },
+  {
+   "id": "SEC-019",
+   "domain": "SEC",
+   "name": "Detection",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "SEC"
+  },
+  {
+   "id": "SEC-020",
+   "domain": "SEC",
+   "name": "Security incident response",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "SEC"
+  },
+  {
+   "id": "SEC-021",
+   "domain": "SEC",
+   "name": "Penetration testing",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "SEC"
+  },
+  {
+   "id": "SEC-022",
+   "domain": "SEC",
+   "name": "Security review",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "SEC"
+  },
+  {
+   "id": "SEC-023",
+   "domain": "SEC",
+   "name": "Privileged-access management",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "SEC"
+  },
+  {
+   "id": "SEC-024",
+   "domain": "SEC",
+   "name": "Secure configuration",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "SEC"
+  },
+  {
+   "id": "SEC-025",
+   "domain": "SEC",
+   "name": "Security training",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "SEC"
+  },
+  {
+   "id": "PRV-001",
+   "domain": "PRV",
+   "name": "Privacy notice",
+   "floor": "M1",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3",
+   "domainName": "PRV"
+  },
+  {
+   "id": "PRV-002",
+   "domain": "PRV",
+   "name": "Consent",
+   "floor": "M1",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3",
+   "domainName": "PRV"
+  },
+  {
+   "id": "PRV-003",
+   "domain": "PRV",
+   "name": "Purpose / legal basis",
+   "floor": "M1",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3",
+   "domainName": "PRV"
+  },
+  {
+   "id": "PRV-004",
+   "domain": "PRV",
+   "name": "Data inventory",
+   "floor": "M1",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3",
+   "domainName": "PRV"
+  },
+  {
+   "id": "PRV-005",
+   "domain": "PRV",
+   "name": "Data subject access",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "PRV"
+  },
+  {
+   "id": "PRV-006",
+   "domain": "PRV",
+   "name": "Correction",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "PRV"
+  },
+  {
+   "id": "PRV-007",
+   "domain": "PRV",
+   "name": "Deletion",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "PRV"
+  },
+  {
+   "id": "PRV-008",
+   "domain": "PRV",
+   "name": "Portability",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "PRV"
+  },
+  {
+   "id": "PRV-009",
+   "domain": "PRV",
+   "name": "Restriction",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "PRV"
+  },
+  {
+   "id": "PRV-010",
+   "domain": "PRV",
+   "name": "Objection",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "PRV"
+  },
+  {
+   "id": "PRV-011",
+   "domain": "PRV",
+   "name": "Consent withdrawal",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "PRV"
+  },
+  {
+   "id": "PRV-012",
+   "domain": "PRV",
+   "name": "Retention",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "PRV"
+  },
+  {
+   "id": "PRV-013",
+   "domain": "PRV",
+   "name": "Cookies",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "PRV"
+  },
+  {
+   "id": "PRV-014",
+   "domain": "PRV",
+   "name": "Processor register",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "PRV"
+  },
+  {
+   "id": "PRV-015",
+   "domain": "PRV",
+   "name": "Subprocessor register",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "PRV"
+  },
+  {
+   "id": "PRV-016",
+   "domain": "PRV",
+   "name": "Privacy incident",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "PRV"
+  },
+  {
+   "id": "PRV-017",
+   "domain": "PRV",
+   "name": "DPIA",
+   "floor": "M4",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4+E5",
+   "domainName": "PRV"
+  },
+  {
+   "id": "PRV-018",
+   "domain": "PRV",
+   "name": "Cross-border transfer",
+   "floor": "M4",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4+E5",
+   "domainName": "PRV"
+  },
+  {
+   "id": "LEG-001",
+   "domain": "LEG",
+   "name": "Terms of service",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "LEG"
+  },
+  {
+   "id": "LEG-002",
+   "domain": "LEG",
+   "name": "Privacy policy",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "LEG"
+  },
+  {
+   "id": "LEG-003",
+   "domain": "LEG",
+   "name": "Marketplace terms",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "LEG"
+  },
+  {
+   "id": "LEG-004",
+   "domain": "LEG",
+   "name": "Seller agreement",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "LEG"
+  },
+  {
+   "id": "LEG-005",
+   "domain": "LEG",
+   "name": "Developer terms",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "LEG"
+  },
+  {
+   "id": "LEG-006",
+   "domain": "LEG",
+   "name": "API terms",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "LEG"
+  },
+  {
+   "id": "LEG-007",
+   "domain": "LEG",
+   "name": "Acceptable-use policy",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "LEG"
+  },
+  {
+   "id": "LEG-008",
+   "domain": "LEG",
+   "name": "Refund policy",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "LEG"
+  },
+  {
+   "id": "LEG-009",
+   "domain": "LEG",
+   "name": "Subscription terms",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "LEG"
+  },
+  {
+   "id": "LEG-010",
+   "domain": "LEG",
+   "name": "IP policy",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "LEG"
+  },
+  {
+   "id": "LEG-011",
+   "domain": "LEG",
+   "name": "Copyright process",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "LEG"
+  },
+  {
+   "id": "LEG-012",
+   "domain": "LEG",
+   "name": "Legal request process",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "LEG"
+  },
+  {
+   "id": "LEG-013",
+   "domain": "LEG",
+   "name": "Contract management",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "LEG"
+  },
+  {
+   "id": "LEG-014",
+   "domain": "LEG",
+   "name": "Legal hold",
+   "floor": "M4",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4+E5",
+   "domainName": "LEG"
+  },
+  {
+   "id": "LEG-015",
+   "domain": "LEG",
+   "name": "Records retention",
+   "floor": "M4",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4+E5",
+   "domainName": "LEG"
+  },
+  {
+   "id": "GOV-001",
+   "domain": "GOV",
+   "name": "Regulatory applicability assessment",
+   "floor": "M4",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4+E5",
+   "domainName": "GOV"
+  },
+  {
+   "id": "GOV-002",
+   "domain": "GOV",
+   "name": "Licence register",
+   "floor": "M4",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4+E5",
+   "domainName": "GOV"
+  },
+  {
+   "id": "GOV-003",
+   "domain": "GOV",
+   "name": "Tax reporting",
+   "floor": "M4",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4+E5",
+   "domainName": "GOV"
+  },
+  {
+   "id": "GOV-004",
+   "domain": "GOV",
+   "name": "Marketplace reporting",
+   "floor": "M4",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4+E5",
+   "domainName": "GOV"
+  },
+  {
+   "id": "GOV-005",
+   "domain": "GOV",
+   "name": "Seller regulatory data",
+   "floor": "M4",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4+E5",
+   "domainName": "GOV"
+  },
+  {
+   "id": "GOV-006",
+   "domain": "GOV",
+   "name": "Compliance reporting",
+   "floor": "M4",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4+E5",
+   "domainName": "GOV"
+  },
+  {
+   "id": "GOV-007",
+   "domain": "GOV",
+   "name": "Lawful requests",
+   "floor": "M4",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4+E5",
+   "domainName": "GOV"
+  },
+  {
+   "id": "GOV-008",
+   "domain": "GOV",
+   "name": "Regulatory notices",
+   "floor": "M4",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4+E5",
+   "domainName": "GOV"
+  },
+  {
+   "id": "GOV-009",
+   "domain": "GOV",
+   "name": "Sanctions controls",
+   "floor": "M4",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4+E5",
+   "domainName": "GOV"
+  },
+  {
+   "id": "GOV-010",
+   "domain": "GOV",
+   "name": "Product recalls",
+   "floor": "M4",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4+E5",
+   "domainName": "GOV"
+  },
+  {
+   "id": "GOV-011",
+   "domain": "GOV",
+   "name": "Regulatory incident reporting",
+   "floor": "M4",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4+E5",
+   "domainName": "GOV"
+  },
+  {
+   "id": "GOV-012",
+   "domain": "GOV",
+   "name": "Government integrations",
+   "floor": "M4",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4+E5",
+   "domainName": "GOV"
+  },
+  {
+   "id": "GOV-013",
+   "domain": "GOV",
+   "name": "Regulator audit package",
+   "floor": "M4",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4+E5",
+   "domainName": "GOV"
+  },
+  {
+   "id": "GOV-014",
+   "domain": "GOV",
+   "name": "Regulatory retention",
+   "floor": "M4",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4+E5",
+   "domainName": "GOV"
+  },
+  {
+   "id": "ACC-001",
+   "domain": "ACC",
+   "name": "Keyboard navigation",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "ACC"
+  },
+  {
+   "id": "ACC-002",
+   "domain": "ACC",
+   "name": "Screen-reader compatibility",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "ACC"
+  },
+  {
+   "id": "ACC-003",
+   "domain": "ACC",
+   "name": "Focus management",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "ACC"
+  },
+  {
+   "id": "ACC-004",
+   "domain": "ACC",
+   "name": "Contrast",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "ACC"
+  },
+  {
+   "id": "ACC-005",
+   "domain": "ACC",
+   "name": "Text scaling",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "ACC"
+  },
+  {
+   "id": "ACC-006",
+   "domain": "ACC",
+   "name": "Accessible authentication",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "ACC"
+  },
+  {
+   "id": "ACC-007",
+   "domain": "ACC",
+   "name": "Captions",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "ACC"
+  },
+  {
+   "id": "ACC-008",
+   "domain": "ACC",
+   "name": "Alt text",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "ACC"
+  },
+  {
+   "id": "ACC-009",
+   "domain": "ACC",
+   "name": "Accessibility testing",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "ACC"
+  },
+  {
+   "id": "ACC-010",
+   "domain": "ACC",
+   "name": "Accessibility statement",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "ACC"
+  },
+  {
+   "id": "I18N-001",
+   "domain": "I18N",
+   "name": "Locale architecture",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "ACC"
+  },
+  {
+   "id": "I18N-002",
+   "domain": "I18N",
+   "name": "Language switching",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "ACC"
+  },
+  {
+   "id": "I18N-003",
+   "domain": "I18N",
+   "name": "Translation workflow",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "ACC"
+  },
+  {
+   "id": "I18N-004",
+   "domain": "I18N",
+   "name": "Currency",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "ACC"
+  },
+  {
+   "id": "I18N-005",
+   "domain": "I18N",
+   "name": "Time zones",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "ACC"
+  },
+  {
+   "id": "I18N-006",
+   "domain": "I18N",
+   "name": "Date / time formats",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "ACC"
+  },
+  {
+   "id": "I18N-007",
+   "domain": "I18N",
+   "name": "Number formats",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "ACC"
+  },
+  {
+   "id": "I18N-008",
+   "domain": "I18N",
+   "name": "RTL",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "ACC"
+  },
+  {
+   "id": "I18N-009",
+   "domain": "I18N",
+   "name": "Regional content",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "ACC"
+  },
+  {
+   "id": "I18N-010",
+   "domain": "I18N",
+   "name": "Locale fallback",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "ACC"
+  },
+  {
+   "id": "INF-001",
+   "domain": "INF",
+   "name": "Environment architecture",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "INF"
+  },
+  {
+   "id": "INF-002",
+   "domain": "INF",
+   "name": "DNS",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "INF"
+  },
+  {
+   "id": "INF-003",
+   "domain": "INF",
+   "name": "Certificates",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "INF"
+  },
+  {
+   "id": "INF-004",
+   "domain": "INF",
+   "name": "CDN",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "INF"
+  },
+  {
+   "id": "INF-005",
+   "domain": "INF",
+   "name": "Compute",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "INF"
+  },
+  {
+   "id": "INF-006",
+   "domain": "INF",
+   "name": "Database",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INF"
+  },
+  {
+   "id": "INF-007",
+   "domain": "INF",
+   "name": "Object storage",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INF"
+  },
+  {
+   "id": "INF-008",
+   "domain": "INF",
+   "name": "Cache",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INF"
+  },
+  {
+   "id": "INF-009",
+   "domain": "INF",
+   "name": "Queues",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INF"
+  },
+  {
+   "id": "INF-010",
+   "domain": "INF",
+   "name": "Networking",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INF"
+  },
+  {
+   "id": "INF-011",
+   "domain": "INF",
+   "name": "Secret store",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INF"
+  },
+  {
+   "id": "INF-012",
+   "domain": "INF",
+   "name": "Region strategy",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INF"
+  },
+  {
+   "id": "INF-013",
+   "domain": "INF",
+   "name": "Scaling",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INF"
+  },
+  {
+   "id": "INF-014",
+   "domain": "INF",
+   "name": "Infrastructure as code",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INF"
+  },
+  {
+   "id": "INF-015",
+   "domain": "INF",
+   "name": "Backup infrastructure",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INF"
+  },
+  {
+   "id": "INF-016",
+   "domain": "INF",
+   "name": "Cost management",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INF"
+  },
+  {
+   "id": "INF-017",
+   "domain": "INF",
+   "name": "Capacity management",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INF"
+  },
+  {
+   "id": "ENG-001",
+   "domain": "ENG",
+   "name": "Source control",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "ENG"
+  },
+  {
+   "id": "ENG-002",
+   "domain": "ENG",
+   "name": "Branching strategy",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "ENG"
+  },
+  {
+   "id": "ENG-003",
+   "domain": "ENG",
+   "name": "Code review",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "ENG"
+  },
+  {
+   "id": "ENG-004",
+   "domain": "ENG",
+   "name": "CI",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "ENG"
+  },
+  {
+   "id": "ENG-005",
+   "domain": "ENG",
+   "name": "Unit tests",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "ENG"
+  },
+  {
+   "id": "ENG-006",
+   "domain": "ENG",
+   "name": "Integration tests",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "ENG"
+  },
+  {
+   "id": "ENG-007",
+   "domain": "ENG",
+   "name": "E2E tests",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "ENG"
+  },
+  {
+   "id": "ENG-008",
+   "domain": "ENG",
+   "name": "Security tests",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "ENG"
+  },
+  {
+   "id": "ENG-009",
+   "domain": "ENG",
+   "name": "Performance tests",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "ENG"
+  },
+  {
+   "id": "ENG-010",
+   "domain": "ENG",
+   "name": "Accessibility tests",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "ENG"
+  },
+  {
+   "id": "ENG-011",
+   "domain": "ENG",
+   "name": "Build artifacts",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "ENG"
+  },
+  {
+   "id": "ENG-012",
+   "domain": "ENG",
+   "name": "Artifact registry",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "ENG"
+  },
+  {
+   "id": "ENG-013",
+   "domain": "ENG",
+   "name": "Dependency management",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "ENG"
+  },
+  {
+   "id": "ENG-014",
+   "domain": "ENG",
+   "name": "SBOM",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "ENG"
+  },
+  {
+   "id": "ENG-015",
+   "domain": "ENG",
+   "name": "Database migrations",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "ENG"
+  },
+  {
+   "id": "ENG-016",
+   "domain": "ENG",
+   "name": "Feature flags",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "ENG"
+  },
+  {
+   "id": "ENG-017",
+   "domain": "ENG",
+   "name": "Environment promotion",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "ENG"
+  },
+  {
+   "id": "ENG-018",
+   "domain": "ENG",
+   "name": "Release approvals",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "ENG"
+  },
+  {
+   "id": "ENG-019",
+   "domain": "ENG",
+   "name": "Rollback",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "ENG"
+  },
+  {
+   "id": "ENG-020",
+   "domain": "ENG",
+   "name": "Change management",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "ENG"
+  },
+  {
+   "id": "OPS-001",
+   "domain": "OPS",
+   "name": "Application logs",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "OPS"
+  },
+  {
+   "id": "OPS-002",
+   "domain": "OPS",
+   "name": "Infrastructure logs",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "OPS"
+  },
+  {
+   "id": "OPS-003",
+   "domain": "OPS",
+   "name": "Metrics",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "OPS"
+  },
+  {
+   "id": "OPS-004",
+   "domain": "OPS",
+   "name": "Tracing",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "OPS"
+  },
+  {
+   "id": "OPS-005",
+   "domain": "OPS",
+   "name": "Crash reporting",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "OPS"
+  },
+  {
+   "id": "OPS-006",
+   "domain": "OPS",
+   "name": "Uptime monitoring",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "OPS"
+  },
+  {
+   "id": "OPS-007",
+   "domain": "OPS",
+   "name": "Synthetic checks",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "OPS"
+  },
+  {
+   "id": "OPS-008",
+   "domain": "OPS",
+   "name": "Dashboards",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "OPS"
+  },
+  {
+   "id": "OPS-009",
+   "domain": "OPS",
+   "name": "Alerts",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "OPS"
+  },
+  {
+   "id": "OPS-010",
+   "domain": "OPS",
+   "name": "On-call",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "OPS"
+  },
+  {
+   "id": "OPS-011",
+   "domain": "OPS",
+   "name": "SLI",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "OPS"
+  },
+  {
+   "id": "OPS-012",
+   "domain": "OPS",
+   "name": "SLO",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "OPS"
+  },
+  {
+   "id": "OPS-013",
+   "domain": "OPS",
+   "name": "SLA",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "OPS"
+  },
+  {
+   "id": "OPS-014",
+   "domain": "OPS",
+   "name": "Error budgets",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "OPS"
+  },
+  {
+   "id": "OPS-015",
+   "domain": "OPS",
+   "name": "Runbooks",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "OPS"
+  },
+  {
+   "id": "OPS-016",
+   "domain": "OPS",
+   "name": "Capacity monitoring",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "OPS"
+  },
+  {
+   "id": "OPS-017",
+   "domain": "OPS",
+   "name": "Cost monitoring",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "OPS"
+  },
+  {
+   "id": "OPS-018",
+   "domain": "OPS",
+   "name": "Status page",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "OPS"
+  },
+  {
+   "id": "INC-001",
+   "domain": "INC",
+   "name": "Severity model",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INC"
+  },
+  {
+   "id": "INC-002",
+   "domain": "INC",
+   "name": "Incident declaration",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INC"
+  },
+  {
+   "id": "INC-003",
+   "domain": "INC",
+   "name": "Incident commander",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INC"
+  },
+  {
+   "id": "INC-004",
+   "domain": "INC",
+   "name": "Escalation",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INC"
+  },
+  {
+   "id": "INC-005",
+   "domain": "INC",
+   "name": "Communications",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INC"
+  },
+  {
+   "id": "INC-006",
+   "domain": "INC",
+   "name": "Containment",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INC"
+  },
+  {
+   "id": "INC-007",
+   "domain": "INC",
+   "name": "Recovery",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INC"
+  },
+  {
+   "id": "INC-008",
+   "domain": "INC",
+   "name": "Customer notification",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INC"
+  },
+  {
+   "id": "INC-009",
+   "domain": "INC",
+   "name": "Regulatory notification",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INC"
+  },
+  {
+   "id": "INC-010",
+   "domain": "INC",
+   "name": "Root cause analysis",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INC"
+  },
+  {
+   "id": "INC-011",
+   "domain": "INC",
+   "name": "Postmortem",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INC"
+  },
+  {
+   "id": "INC-012",
+   "domain": "INC",
+   "name": "Corrective actions",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "INC"
+  },
+  {
+   "id": "BCP-001",
+   "domain": "BCP",
+   "name": "Business impact assessment",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "BCP"
+  },
+  {
+   "id": "BCP-002",
+   "domain": "BCP",
+   "name": "RPO",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "BCP"
+  },
+  {
+   "id": "BCP-003",
+   "domain": "BCP",
+   "name": "RTO",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "BCP"
+  },
+  {
+   "id": "BCP-004",
+   "domain": "BCP",
+   "name": "Backups",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "BCP"
+  },
+  {
+   "id": "BCP-005",
+   "domain": "BCP",
+   "name": "Restore test",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "BCP"
+  },
+  {
+   "id": "BCP-006",
+   "domain": "BCP",
+   "name": "Disaster recovery",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "BCP"
+  },
+  {
+   "id": "BCP-007",
+   "domain": "BCP",
+   "name": "Region failure",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "BCP"
+  },
+  {
+   "id": "BCP-008",
+   "domain": "BCP",
+   "name": "Credential compromise",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "BCP"
+  },
+  {
+   "id": "BCP-009",
+   "domain": "BCP",
+   "name": "Provider outage",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "BCP"
+  },
+  {
+   "id": "BCP-010",
+   "domain": "BCP",
+   "name": "Alternate communications",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "BCP"
+  },
+  {
+   "id": "BCP-011",
+   "domain": "BCP",
+   "name": "Emergency access",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "BCP"
+  },
+  {
+   "id": "BCP-012",
+   "domain": "BCP",
+   "name": "Recovery validation",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "BCP"
+  },
+  {
+   "id": "BCP-013",
+   "domain": "BCP",
+   "name": "Continuity exercises",
+   "floor": "M2",
+   "criticality": "C3",
+   "evidence": "E1+E2+E3+E4",
+   "domainName": "BCP"
+  },
+  {
+   "id": "REL-001",
+   "domain": "REL",
+   "name": "Web deployment",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "REL"
+  },
+  {
+   "id": "REL-002",
+   "domain": "REL",
+   "name": "Mobile signing",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "REL"
+  },
+  {
+   "id": "REL-003",
+   "domain": "REL",
+   "name": "Apple distribution",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "REL"
+  },
+  {
+   "id": "REL-004",
+   "domain": "REL",
+   "name": "Google Play distribution",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "REL"
+  },
+  {
+   "id": "REL-005",
+   "domain": "REL",
+   "name": "Beta distribution",
+   "floor": "M1",
+   "criticality": "C2",
+   "evidence": "E1+E2",
+   "domainName": "REL"
+  },
+  {
+   "id": "REL-006",
+   "domain": "REL",
+   "name": "Release notes",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "REL"
+  },
+  {
+   "id": "REL-007",
+   "domain": "REL",
+   "name": "Version tracking",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "REL"
+  },
+  {
+   "id": "REL-008",
+   "domain": "REL",
+   "name": "Phased rollout",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "REL"
+  },
+  {
+   "id": "REL-009",
+   "domain": "REL",
+   "name": "Rollback",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "REL"
+  },
+  {
+   "id": "REL-010",
+   "domain": "REL",
+   "name": "Store compliance",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "REL"
+  },
+  {
+   "id": "REL-011",
+   "domain": "REL",
+   "name": "Privacy declarations",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "REL"
+  },
+  {
+   "id": "REL-012",
+   "domain": "REL",
+   "name": "Crash monitoring",
+   "floor": "M2",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "REL"
+  },
+  {
+   "id": "DOC-001",
+   "domain": "DOC",
+   "name": "Customer help",
+   "floor": "M1",
+   "criticality": "C1",
+   "evidence": "E1+E2",
+   "domainName": "DOC"
+  },
+  {
+   "id": "DOC-002",
+   "domain": "DOC",
+   "name": "Seller documentation",
+   "floor": "M1",
+   "criticality": "C1",
+   "evidence": "E1+E2",
+   "domainName": "DOC"
+  },
+  {
+   "id": "DOC-003",
+   "domain": "DOC",
+   "name": "Internal knowledge",
+   "floor": "M1",
+   "criticality": "C1",
+   "evidence": "E1+E2",
+   "domainName": "DOC"
+  },
+  {
+   "id": "DOC-004",
+   "domain": "DOC",
+   "name": "Engineering documentation",
+   "floor": "M1",
+   "criticality": "C1",
+   "evidence": "E1+E2",
+   "domainName": "DOC"
+  },
+  {
+   "id": "DOC-005",
+   "domain": "DOC",
+   "name": "API documentation",
+   "floor": "M1",
+   "criticality": "C1",
+   "evidence": "E1+E2",
+   "domainName": "DOC"
+  },
+  {
+   "id": "DOC-006",
+   "domain": "DOC",
+   "name": "MCP documentation",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "DOC"
+  },
+  {
+   "id": "DOC-007",
+   "domain": "DOC",
+   "name": "Support playbooks",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "DOC"
+  },
+  {
+   "id": "DOC-008",
+   "domain": "DOC",
+   "name": "Runbooks",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "DOC"
+  },
+  {
+   "id": "DOC-009",
+   "domain": "DOC",
+   "name": "Security playbooks",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "DOC"
+  },
+  {
+   "id": "DOC-010",
+   "domain": "DOC",
+   "name": "Compliance policies",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "DOC"
+  },
+  {
+   "id": "DOC-011",
+   "domain": "DOC",
+   "name": "Architecture records",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "DOC"
+  },
+  {
+   "id": "DOC-012",
+   "domain": "DOC",
+   "name": "Decision records",
+   "floor": "M2",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "DOC"
+  },
+  {
+   "id": "EXE-001",
+   "domain": "EXE",
+   "name": "Executive dashboard",
+   "floor": "M3",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "EXE"
+  },
+  {
+   "id": "EXE-002",
+   "domain": "EXE",
+   "name": "Financial dashboard",
+   "floor": "M3",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "EXE"
+  },
+  {
+   "id": "EXE-003",
+   "domain": "EXE",
+   "name": "Product dashboard",
+   "floor": "M3",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "EXE"
+  },
+  {
+   "id": "EXE-004",
+   "domain": "EXE",
+   "name": "Risk dashboard",
+   "floor": "M3",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "EXE"
+  },
+  {
+   "id": "EXE-005",
+   "domain": "EXE",
+   "name": "Security dashboard",
+   "floor": "M3",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4",
+   "domainName": "EXE"
+  },
+  {
+   "id": "EXE-006",
+   "domain": "EXE",
+   "name": "Compliance dashboard",
+   "floor": "M4",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4+E5",
+   "domainName": "EXE"
+  },
+  {
+   "id": "EXE-007",
+   "domain": "EXE",
+   "name": "Roadmap governance",
+   "floor": "M4",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4+E5",
+   "domainName": "EXE"
+  },
+  {
+   "id": "EXE-008",
+   "domain": "EXE",
+   "name": "Strategic dependencies",
+   "floor": "M4",
+   "criticality": "C1",
+   "evidence": "E1+E2+E4+E5",
+   "domainName": "EXE"
+  },
+  {
+   "id": "RSK-001",
+   "domain": "RSK",
+   "name": "Risk register",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "RSK"
+  },
+  {
+   "id": "RSK-002",
+   "domain": "RSK",
+   "name": "Risk ownership",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "RSK"
+  },
+  {
+   "id": "RSK-003",
+   "domain": "RSK",
+   "name": "Risk scoring",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "RSK"
+  },
+  {
+   "id": "RSK-004",
+   "domain": "RSK",
+   "name": "Control mapping",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "RSK"
+  },
+  {
+   "id": "RSK-005",
+   "domain": "RSK",
+   "name": "Exception management",
+   "floor": "M3",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4",
+   "domainName": "RSK"
+  },
+  {
+   "id": "RSK-006",
+   "domain": "RSK",
+   "name": "Internal audit",
+   "floor": "M4",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4+E5",
+   "domainName": "RSK"
+  },
+  {
+   "id": "RSK-007",
+   "domain": "RSK",
+   "name": "External audit",
+   "floor": "M4",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4+E5",
+   "domainName": "RSK"
+  },
+  {
+   "id": "RSK-008",
+   "domain": "RSK",
+   "name": "Vendor risk",
+   "floor": "M4",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4+E5",
+   "domainName": "RSK"
+  },
+  {
+   "id": "RSK-009",
+   "domain": "RSK",
+   "name": "Assurance evidence",
+   "floor": "M4",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4+E5",
+   "domainName": "RSK"
+  },
+  {
+   "id": "RSK-010",
+   "domain": "RSK",
+   "name": "Corrective action tracking",
+   "floor": "M4",
+   "criticality": "C2",
+   "evidence": "E1+E2+E4+E5",
+   "domainName": "RSK"
+  }
+ ]
+}

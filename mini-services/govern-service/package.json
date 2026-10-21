@@ -1,0 +1,11 @@
+{
+  "name": "govern-service",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "description": "Tengasell governance service (MSCS 12-d) — versioned bilingual policy CMS with editorial workflow, Privacy Centre/DSAR engine (access/correction/deletion/portability/restriction/objection), data register, processor register, corporate/regulatory registers, incident + risk + legal-hold management, decision log and the 609-control MSCS compliance register on port 3008.",
+  "scripts": {
+    "dev": "bun --hot index.ts",
+    "start": "bun index.ts"
+  }
+}

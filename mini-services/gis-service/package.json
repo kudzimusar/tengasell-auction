@@ -1,0 +1,9 @@
+{
+  "name": "tengasell-gis-service",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Tengasell GIS mini-service — open-source GIS stack contracts on port 3004: Nominatim-compatible /search + /reverse, Photon-compatible /api autocomplete, OSRM-compatible /route + /table, TileServer-GL-compatible MVT tiles + MapLibre style. Zero dependencies (plain TypeScript on Bun's HTTP server).",
+  "scripts": {
+    "dev": "bun --hot index.ts"
+  }
+}

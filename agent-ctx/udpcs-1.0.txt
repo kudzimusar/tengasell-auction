@@ -1,0 +1,2988 @@
+┃┃┃┃ 11-11 Tech
+
+CLIENT CAPABILITY STANDARD
+
+UNIVERSAL DIGITAL PLATFORM CAPABILITY STANDARD
+20 October 2026
+
+Build what matters. Prove what works.
+
+┃┃┃┃ 11-11 Tech
+Build what matters. Prove what works.
+
+UNIVERSAL DIGITAL PLATFORM
+
+Capability Standard
+UDPCS 1.0
+Marketplace • CMS • SaaS • Mobile • AI • Enterprise Application Readiness
+Framework
+PURPOSE
+
+A reusable due-diligence, design, build and operational-readiness standard for determining whether a digital product has the
+customer, administrative, corporate, technical, financial, security, legal and governance capabilities required to operate as a real
+company.
+
+EDITION
+
+Client Reference Edition
+
+ISSUED
+
+20 October 2026
+
+PREPARED BY
+
+11-11 Tech
+
+POSITIONING
+
+Tokyo-built. Africa-aware. Global by design.
+
+USE
+
+Architecture reviews • product planning • due diligence • build
+checklists • readiness audits
+
+A capability framework from 11-11 Tech — product strategy, software engineering, IT operations, marketing technology and AI.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+CLIENT STANDARD • 1
+
+┃┃┃┃ 11-11 Tech
+
+CLIENT CAPABILITY STANDARD
+
+UNIVERSAL DIGITAL PLATFORM CAPABILITY STANDARD
+20 October 2026
+
+Build what matters. Prove what works.
+
+EXECUTIVE BRIEF
+
+Build the company around the product - not after
+it.
+A marketplace, CMS or application is incomplete when the public experience works but the business cannot govern,
+support, reconcile, secure, audit or extend it.
+The recurring failure pattern in software projects is not usually the absence of another screen. It is the absence of an
+operating capability: a marketplace with no seller administration, a CMS with no editorial workflow, payments with no
+reconciliation, APIs with no developer console, or customer accounts with no privacy/deletion operations.
+11-11 TECH DOCTRINE
+
+Every external capability requires an internal control-plane counterpart. If customers can buy, sellers can sell, editors can
+publish, developers can integrate, or AI agents can act, the company must be able to authorize, inspect, support, audit, correct,
+suspend, recover and report on those actions.
+
+How to use this standard
+ Use the 35-domain Master Capability Catalogue as the architecture index for a new product or company.
+ Mark each domain REQUIRED, CONDITIONAL, NOT APPLICABLE or FUTURE before implementation begins.
+ For every material feature, run the Capability Mirror and the nine-dimension Feature Completeness test.
+ Assess maturity at Foundation, Operational, Scalable or Enterprise / Regulated level rather than using a binary “built / not built”
+judgement.
+
+ Require evidence. Source code, a design document or a green UI does not by itself prove operational capability.
+
+Scope
+UDPCS 1.0 is designed to be reused across marketplaces, content platforms, SaaS products, consumer/mobile applications,
+B2B platforms, AI-enabled software, internal systems and regulated digital services. The framework identifies capability
+areas; exact legal, tax and regulatory duties remain jurisdiction- and industry-specific.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+CLIENT STANDARD • 2
+
+┃┃┃┃ 11-11 Tech
+
+CLIENT CAPABILITY STANDARD
+
+UNIVERSAL DIGITAL PLATFORM CAPABILITY STANDARD
+20 October 2026
+
+Build what matters. Prove what works.
+
+OPERATING ARCHITECTURE
+
+The Five-Plane Operating Model
+The five planes prevent the customer application from being mistaken for the whole company.
+
+Figure 1. The 11-11 Tech Five-Plane Operating Model.
+
+Plane
+
+Primary question
+
+Typical surfaces
+
+Experience
+
+How do customers, sellers, partners and
+audiences receive value?
+
+Web/mobile apps, seller portal, CMS studio, public site, partner portal.
+
+Control
+
+How does the company safely operate
+and correct the product?
+
+Admin, support, finance, moderation, compliance and executive
+consoles.
+
+Platform
+
+How is capability shared and extended?
+
+Identity, data, APIs, developer tooling, MCP/AI, events and integrations.
+
+Operations
+
+How is the service deployed, observed,
+secured and recovered?
+
+Cloud, CI/CD, security operations, observability, incident and DR
+systems.
+
+Governance
+
+How is the company accountable?
+
+Corporate, legal, privacy, regulatory, tax, risk and audit processes.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+CLIENT STANDARD • 3
+
+┃┃┃┃ 11-11 Tech
+
+CLIENT CAPABILITY STANDARD
+
+UNIVERSAL DIGITAL PLATFORM CAPABILITY STANDARD
+20 October 2026
+
+Build what matters. Prove what works.
+
+DESIGN RULE
+
+The Capability Mirror
+A feature should be mirrored across business, control, data, security, compliance and recovery before it is declared
+complete.
+
+Figure 2. Fifteen questions that expose missing operational layers.
+
+#
+
+Lens
+
+Required design question
+
+01
+
+Customer
+
+Who uses it, what outcome do they expect and what happens at each state?
+
+02
+
+Business owner
+
+Which person/team owns the outcome and policy?
+
+03
+
+Admin
+
+Who can inspect, approve, correct, suspend, restore or override it?
+
+04
+
+Permission
+
+What authority is required; what is explicitly forbidden?
+
+05
+
+Data
+
+What authoritative records are created, changed or deleted?
+
+06
+
+Audit
+
+Which actions must be traceable and immutable?
+
+07
+
+Finance
+
+Does money, revenue, liability, commission, tax or reconciliation change?
+
+08
+
+Legal
+
+Which policy, contract, legal or regulatory obligation is triggered?
+
+09
+
+Security
+
+How can it be abused, escalated, forged or exfiltrated?
+
+10
+
+Support
+
+What information and scoped actions does support need?
+
+11
+
+Operations
+
+What failure states, retries, alerts and runbooks exist?
+
+12
+
+Analytics
+
+How is success, quality and failure measured?
+
+13
+
+API
+
+Does software-to-software access need parity or a deliberately smaller surface?
+
+14
+
+AI / MCP
+
+Should an agent access it; what consent/approval is required?
+
+15
+
+Recovery
+
+Can the state be rolled back, restored, reconciled or reconstructed?
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+CLIENT STANDARD • 4
+
+┃┃┃┃ 11-11 Tech
+
+CLIENT CAPABILITY STANDARD
+
+UNIVERSAL DIGITAL PLATFORM CAPABILITY STANDARD
+20 October 2026
+
+Build what matters. Prove what works.
+
+MATURITY
+
+Capability maturity is not binary
+Different products need different levels of operational rigor. The correct target depends on money flow, data
+sensitivity, criticality, scale and regulation.
+
+Figure 3. A four-level maturity model for planning and readiness reviews.
+
+Level
+
+Minimum interpretation
+
+Typical gate
+
+1 — Foundation
+
+Core journeys work safely with identity, authoritative data, baseline admin and
+basic security.
+
+MVP / private beta.
+
+2 — Operational
+
+Support, finance, monitoring, incident handling, audit and backup make daily
+operation sustainable.
+
+Public launch / revenue
+operation.
+
+3 — Scalable
+
+Automation, developer interfaces, SLOs, data governance and delegated
+controls support growth.
+
+Multi-team / partner / multiregion growth.
+
+4 — Enterprise /
+Regulated
+
+Advanced IAM, assurance evidence, DR, vendor governance and jurisdictionspecific controls withstand scrutiny.
+
+Enterprise contracts /
+regulated deployment / high
+criticality.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+CLIENT STANDARD • 5
+
+┃┃┃┃ 11-11 Tech
+
+CLIENT CAPABILITY STANDARD
+
+UNIVERSAL DIGITAL PLATFORM CAPABILITY STANDARD
+20 October 2026
+
+Build what matters. Prove what works.
+
+MASTER INDEX
+
+35-Domain Master Capability Catalogue
+Use this as the mandatory architecture index before feature design, implementation or release planning.
+ID
+
+Plane
+
+Capability domain
+
+Purpose
+
+Minimum evidence
+
+STR-01
+
+Experience
+
+Strategy & Business Model
+
+Defines who the product serves, why it exists, how value is created and how
+the business sustains itself.
+
+Approved product brief; business model; roadmap; KPI
+definitions.
+
+EXP-01
+
+Experience
+
+Customer Product
+
+The public and authenticated experience across web, mobile and other
+channels.
+
+Journey maps; release acceptance; production analytics;
+accessibility evidence.
+
+IAM-01
+
+Experience
+
+Identity, Accounts & Organizations
+
+Controls people, organizations, sessions and delegated access.
+
+Role matrix; auth tests; session logs; tenant-isolation proof.
+
+MKT-01
+
+Experience
+
+Marketplace / Supply & Demand
+
+Connects buyers and sellers/providers and manages supply, demand and
+marketplace trust.
+
+Seller lifecycle evidence; transaction reconciliation; moderation
+and dispute records.
+
+COM-01
+
+Experience
+
+Commerce, Payments & Transactions
+
+Manages quotes/orders/bookings/subscriptions and the complete money
+lifecycle.
+
+Ledger/reconciliation; payment-provider evidence;
+refund/dispute controls.
+
+CMS-01
+
+Experience
+
+CMS / Content / Media
+
+Creates, governs, publishes and distributes structured content and digital
+assets.
+
+Content workflow evidence; version history; publication logs;
+rights metadata.
+
+DSC-01
+
+Experience
+
+Search, Discovery &
+Recommendations
+
+Helps users find the right product, content, seller or service.
+
+Search quality metrics; index health; relevance tests.
+
+MSG-01
+
+Experience
+
+Communication & Notifications
+
+Coordinates system, transactional and human communications.
+
+Template catalogue; consent records; provider logs;
+bounce/failure handling.
+
+A11Y-01
+
+Experience
+
+Accessibility & Internationalization
+
+Makes the product usable across abilities, languages, locales and regions.
+
+Accessibility audit; localization matrix; device/locale QA.
+
+GRO-01
+
+Experience
+
+Sales, Marketing & Growth
+
+Acquires, converts and retains customers while governing claims and
+consent.
+
+Campaign attribution; CRM pipeline; consent evidence;
+experiment register.
+
+PRT-01
+
+Experience
+
+Partners & Vendors
+
+Provides structured onboarding and operation for strategic partners and
+third parties.
+
+Partner register; contract status; integration health; vendor risk
+record.
+
+CTL-01
+
+Control
+
+Admin / Operations Control Plane
+
+Gives authorized staff safe operational control over the live product.
+
+Admin role matrix; privileged-action logs; break-glass
+procedure.
+
+CRM-01
+
+Control
+
+Customer Support / CRM
+
+Enables support teams to understand users and resolve issues without
+broad administrative privilege.
+
+Support runbooks; case history; SLA dashboard; scoped
+support permissions.
+
+TRS-01
+
+Control
+
+Trust & Safety
+
+Handles abuse, fraud, scams, illegal content/goods, policy violations and
+appeals.
+
+Case file; enforcement log; appeal history; policy mapping.
+
+FIN-01
+
+Control
+
+Finance & Accounting
+
+Explains and reconciles why money moved and whose money it is.
+
+Reconciliation; close pack; tax reports; chart of accounts /
+mappings.
+
+COR-01
+
+Control
+
+Corporate Administration
+
+Runs the company itself.
+
+Corporate register; asset register; onboarding/offboarding
+records.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+CLIENT STANDARD • 6
+
+┃┃┃┃ 11-11 Tech
+
+CLIENT CAPABILITY STANDARD
+
+UNIVERSAL DIGITAL PLATFORM CAPABILITY STANDARD
+20 October 2026
+
+Build what matters. Prove what works.
+
+ID
+
+Plane
+
+Capability domain
+
+Purpose
+
+Minimum evidence
+
+EXE-01
+
+Control
+
+Executive Governance
+
+Provides leadership visibility and accountable decision-making.
+
+Executive dashboard; risk register; decision log; operating
+review pack.
+
+DAT-01
+
+Platform
+
+Data Platform & Governance
+
+Manages data as an owned, classified, traceable and recoverable asset.
+
+Data inventory; lineage map; classification; backup/restore
+evidence.
+
+BI-01
+
+Platform
+
+Analytics & Business Intelligence
+
+Defines trusted metrics and turns operational data into decisions.
+
+Metric dictionary; dashboard ownership; data-quality controls.
+
+API-01
+
+Platform
+
+API Platform
+
+Provides governed software-to-software access.
+
+OpenAPI definition; API tests; rate-limit logs;
+version/deprecation policy.
+
+DEV-01
+
+Platform
+
+Developer Console & Portal
+
+Turns APIs into a usable developer product.
+
+Developer onboarding test; key rotation; SDK release
+evidence.
+
+MCP-01
+
+Platform
+
+MCP / AI / Automation
+
+Provides controlled agent access to tools, resources and workflows.
+
+Tool inventory; policy matrix; agent action audit; revocation
+test.
+
+INT-01
+
+Platform
+
+Integration & Event Platform
+
+Connects internal and external systems reliably.
+
+Integration register; delivery logs; retry/DLQ evidence; SLA.
+
+SEC-01
+
+Operations
+
+Security & IAM
+
+Protects identities, applications, infrastructure and operations.
+
+Threat model; security tests; IAM review; vulnerability closure.
+
+INF-01
+
+Operations
+
+Infrastructure & Cloud
+
+Provides resilient compute, networking, storage and environment isolation.
+
+Architecture diagram; IaC; capacity evidence; cost ownership.
+
+ENG-01
+
+Operations
+
+Engineering / SDLC
+
+Turns product changes into controlled releases.
+
+CI evidence; release record; SBOM; rollback proof.
+
+OBS-01
+
+Operations
+
+Observability / SRE
+
+Makes service health measurable and actionable.
+
+SLO dashboard; alert test; runbooks; incident trend.
+
+INC-01
+
+Operations
+
+Incident Management
+
+Provides a repeatable response when service or security fails.
+
+Incident record; timeline; postmortem; corrective actions.
+
+BCD-01
+
+Operations
+
+Business Continuity & Disaster
+Recovery
+
+Ensures the organization can survive severe technical or operational
+disruption.
+
+DR test; restore proof; continuity plan; dependency map.
+
+REL-01
+
+Operations
+
+Release & Distribution
+
+Controls deployment to app stores, web, enterprise or other channels.
+
+Store approval evidence; signing custody; rollout log.
+
+DOC-01
+
+Operations
+
+Documentation & Knowledge
+
+Ensures every audience can operate, integrate with or support the product.
+
+Documentation ownership; review dates; runbook tests.
+
+PRV-01
+
+Governance
+
+Privacy
+
+Governs personal-data collection, use, rights and retention.
+
+RoPA/data map; request logs; retention evidence; privacy
+notices.
+
+LEG-01
+
+Governance
+
+Legal & Regulatory
+
+Maintains the contractual and policy foundation of the business.
+
+Policy register; contract register; license evidence; review
+history.
+
+GOV-01
+
+Governance
+
+Government / Tax / Reporting
+
+Produces controlled evidence and reports for lawful obligations.
+
+Submission records; legal-request log; evidence package;
+approvals.
+
+RSK-01
+
+Governance
+
+Risk / Audit / Assurance
+
+Creates confidence that controls are designed, owned and operating.
+
+Control evidence; audit findings; remediation plan; exception
+register.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+CLIENT STANDARD • 7
+
+┃┃┃┃ 11-11 Tech
+
+CLIENT CAPABILITY STANDARD
+
+UNIVERSAL DIGITAL PLATFORM CAPABILITY STANDARD
+20 October 2026
+
+Build what matters. Prove what works.
+
+PLANE 01
+
+Experience Plane
+The product surfaces that acquire users, deliver value and create marketplace/content activity.
+ID
+
+Domain
+
+Core capability set
+
+STR-01
+
+Strategy & Business Model
+
+Problem definition; personas; value proposition; pricing/revenue model; competitive positioning; roadmap; KPIs.
+
+EXP-01
+
+Customer Product
+
+Public website; app shell; onboarding; navigation; core journeys; account centre; self-service; transactional states.
+
+IAM-01
+
+Identity, Accounts & Organizations
+
+Registration; authentication; MFA/passkeys; recovery; sessions; devices; tenants; teams; invitations; RBAC/ABAC.
+
+MKT-01
+
+Marketplace / Supply & Demand
+
+Seller onboarding; KYB/KYC where applicable; listings; moderation; buyer journey; orders; pricing; payouts; disputes; reviews.
+
+COM-01
+
+Commerce, Payments & Transactions
+
+Order states; payment authorization/capture; commissions; transfers; refunds; chargebacks; invoices; tax; settlement.
+
+CMS-01
+
+CMS / Content / Media
+
+Content models; authoring; workflow; preview; scheduling; localization; versioning; DAM; delivery APIs.
+
+DSC-01
+
+Search, Discovery & Recommendations
+
+Search; filters; sorting; taxonomy; ranking; autocomplete; recommendations; saved searches; zero-result handling.
+
+MSG-01
+
+Communication & Notifications
+
+Email; SMS; push; in-app; inbox/chat; templates; preferences; delivery tracking; unsubscribe/suppression.
+
+A11Y-01
+
+Accessibility & Internationalization
+
+WCAG controls; keyboard/screen reader; contrast; localization; currency; time zones; RTL; translation workflow.
+
+GRO-01
+
+Sales, Marketing & Growth
+
+CRM; leads; campaigns; attribution; SEO/ASO; referral; lifecycle messaging; experiments; consent; suppression.
+
+PRT-01
+
+Partners & Vendors
+
+Partner portal; contracts; credentials; integrations; referrals; commissions; vendor reviews; renewals.
+
+DESIGN WARNING
+
+Do not collapse “customer product” and “company operations” into one interface. A secure internal control plane should expose different information, permissions and
+actions from the public product.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+CLIENT STANDARD • 8
+
+┃┃┃┃ 11-11 Tech
+
+CLIENT CAPABILITY STANDARD
+
+UNIVERSAL DIGITAL PLATFORM CAPABILITY STANDARD
+20 October 2026
+
+Build what matters. Prove what works.
+
+MARKETPLACE BLUEPRINT
+
+A marketplace is a transaction operating system
+Listings + checkout are only a small part of a mature marketplace. The company must control seller lifecycle, transaction state, money movement, trust and
+post-transaction obligations.
+
+Figure 4. Marketplace customer lifecycle with control and governance overlays.
+
+ID
+
+Capability
+
+Required scope
+
+MKT-01.1
+
+Seller / provider acquisition
+
+Registration, invitations, applications, business profile, onboarding state.
+
+MKT-01.2
+
+Seller verification
+
+Identity, company/beneficial-owner, tax, bank/payment and document verification where applicable.
+
+MKT-01.3
+
+Seller administration
+
+Approve/reject, suspend/reinstate, compliance state, account health, limitations.
+
+MKT-01.4
+
+Catalog / listings
+
+Products/services, variants, price, availability, inventory, attributes, media, categories.
+
+MKT-01.5
+
+Marketplace moderation
+
+Listing review, prohibited goods/services, counterfeit/illegal-content handling, duplicate/quality controls.
+
+MKT-01.6
+
+Buyer journey
+
+Browse, search, detail, cart/request, checkout, confirmation and history.
+
+MKT-01.7
+
+Transaction engine
+
+Orders, bookings, quotes, contracts, subscriptions and state transitions.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+CLIENT STANDARD • 9
+
+┃┃┃┃ 11-11 Tech
+
+CLIENT CAPABILITY STANDARD
+
+UNIVERSAL DIGITAL PLATFORM CAPABILITY STANDARD
+20 October 2026
+
+Build what matters. Prove what works.
+
+ID
+
+Capability
+
+Required scope
+
+MKT-01.8
+
+Pricing engine
+
+Base price, dynamic pricing, promotions, coupons, commissions and platform fees.
+
+MKT-01.9
+
+Payment orchestration
+
+Authorization, capture, settlement, payment methods, retries and currency handling.
+
+MKT-01.10
+
+Money movement
+
+Split payments, transfers, seller balances, reserves, payouts and payout status.
+
+MKT-01.11
+
+Refunds & reversals
+
+Full/partial refunds, cancellation, adjustments and transfer/payout reversal rules.
+
+MKT-01.12
+
+Disputes & chargebacks
+
+Complaint intake, card disputes, evidence, liability and resolution.
+
+MKT-01.13
+
+Tax
+
+VAT/GST/sales tax, tax codes, seller information, invoicing and marketplace-facilitator logic where applicable.
+
+MKT-01.14
+
+Fulfilment
+
+Delivery, pickup, appointments, digital delivery, tracking and proof of service.
+
+MKT-01.15
+
+Post-transaction
+
+Reviews, ratings, returns, warranties, claims, reorder/rebooking.
+
+MKT-01.16
+
+Marketplace trust
+
+Seller/buyer risk, scams, fake reviews, fraud signals and account/linkage abuse.
+
+MKT-01.17
+
+Seller analytics
+
+Sales, traffic, conversion, fees, payouts, disputes and account health.
+
+MKT-01.18
+
+Seller support
+
+Tickets, appeals, payout/listing help, education and escalation.
+
+MKT-01.19
+
+Marketplace governance
+
+Seller terms, buyer rules, prohibited goods/services, enforcement and appeals.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+CLIENT STANDARD • 10
+
+┃┃┃┃ 11-11 Tech
+
+CLIENT CAPABILITY STANDARD
+
+UNIVERSAL DIGITAL PLATFORM CAPABILITY STANDARD
+20 October 2026
+
+Build what matters. Prove what works.
+
+Marketplace Financial & Trust Controls
+Payment processing is not the same as finance, and seller access is not the same as marketplace governance.
+MONEY PRINCIPLE
+
+The platform must distinguish company money, seller/provider money, customer refunds, processor balances, fees, taxes, reserves and liabilities. A successful payment
+response does not prove that the accounting state is correct.
+
+Control area
+
+Questions that must be answerable
+
+Settlement & reconciliation
+
+Can every provider transaction, transfer, fee, refund and payout be tied to an internal transaction and ledger state?
+
+Seller balances
+
+What is available, pending, reserved, disputed, withheld or already paid?
+
+Disputes
+
+Who owns card-network evidence, customer complaint handling, liability and account consequences?
+
+Fraud / abuse
+
+Can risk cases freeze or limit activity without corrupting transaction history?
+
+Seller compliance
+
+What information is required to sell in each jurisdiction/category, and how is expiry/reverification handled?
+
+Tax
+
+Which party calculates, collects, invoices, reports or remits tax in each supported market?
+
+Support
+
+Can support explain a payout or refund without receiving unrestricted finance/admin access?
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+CLIENT STANDARD • 11
+
+┃┃┃┃ 11-11 Tech
+
+CLIENT CAPABILITY STANDARD
+
+UNIVERSAL DIGITAL PLATFORM CAPABILITY STANDARD
+20 October 2026
+
+Build what matters. Prove what works.
+
+CMS BLUEPRINT
+
+A CMS is a content operating system
+Professional content platforms separate authoring, governance, preview, publishing, delivery and audit rather than treating content as rows in a database.
+
+Figure 5. Editorial lifecycle and API separation for a mature CMS.
+
+ID
+
+Capability
+
+Required scope
+
+CMS-01.1
+
+Content model
+
+Types, schemas, fields, metadata, references, taxonomy, validation, SEO structure.
+
+CMS-01.2
+
+Creation / authoring
+
+Structured editor, rich text, media, autosave, drafts, templates, reusable blocks, collaboration.
+
+CMS-01.3
+
+Editorial workflow
+
+Idea → assigned → draft → review → fact/legal → approved → scheduled → published → corrected → archived.
+
+CMS-01.4
+
+Publishing
+
+Immediate/scheduled publish, scheduled unpublish, embargo, preview, staging, channels, editions, rollback.
+
+CMS-01.5
+
+Versioning & audit
+
+Revision history, compare/diff, restore, actor, approver, publisher, timestamps and correction history.
+
+CMS-01.6
+
+Localization
+
+Locales, regional editions, translation workflow, fallbacks, localized assets/metadata and translation state.
+
+CMS-01.7
+
+Digital asset management
+
+Photos, video, audio, PDFs, crops/renditions, captions, alt text, rights, licenses, credits, expiry.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+CLIENT STANDARD • 12
+
+┃┃┃┃ 11-11 Tech
+
+CLIENT CAPABILITY STANDARD
+
+UNIVERSAL DIGITAL PLATFORM CAPABILITY STANDARD
+20 October 2026
+
+Build what matters. Prove what works.
+
+ID
+
+Capability
+
+Required scope
+
+CMS-01.8
+
+Content APIs
+
+Management API, Delivery API, Preview API, media/image APIs, GraphQL where useful, webhooks and indexing.
+
+Professional editorial controls
+ Explicit publication authority: writing, approving and publishing are separable permissions.
+ Preview tokens and unpublished content must be isolated from public delivery credentials.
+ Correction and update history should preserve accountability for material published changes.
+ Media assets require ownership, usage-rights, credit, accessibility metadata and lifecycle controls, not only file upload.
+ Localization needs translation state, locale fallback rules and region-specific publishing controls.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+CLIENT STANDARD • 13
+
+┃┃┃┃ 11-11 Tech
+
+CLIENT CAPABILITY STANDARD
+
+UNIVERSAL DIGITAL PLATFORM CAPABILITY STANDARD
+20 October 2026
+
+Build what matters. Prove what works.
+
+PLANE 02
+
+Control Plane
+The internal product used to operate the customer product.
+ID
+
+Domain
+
+Control responsibility
+
+Evidence
+
+CTL-01
+
+Admin / Operations Control Plane
+
+User/seller/content/transaction administration; configuration; approvals;
+suspensions; refunds; flags; audit; feature controls.
+
+Admin role matrix; privileged-action logs; breakglass procedure.
+
+CRM-01
+
+Customer Support / CRM
+
+Tickets; interaction history; identity checks; SLA; assignment; internal notes;
+macros; escalation; knowledge base.
+
+Support runbooks; case history; SLA dashboard;
+scoped support permissions.
+
+TRS-01
+
+Trust & Safety
+
+Report queues; evidence; risk scoring; enforcement; suspension; takedown;
+appeals; reinstatement; regulator escalation.
+
+Case file; enforcement log; appeal history; policy
+mapping.
+
+FIN-01
+
+Finance & Accounting
+
+GL integration; AR/AP; invoicing; commissions; liabilities; settlement; reconciliation;
+tax; budgets; month-end; reporting.
+
+Reconciliation; close pack; tax reports; chart of
+accounts / mappings.
+
+COR-01
+
+Corporate Administration
+
+Entity records; directors; HR; onboarding/offboarding; procurement; contracts;
+devices; licenses; domains; approvals.
+
+Corporate register; asset register;
+onboarding/offboarding records.
+
+EXE-01
+
+Executive Governance
+
+Company health; revenue/cost; product health; reliability; security; compliance;
+risks; OKRs; roadmap; decision records.
+
+Executive dashboard; risk register; decision log;
+operating review pack.
+
+Operations Admin Console blueprint
+Module
+
+Minimum internal capabilities
+
+Users & organizations
+
+Search/inspect; verification; roles; memberships; suspension; restoration; deletion workflow; session/device visibility.
+
+Marketplace
+
+Sellers; listings; orders; refunds; disputes; commissions; balances; payouts; fraud flags; reviews; complaints.
+
+CMS
+
+Authors; editors; content; scheduled publication; media; categories/tags; editions; corrections; workflow queues.
+
+Configuration
+
+Feature flags; pricing/commission rules; categories; regions; templates; limits; policies; maintenance controls.
+
+Security & access
+
+Granular roles; step-up auth; approval thresholds; privileged action restrictions; break-glass; session termination.
+
+Audit
+
+Actor; authority; target object; before/after state; timestamp; source; reason; correlation/request IDs.
+
+PRIVILEGE RULE
+
+“is_admin = true” is not a mature authorization architecture. Support, moderation, finance, editorial, security and corporate teams should receive the narrow authority their
+work requires, with traceable elevation for exceptional actions.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+CLIENT STANDARD • 14
+
+┃┃┃┃ 11-11 Tech
+
+CLIENT CAPABILITY STANDARD
+
+UNIVERSAL DIGITAL PLATFORM CAPABILITY STANDARD
+20 October 2026
+
+Build what matters. Prove what works.
+
+PLANE 03
+
+Platform Plane
+Shared capabilities that make the business composable, integrable and agent-ready.
+
+Figure 6. A mature developer platform separates API traffic, developer experience, partner integration and AI-agent access.
+
+ID
+
+Domain
+
+Core capability set
+
+DAT-01
+
+Data Platform & Governance
+
+Operational DBs; storage; cache; search indexes; warehouse/lake; catalog; lineage; quality; retention; deletion; backups.
+
+BI-01
+
+Analytics & Business Intelligence
+
+Product, marketplace, content, commercial and technical metrics; cohorts; funnels; semantic definitions; dashboards.
+
+API-01
+
+API Platform
+
+REST/GraphQL where justified; auth; scopes; quotas; rate limits; versioning; idempotency; pagination; errors; OpenAPI.
+
+DEV-01
+
+Developer Console & Portal
+
+Developer accounts; apps/projects; keys; OAuth clients; scopes; sandbox; usage; logs; docs; SDKs; changelog; support.
+
+MCP-01
+
+MCP / AI / Automation
+
+MCP server/gateway; tool/resource registry; OAuth; scopes; consent; human approval; audit; rate limits; secret isolation;
+versioning.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+CLIENT STANDARD • 15
+
+┃┃┃┃ 11-11 Tech
+
+CLIENT CAPABILITY STANDARD
+
+UNIVERSAL DIGITAL PLATFORM CAPABILITY STANDARD
+20 October 2026
+
+Build what matters. Prove what works.
+
+ID
+
+Domain
+
+Core capability set
+
+INT-01
+
+Integration & Event Platform
+
+Webhooks; events; queues; connectors; OAuth integrations; imports/exports; retries; dead-letter handling; health; ownership.
+
+API platform
+ Authentication and authorization appropriate to user, service and partner identities.
+ Scopes/permissions, quotas, rate limits, idempotency, pagination, consistent errors and request/correlation IDs.
+ Explicit versioning and deprecation policy, with documented migration paths.
+ Machine-readable OpenAPI descriptions for supported HTTP APIs, plus contract and compatibility testing.
+ Webhook signing, replay protection, retries, dead-letter handling and observable delivery status.
+
+Developer Console & Portal
+ Developer identity, organizations, projects/apps, credential issuance and rotation.
+ OAuth client registration, redirect-URI control, scopes, environments and sandbox/test credentials.
+ Usage, quotas, request logs, billing where applicable, webhook configuration and secret rotation.
+ Quick starts, SDKs, API reference, examples, changelog, migration guides, status and support.
+
+MCP / AI Agent Gateway
+ Tool, resource and prompt registries with explicit schemas and ownership.
+ User/organization authorization, OAuth, fine-grained scopes and revocation.
+ Human approval for consequential actions, with agent identity and complete execution audit.
+ Secrets isolation, data-loss prevention, rate/usage limits, sandboxing and policy enforcement.
+ Version compatibility, safe tool evolution, observability and emergency disconnect controls.
+BOUNDARY
+
+API access and AI-agent access are related but not identical. Agent actions require stronger contextual authorization, consent, approval and audit because an agent can
+chain capabilities in ways an ordinary integration may not.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+CLIENT STANDARD • 16
+
+┃┃┃┃ 11-11 Tech
+
+CLIENT CAPABILITY STANDARD
+
+UNIVERSAL DIGITAL PLATFORM CAPABILITY STANDARD
+20 October 2026
+
+Build what matters. Prove what works.
+
+Data, Analytics & Integration Control
+The company should always know what data exists, why it exists, who owns it, who can access it, where it goes
+and when it must disappear.
+Area
+
+Minimum architecture
+
+Operational data
+
+Authoritative databases, transaction consistency, tenant boundaries and schema ownership.
+
+Object/media storage
+
+Ownership, encryption, lifecycle, malware/media validation where relevant and deletion semantics.
+
+Search/indexes
+
+Source-of-truth relationship, reindex/rebuild procedure, stale data handling and access filtering.
+
+Queues/events
+
+Delivery semantics, idempotency, retry, dead-letter processing and event versioning.
+
+Analytics warehouse/lake
+
+Data contracts, lineage, sensitive-data handling, semantic definitions and access tiers.
+
+Backups/archive
+
+Retention, encryption, immutability where needed, restore tests and deletion exceptions.
+
+Data governance
+
+Catalog, classification, quality, retention, residency, deletion, ownership and access review.
+
+Integrations
+
+Owner, credentials, scopes, health, logs, retries, versions, SLA and failure procedure for every dependency.
+
+Metric families
+Family
+
+Examples
+
+Product
+
+Activation, DAU/MAU, retention, funnels, conversion, engagement, churn, feature adoption.
+
+Marketplace
+
+GMV, active supply/demand, liquidity, take rate, cancellations, refunds, disputes, seller retention.
+
+CMS / media
+
+Output, readership, engagement, conversion, author/channel/content performance.
+
+Commercial
+
+Revenue, margin, CAC, LTV, MRR/ARR where applicable, ARPU, cohort economics.
+
+Technical
+
+Availability, latency, error rate, throughput, crash rate, queue depth, cost and saturation.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+CLIENT STANDARD • 17
+
+┃┃┃┃ 11-11 Tech
+
+CLIENT CAPABILITY STANDARD
+
+UNIVERSAL DIGITAL PLATFORM CAPABILITY STANDARD
+20 October 2026
+
+Build what matters. Prove what works.
+
+PLANE 04
+
+Operations Plane
+The systems that keep software secure, observable, deployable and recoverable.
+
+Figure 7. NIST CSF 2.0 security lifecycle used as an operational security anchor.
+
+ID
+
+Domain
+
+Core capability set
+
+SEC-01
+
+Security & IAM
+
+Threat modeling; MFA; privileged access; encryption; secure coding; vulnerability management; logging; incident security; secrets.
+
+INF-01
+
+Infrastructure & Cloud
+
+DNS; certificates; CDN; WAF; compute; DB; storage; queues; caches; networks; scaling; regions; cost controls.
+
+ENG-01
+
+Engineering / SDLC
+
+Source control; review; CI; tests; artifacts; dependencies; SBOM; environments; migrations; feature flags; deployment; rollback.
+
+OBS-01
+
+Observability / SRE
+
+Logs; metrics; traces; RUM; crash reports; synthetics; alerts; dashboards; SLI/SLO; on-call; status page.
+
+INC-01
+
+Incident Management
+
+Severity model; command roles; escalation; communication; containment; restoration; status updates; postmortems.
+
+BCD-01
+
+Business Continuity & Disaster Recovery
+
+RPO/RTO; backups; restore testing; region/provider failure; emergency access; alternate communications; continuity runbooks.
+
+REL-01
+
+Release & Distribution
+
+Signing keys; certificates; store metadata; review accounts; privacy declarations; phased rollout; beta; rollback; compliance.
+
+DOC-01
+
+Documentation & Knowledge
+
+Help centre; seller academy; internal KB; engineering docs; developer docs; runbooks; security/compliance playbooks.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+CLIENT STANDARD • 18
+
+┃┃┃┃ 11-11 Tech
+
+CLIENT CAPABILITY STANDARD
+
+UNIVERSAL DIGITAL PLATFORM CAPABILITY STANDARD
+20 October 2026
+
+Build what matters. Prove what works.
+
+Engineering, Observability & Recovery Checklist
+Shipping safely requires more than CI/CD.
+Discipline
+
+Minimum controls
+
+Source & review
+
+Protected repositories; branch/review policy; code ownership; signed/traceable changes where required.
+
+CI & testing
+
+Unit, integration, contract/API, DB, security, UI, accessibility, performance, resilience and end-to-end testing as risk requires.
+
+Supply chain
+
+Dependency policy, secret scanning, vulnerability scanning, artifact provenance and SBOM for appropriate environments.
+
+Database change
+
+Versioned migrations, forward/backward compatibility where needed, backup/rollback and production change control.
+
+Release
+
+Staging evidence, feature flags, phased rollout, rollback, release notes, approvals and change record.
+
+Observability
+
+Logs, metrics, traces, crash/RUM, synthetic monitoring, dashboards, alert routing and data retention.
+
+Reliability
+
+Defined SLI/SLO, error budget or equivalent service targets, capacity limits, load/performance tests.
+
+Incident
+
+Severity, commander, responders, communications, containment/restoration, timeline and postmortem.
+
+Recovery
+
+RPO/RTO, backup integrity, restore tests, provider/region failure plans, emergency access and continuity communications.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+CLIENT STANDARD • 19
+
+┃┃┃┃ 11-11 Tech
+
+CLIENT CAPABILITY STANDARD
+
+UNIVERSAL DIGITAL PLATFORM CAPABILITY STANDARD
+20 October 2026
+
+Build what matters. Prove what works.
+
+PLANE 05
+
+Governance Plane
+Legal, privacy, regulatory, tax, risk and assurance should be designed into the operating model, not added as a release-day checklist.
+ID
+
+Domain
+
+Core capability set
+
+Evidence
+
+PRV-01
+
+Privacy
+
+Consent; purpose/legal basis; data inventory; DSAR; correction; deletion; portability;
+objection; retention; processors; breach workflow.
+
+RoPA/data map; request logs; retention evidence;
+privacy notices.
+
+LEG-01
+
+Legal & Regulatory
+
+Terms; privacy policy; seller/buyer rules; refund policy; API terms; content/IP
+process; licenses; contracts; regulated-field requirements.
+
+Policy register; contract register; license evidence;
+review history.
+
+GOV-01
+
+Government / Tax / Reporting
+
+Tax reports; seller reporting; regulatory submissions; legal holds; lawful requests;
+recalls; incident reports; sanctions/export controls where applicable.
+
+Submission records; legal-request log; evidence
+package; approvals.
+
+RSK-01
+
+Risk / Audit / Assurance
+
+Risk register; control library; internal audit; evidence retention; vendor assurance;
+exceptions; remediation; certification mapping.
+
+Control evidence; audit findings; remediation plan;
+exception register.
+
+Legal & policy set
+ Terms of Service / customer agreement; Privacy Policy; seller/provider agreement and buyer rules where relevant.
+ Acceptable-use and content policies; prohibited goods/services policy; refund/cancellation/subscription terms.
+ Developer/API terms; partner agreements; IP/copyright/trademark processes; licenses and regulated-service documentation.
+ Policy ownership, version history, effective dates, acceptance evidence and jurisdiction applicability.
+
+Privacy control centre
+ Data inventory and purpose/legal-basis mapping; consent and preference records where applicable.
+ Data subject requests: access, correction, deletion, portability, restriction/objection as applicable to the jurisdiction.
+ Retention schedules, deletion jobs, legal/anti-fraud retention exceptions and processor/subprocessor records.
+ Breach triage, escalation, evidence and notification workflow.
+
+Government / regulatory interface
+ Tax, seller/platform or industry reports generated through controlled internal processes.
+ Lawful request / subpoena workflow with legal review, scope control, data minimization and evidence of response.
+ Legal holds, recalls, incident reports, sanctions/export controls or licensing records where applicable.
+ Do not assume regulators require direct admin access. Prefer controlled evidence production unless a specific law or programme requires otherwise.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+CLIENT STANDARD • 20
+
+┃┃┃┃ 11-11 Tech
+
+CLIENT CAPABILITY STANDARD
+
+UNIVERSAL DIGITAL PLATFORM CAPABILITY STANDARD
+20 October 2026
+
+Build what matters. Prove what works.
+
+Corporate, Finance & Business Operations
+A software platform is also an employer, contracting party, purchaser, asset owner and financial operator.
+Corporate area
+
+Capabilities to represent
+
+Entity & governance
+
+Legal entities; ownership; directors; registrations; delegated authorities; board/management decisions; insurance.
+
+People / HR
+
+Employees/contractors; onboarding; offboarding; training; confidentiality/IP; device and access assignment.
+
+Procurement / vendors
+
+Suppliers; contracts; renewals; spend; security/privacy assessment; licenses; subprocessors.
+
+Corporate assets
+
+Domains; trademarks; certificates; cloud accounts; API accounts; devices; software licenses; data assets.
+
+Finance operations
+
+AR/AP; invoices; credit notes; GL mappings; liabilities; settlement; reconciliation; tax; expenses; budgets; closing.
+
+Commercial controls
+
+Pricing; discounts; commissions; credit/refund authority; contract approvals; revenue reporting.
+
+CORPORATE COMPLETENESS
+
+Do not build internal HR, accounting or procurement software merely because the capability exists. The architecture may satisfy a capability through a governed integration
+with a specialist system. What matters is ownership, authority, data flow, evidence and failure handling.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+CLIENT STANDARD • 21
+
+┃┃┃┃ 11-11 Tech
+
+CLIENT CAPABILITY STANDARD
+
+UNIVERSAL DIGITAL PLATFORM CAPABILITY STANDARD
+20 October 2026
+
+Build what matters. Prove what works.
+
+SURFACE INVENTORY
+
+24 surfaces a mature digital company may need
+These are logical surfaces. Several may coexist inside one application, but the roles, permissions and data
+boundaries should remain explicit.
+#
+
+Surface
+
+Primary audience
+
+Purpose
+
+01
+
+Public website
+
+Everyone
+
+Brand, acquisition, public content/catalog, policy and support entry points.
+
+02
+
+Customer application
+
+Customers
+
+Primary product journeys.
+
+03
+
+Customer account centre
+
+Customers
+
+Profile, security, privacy, subscription, transaction and notification controls.
+
+04
+
+Seller/provider portal
+
+Marketplace supply
+
+Listings, orders, analytics, payouts, support and compliance.
+
+05
+
+Partner portal
+
+Business partners
+
+Contracts, integrations, referrals, commissions, support and documentation.
+
+06
+
+CMS/editorial studio
+
+Authors/editors
+
+Create, review, publish, localize and correct content.
+
+07
+
+Operations admin console
+
+Internal operators
+
+Cross-product operational control.
+
+08
+
+Support console
+
+Support agents
+
+Cases, customer context, scoped remediation and knowledge.
+
+09
+
+Trust & Safety console
+
+Moderators/risk
+
+Reports, fraud, policy cases, enforcement, appeals.
+
+10
+
+Finance console
+
+Finance/accounting
+
+Reconciliation, invoices, payouts, liabilities, close and reporting.
+
+11
+
+Compliance console
+
+Legal/compliance
+
+Policies, obligations, requests, evidence and regulatory reporting.
+
+12
+
+Corporate admin
+
+Company operations
+
+People, vendors, assets, contracts and approvals.
+
+13
+
+Executive dashboard
+
+Leadership
+
+Company, product, risk and reliability health.
+
+14
+
+Developer portal
+
+Developers
+
+Documentation, tutorials, SDKs, changelog and support.
+
+15
+
+Developer console
+
+Integration owners
+
+Apps, credentials, scopes, sandbox, usage and logs.
+
+16
+
+API gateway
+
+Software integrations
+
+Governed API access and traffic control.
+
+17
+
+MCP / Agent gateway
+
+AI systems/agents
+
+Governed tool/resource access and human approval.
+
+18
+
+Analytics / BI
+
+Analysts/managers
+
+Trusted dashboards, exploration and decision support.
+
+19
+
+Security / SOC console
+
+Security teams
+
+Detection, investigations, vulnerabilities and incident security.
+
+20
+
+Infrastructure / Ops console
+
+Engineering/SRE
+
+Deployments, service health, scaling and recovery.
+
+21
+
+Privacy centre
+
+Customers/privacy
+team
+
+Consent, data rights and preference controls.
+
+22
+
+Help centre
+
+Customers/sellers
+
+Self-service support and operational guidance.
+
+23
+
+Status page
+
+Customers/developers
+
+Service incidents and maintenance communications.
+
+24
+
+Regulatory/export interface
+
+Authorized compliance
+staff
+
+Controlled reports/evidence; not a general government admin login.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+CLIENT STANDARD • 22
+
+┃┃┃┃ 11-11 Tech
+
+CLIENT CAPABILITY STANDARD
+
+UNIVERSAL DIGITAL PLATFORM CAPABILITY STANDARD
+20 October 2026
+
+Build what matters. Prove what works.
+
+RELEASE GATE
+
+The Nine-Dimension Feature Completeness Test
+A UI working in staging is not enough to call a material capability complete.
+Dimension
+
+Pass condition
+
+Product
+
+The user-facing journey and expected outcomes work.
+
+Admin
+
+Authorized staff can inspect, approve, correct and control it.
+
+Data
+
+Authoritative data model, ownership, retention and integrity are defined.
+
+Security
+
+Authentication, authorization, abuse cases and secrets are controlled.
+
+Audit
+
+Material actions produce sufficient traceability.
+
+Operations
+
+Monitoring, alerts, runbooks, retries and failure modes are known.
+
+Support
+
+Agents can diagnose and resolve customer issues under scoped permissions.
+
+Compliance
+
+Privacy, legal, tax and regulatory impacts are identified and implemented where applicable.
+
+Measurement
+
+Success, failure, quality and business outcomes are observable.
+
+Example — Seller payout
+Dimension
+
+What “complete” looks like
+
+Product
+
+Seller sees balance, payout state and destination.
+
+Admin
+
+Authorized finance/operator can inspect payout and permitted holds/adjustments.
+
+Data
+
+Ledger and provider references tie the payout to transactions and balance movements.
+
+Security
+
+Changing payout destination requires appropriate reauthentication/verification.
+
+Audit
+
+Material changes and payout actions identify actor, authority and before/after state.
+
+Operations
+
+Failures, retries and stuck states are visible and actionable.
+
+Support
+
+Support can explain status without unrestricted finance authority.
+
+Compliance
+
+Identity/tax/market obligations are enforced where required.
+
+Measurement
+
+Payout volume, failure rate, delay and reconciliation exceptions are monitored.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+CLIENT STANDARD • 23
+
+┃┃┃┃ 11-11 Tech
+
+CLIENT CAPABILITY STANDARD
+
+UNIVERSAL DIGITAL PLATFORM CAPABILITY STANDARD
+20 October 2026
+
+Build what matters. Prove what works.
+
+AUDIT WORKSHEET
+
+Universal capability review checklist
+Copy this table into project governance and complete it before declaring architecture or launch readiness.
+ID
+
+Capability
+
+Applicability
+
+Status
+
+Accountable owner
+
+Evidence / reference
+
+STR-01
+
+Strategy & Business Model
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+EXP-01
+
+Customer Product
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+IAM-01
+
+Identity, Accounts & Organizations
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+MKT-01
+
+Marketplace / Supply & Demand
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+COM-01
+
+Commerce, Payments & Transactions
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+CMS-01
+
+CMS / Content / Media
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+DSC-01
+
+Search, Discovery & Recommendations
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+MSG-01
+
+Communication & Notifications
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+A11Y-01
+
+Accessibility & Internationalization
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+GRO-01
+
+Sales, Marketing & Growth
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+PRT-01
+
+Partners & Vendors
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+CTL-01
+
+Admin / Operations Control Plane
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+CRM-01
+
+Customer Support / CRM
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+TRS-01
+
+Trust & Safety
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+FIN-01
+
+Finance & Accounting
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+COR-01
+
+Corporate Administration
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+EXE-01
+
+Executive Governance
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+DAT-01
+
+Data Platform & Governance
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+BI-01
+
+Analytics & Business Intelligence
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+CLIENT STANDARD • 24
+
+┃┃┃┃ 11-11 Tech
+
+CLIENT CAPABILITY STANDARD
+
+UNIVERSAL DIGITAL PLATFORM CAPABILITY STANDARD
+20 October 2026
+
+Build what matters. Prove what works.
+
+ID
+
+Capability
+
+Applicability
+
+Status
+
+Accountable owner
+
+Evidence / reference
+
+API-01
+
+API Platform
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+DEV-01
+
+Developer Console & Portal
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+MCP-01
+
+MCP / AI / Automation
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+INT-01
+
+Integration & Event Platform
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+SEC-01
+
+Security & IAM
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+INF-01
+
+Infrastructure & Cloud
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+ENG-01
+
+Engineering / SDLC
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+OBS-01
+
+Observability / SRE
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+INC-01
+
+Incident Management
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+BCD-01
+
+Business Continuity & Disaster Recovery
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+REL-01
+
+Release & Distribution
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+DOC-01
+
+Documentation & Knowledge
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+PRV-01
+
+Privacy
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+LEG-01
+
+Legal & Regulatory
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+GOV-01
+
+Government / Tax / Reporting
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+RSK-01
+
+Risk / Audit / Assurance
+
+□ Required □ Conditional □ N/A □
+Future
+
+□ Missing □ Designed □ Built □ Tested □
+Live
+
+________________
+
+________________
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+CLIENT STANDARD • 25
+
+┃┃┃┃ 11-11 Tech
+
+CLIENT CAPABILITY STANDARD
+
+UNIVERSAL DIGITAL PLATFORM CAPABILITY STANDARD
+20 October 2026
+
+Build what matters. Prove what works.
+
+Evidence Model
+A capability is only as credible as the evidence proving it operates.
+Evidence class
+
+Examples
+
+Weak substitute to avoid
+
+Design evidence
+
+Approved architecture, workflow, policy, role matrix, data model.
+
+A verbal claim that “the backend handles it”.
+
+Implementation evidence
+
+Source, configuration, migrations, infrastructure-as-code, schemas.
+
+A screenshot with no traceable implementation.
+
+Verification evidence
+
+Automated tests, security checks, contract tests, accessibility tests.
+
+Tests weakened to make the build green.
+
+Runtime evidence
+
+Logs, metrics, transaction records, published content, real API response, real device
+behaviour.
+
+Mock/demo data presented as production proof.
+
+Operational evidence
+
+Runbooks, incident exercises, restore tests, on-call evidence, support cases.
+
+A document that has never been exercised.
+
+Governance evidence
+
+Approvals, audit events, policy acceptance, licenses, regulator/tax submissions where
+applicable.
+
+Unowned policies or expired documentation.
+
+PROOF PRINCIPLE
+
+The higher the risk, the stronger the evidence. A payment, identity, privacy, security or regulatory capability should not be accepted solely because code exists.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+CLIENT STANDARD • 26
+
+┃┃┃┃ 11-11 Tech
+
+CLIENT CAPABILITY STANDARD
+
+UNIVERSAL DIGITAL PLATFORM CAPABILITY STANDARD
+20 October 2026
+
+Build what matters. Prove what works.
+
+Recommended Implementation Sequence
+Build the minimum control and governance needed alongside the product - then deepen maturity as risk and
+scale increase.
+Wave
+
+Primary outcomes
+
+Typical domains
+
+Wave 0 — Authority &
+business design
+
+Define product, business model, jurisdiction, data sensitivity, money flows, roles and nonnegotiable obligations.
+
+STR, LEG, PRV, FIN, SEC, IAM.
+
+Wave 1 — Customer +
+minimum control plane
+
+Build core journeys with authoritative identity/data and the admin ability to support/correct
+them.
+
+EXP, IAM, CTL, DAT, MSG, domain-specific
+MKT/CMS/COM.
+
+Wave 2 — Operational launch
+
+Add support, monitoring, reconciliation, incident, backup/restore, distribution and
+documentation.
+
+CRM, FIN, OBS, INC, BCD, REL, DOC.
+
+Wave 3 — Scale & ecosystem
+
+Add analytics governance, API/developer product, integrations, automation, partner
+operating model.
+
+BI, API, DEV, INT, PRT, GRO.
+
+Wave 4 — Enterprise /
+regulated
+
+Harden assurance, advanced access, formal DR, vendor risk, regulatory evidence and
+agent governance.
+
+RSK, GOV, COR, EXE, MCP plus advanced
+SEC/PRV/INF.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+CLIENT STANDARD • 27
+
+┃┃┃┃ 11-11 Tech
+
+CLIENT CAPABILITY STANDARD
+
+UNIVERSAL DIGITAL PLATFORM CAPABILITY STANDARD
+20 October 2026
+
+Build what matters. Prove what works.
+
+STANDARDS & REFERENCES
+
+External standards informing UDPCS 1.0
+UDPCS is an 11-11 Tech synthesis and is not an ISO, NIST, OWASP or regulator certification. The references below anchor specific capability areas in
+established external guidance.
+Ref
+
+Authority
+
+Reference
+
+Use in this standard
+
+R1
+
+NIST
+
+Cybersecurity Framework (CSF) 2.0
+
+Govern, Identify, Protect, Detect, Respond, Recover.
+
+R2
+
+OWASP
+
+Application Security Verification Standard (ASVS) 5.0
+
+Application-security verification requirements and rigor.
+
+R3
+
+W3C
+
+Web Content Accessibility Guidelines (WCAG) 2.2
+
+International web accessibility standard; Level AA is a common target.
+
+R4
+
+OpenAPI Initiative
+
+OpenAPI Specification
+
+Machine-readable, language-agnostic HTTP API description.
+
+R5
+
+Model Context Protocol
+
+MCP Specification 2026-07-28
+
+Stateless core, extensions, authorization hardening and agent capability model.
+
+R6
+
+AWS
+
+Well-Architected Framework
+
+Operational excellence, security, reliability, performance efficiency, cost
+optimization and sustainability.
+
+R7
+
+European Commission
+
+General Data Protection Regulation - individual rights
+guidance
+
+Access, rectification, erasure, restriction, portability and objection.
+
+R8
+
+European Commission
+
+Digital Services Act
+
+Marketplace transparency, seller traceability and platform responsibilities in the EU.
+
+R9
+
+Apple
+
+App Review - Provide information for a complete review
+
+Business model, test accounts, external services and regulated-field
+documentation.
+
+R10
+
+Google Play
+
+User Data policy
+
+Data safety and account-deletion expectations for applicable apps.
+
+R11
+
+Contentful
+
+API basics
+
+Example separation of Content Management, Delivery and Preview APIs in a
+mature CMS.
+
+R12
+
+Stripe
+
+Connect documentation
+
+Reference model for connected-account onboarding, money movement, payouts
+and marketplace operations.
+
+Reference links
+R1 NIST — Cybersecurity Framework (CSF) 2.0: https://www.nist.gov/publications/nist-cybersecurity-framework-csf-20
+R2 OWASP — Application Security Verification Standard (ASVS) 5.0: https://owasp.org/projects/asvs
+R3 W3C — Web Content Accessibility Guidelines (WCAG) 2.2: https://www.w3.org/WAI/standards-guidelines/wcag/
+R4 OpenAPI Initiative — OpenAPI Specification: https://spec.openapis.org/oas/latest.html
+R5 Model Context Protocol — MCP Specification 2026-07-28: https://modelcontextprotocol.io/specification/2026-07-28
+R6 AWS — Well-Architected Framework: https://docs.aws.amazon.com/wellarchitected/latest/framework/the-pillars-of-the-framework.html
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+CLIENT STANDARD • 28
+
+┃┃┃┃ 11-11 Tech
+
+CLIENT CAPABILITY STANDARD
+
+UNIVERSAL DIGITAL PLATFORM CAPABILITY STANDARD
+20 October 2026
+
+Build what matters. Prove what works.
+
+R7 European Commission — General Data Protection Regulation - individual rights guidance: https://commission.europa.eu/law/law-topic/data-protection/information-
+
+individuals_en
+R8 European Commission — Digital Services Act: https://digital-strategy.ec.europa.eu/en/policies/digital-services-act
+R9 Apple — App Review - Provide information for a complete review: https://developer.apple.com/help/app-review/before-submitting-for-review/complete-review
+R10 Google Play — User Data policy: https://support.google.com/googleplay/android-developer/answer/10144311?hl=en
+R11 Contentful — API basics: https://www.contentful.com/developers/docs/references/api-basics/
+R12 Stripe — Connect documentation: https://docs.stripe.com/connect
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+CLIENT STANDARD • 29
+
+┃┃┃┃ 11-11 Tech
+
+CLIENT CAPABILITY STANDARD
+
+UNIVERSAL DIGITAL PLATFORM CAPABILITY STANDARD
+20 October 2026
+
+Build what matters. Prove what works.
+
+ABOUT 11-11 TECH
+
+Digital systems built as businesses, not isolated features.
+11-11 Tech integrates strategy, marketing, product design, software engineering, IT operations and AI to create systems that can be used, governed,
+measured and grown.
+MISSION
+
+Turn difficult real-world problems into digital products people can trust, use and grow with.
+
+How UDPCS 1.0 can be used in client work
+Engagement
+
+Deliverable
+
+Architecture Discovery
+
+Map the product and company against all 35 capability domains; identify missing planes and dependencies.
+
+Marketplace / CMS Design
+
+Define product, admin, finance, content, developer and compliance surfaces before implementation.
+
+Technical Due Diligence
+
+Assess whether claimed capabilities have implementation, runtime and operational evidence.
+
+Launch Readiness
+
+Apply maturity targets, feature-completeness gates and operational evidence before public release.
+
+Modernization
+
+Use the framework to identify where a technically functioning legacy product lacks control, platform or governance capability.
+
+AI / MCP Enablement
+
+Expose only capabilities that have appropriate identity, authorization, consent, audit and recovery controls.
+
+Build what matters. Prove what works.
+Tokyo-built. Africa-aware. Global by design.
+© 2026 11-11 Tech. UDPCS 1.0 — Client Reference Edition.
+This framework provides product, architecture and operational guidance. It does not replace jurisdiction-specific legal, tax, accounting, cybersecurity or regulatory advice.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+CLIENT STANDARD • 30
+
+

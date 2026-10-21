@@ -1,0 +1,11 @@
+{
+  "name": "trust-service",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "description": "Tengasell Support & Trust service (MSCS 12-c) — support tickets with SLA/macros/CSAT, abuse reports, cases, enforcement ladder with dual approval, appeals, staff RBAC roles, MFA (TOTP) state, listing screening + takedown, seller health score, on port 3007.",
+  "scripts": {
+    "dev": "bun --hot index.ts",
+    "start": "bun index.ts"
+  }
+}

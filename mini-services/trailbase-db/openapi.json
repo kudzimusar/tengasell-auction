@@ -1,0 +1,1979 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "TrailBase",
+    "description": "OpenApi definitions of TrailBase's APIs",
+    "contact": {
+      "email": "contact@trailbase.io"
+    },
+    "license": {
+      "name": "OSL-3.0",
+      "identifier": "OSL-3.0"
+    },
+    "version": "v0.35.0 (0)"
+  },
+  "paths": {
+    "/api/auth/v1/avatar": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "create_avatar_handler",
+        "responses": {
+          "200": {
+            "description": "Deletion success"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "delete_avatar_handler",
+        "responses": {
+          "200": {
+            "description": "Deletion success"
+          }
+        }
+      }
+    },
+    "/api/auth/v1/avatar/{b64_user_id}": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "get_avatar_handler",
+        "parameters": [
+          {
+            "name": "b64_user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Optional Avatar file"
+          }
+        }
+      }
+    },
+    "/api/auth/v1/change_email/confirm/{email_verification_code}": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Confirm a change of email address.",
+        "operationId": "change_email_confirm_handler",
+        "parameters": [
+          {
+            "name": "email_verification_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success, when redirect_uri is not present."
+          },
+          "303": {
+            "description": "Success, when redirect_uri is present."
+          }
+        }
+      }
+    },
+    "/api/auth/v1/change_email/request": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Request an email change.",
+        "operationId": "change_email_request_handler",
+        "parameters": [
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "description": "Success (and error if err_redirect_uri not present) redirect target for non-JSON requests.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "err_redirect_uri",
+            "in": "query",
+            "description": "Error redirect target for non-JSON requests.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeEmailRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success, when redirect_uri is not present and JSON input"
+          },
+          "303": {
+            "description": "Success, when redirect_uri is present or HTML form input"
+          },
+          "400": {
+            "description": "Bad request."
+          },
+          "403": {
+            "description": "User conflict."
+          },
+          "429": {
+            "description": "Too many attempts."
+          }
+        }
+      }
+    },
+    "/api/auth/v1/change_password": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Request a change of password.",
+        "operationId": "change_password_handler",
+        "parameters": [
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "description": "Success (and error if err_redirect_uri not present) redirect target for non-JSON requests.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "err_redirect_uri",
+            "in": "query",
+            "description": "Error redirect target for non-JSON requests.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success, when redirect_uri not present."
+          },
+          "303": {
+            "description": "Success, when redirect_uri present."
+          }
+        }
+      }
+    },
+    "/api/auth/v1/change_username": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Request a change of a user username.",
+        "operationId": "change_username_handler",
+        "parameters": [
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "description": "Success (and error if err_redirect_uri not present) redirect target for non-JSON requests.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "err_redirect_uri",
+            "in": "query",
+            "description": "Error redirect target for non-JSON requests.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeUsernameRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success, when redirect_uri not present."
+          },
+          "303": {
+            "description": "Success, when redirect_uri present."
+          },
+          "409": {
+            "description": "Fail, username already taken."
+          },
+          "500": {
+            "description": "Fail, something went wrong."
+          }
+        }
+      }
+    },
+    "/api/auth/v1/delete": {
+      "delete": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Get public profile of the given user.",
+        "operationId": "delete_handler",
+        "responses": {
+          "200": {
+            "description": "User deleted."
+          }
+        }
+      }
+    },
+    "/api/auth/v1/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Log in users by email and password.",
+        "operationId": "login_handler",
+        "parameters": [
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "mfa_redirect_uri",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "response_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/ResponseType"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          {
+            "name": "pkce_code_challenge",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Auth, refresh & CSRF tokens.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "303": {
+            "description": "Form Fail OR Auth, refresh & CSRF tokens via cookies."
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden, when login succeeded but MFA is needed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaTokenResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/v1/login_mfa": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Log in users by email and password.",
+        "operationId": "login_mfa_handler",
+        "parameters": [
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "mfa_redirect_uri",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "response_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/ResponseType"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          {
+            "name": "pkce_code_challenge",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginMfaRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Auth & refresh tokens.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/v1/logout": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Logs out the current user and delete **all** pending sessions for that user.",
+        "description": "Relies on the client to drop any auth tokens. We delete the session to avoid refresh tokens\nbringing a logged out session back to live.",
+        "operationId": "logout_handler",
+        "parameters": [
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Auth & refresh tokens."
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Logs out the current user and deletes the specific session for the given refresh token.",
+        "description": "Relies on the client to drop any auth tokens.",
+        "operationId": "post_logout_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LogoutRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Auth & refresh tokens."
+          }
+        }
+      }
+    },
+    "/api/auth/v1/oauth/providers": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "List configured OAuth providers.",
+        "operationId": "list_configured_providers_handler",
+        "responses": {
+          "200": {
+            "description": "List of OAuth providers.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfiguredOAuthProvidersResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/v1/oauth/{provider}/callback": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "This handler receives the ?code=<>&state=<>, uses it to get an external oauth token, gets the\nuser's information, creates a new local user if needed, and finally mints our own tokens.",
+        "operationId": "callback_from_external_auth_provider_get",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "description": "Authorization code. Absent when the provider reports an `error` instead, e.g. when\nthe user cancelled the consent dialog (Apple sends `error` + `state` without `code`).",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "error",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Redirect."
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "callback_from_external_auth_provider_post",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/CallbackQuery"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Redirect."
+          }
+        }
+      }
+    },
+    "/api/auth/v1/oauth/{provider}/login": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Log in via external OAuth provider.",
+        "operationId": "login_with_external_auth_provider",
+        "parameters": [
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "mfa_redirect_uri",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "response_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/ResponseType"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          {
+            "name": "pkce_code_challenge",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Redirect."
+          }
+        }
+      }
+    },
+    "/api/auth/v1/refresh": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Refreshes auth tokens given a refresh token.",
+        "description": "NOTE: This is a json-only API, since cookies will be auto-refreshed.",
+        "operationId": "refresh_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Refreshed auth tokens.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefreshResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/v1/register": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Registers a new user with email and password.",
+        "operationId": "register_user_handler",
+        "parameters": [
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "New user registered, or email is already registered but want to avoid account enumerations."
+          },
+          "303": {
+            "description": "New user registered, or email is already registered but want to avoid account enumerations."
+          },
+          "409": {
+            "description": "Username (or unverified_email) already taken."
+          },
+          "424": {
+            "description": "Failed to send verification Email."
+          }
+        }
+      }
+    },
+    "/api/auth/v1/reset_password/request": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Request a password reset.",
+        "operationId": "reset_password_request_handler",
+        "parameters": [
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success or user not found, when redirect_uri not present."
+          },
+          "303": {
+            "description": "Success or user not found, when redirect_uri present"
+          },
+          "400": {
+            "description": "Malformed email address."
+          }
+        }
+      }
+    },
+    "/api/auth/v1/reset_password/update": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Endpoint for setting a new password after the user has requested a reset and provided a\nreplacement password.",
+        "operationId": "reset_password_update_handler",
+        "parameters": [
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "303": {
+            "description": "Success. Redirect to provided `redirect_uri` or login page."
+          },
+          "400": {
+            "description": "Bad request: invalid redirect_uri."
+          },
+          "401": {
+            "description": "Unauthorized: invalid reset code."
+          }
+        }
+      }
+    },
+    "/api/auth/v1/status": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Check login status.",
+        "operationId": "login_status_handler",
+        "responses": {
+          "200": {
+            "description": "Auth & refresh tokens.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginStatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/v1/token": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Exchange authorization code for auth tokens.",
+        "description": "This API endpoint is meant for client-side applications (SPA, mobile, desktop, ...) using the\nweb-auth flow.",
+        "operationId": "auth_code_to_token_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthCodeToTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Converts auth & pkce codes to tokens.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/v1/totp/confirm": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Verify the current user's TOTP",
+        "operationId": "register_totp_confirm_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmRegisterTotpRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "TOTP verified"
+          }
+        }
+      }
+    },
+    "/api/auth/v1/totp/register": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Sign-up user for TOTP second factor.",
+        "operationId": "register_totp_request_handler",
+        "parameters": [
+          {
+            "name": "png",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "TOTP secret and QR code URI.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterTotpResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/v1/totp/unregister": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "unregister_totp_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DisableTotpRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "TOTP disabled successfully."
+          }
+        }
+      }
+    },
+    "/api/auth/v1/verify_email/confirm/{email_verification_token}": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "email_verification_confirm_handler",
+        "parameters": [
+          {
+            "name": "email_verification_token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Email verified, when redirect_uri not present"
+          },
+          "303": {
+            "description": "Email verified, when redirect_uri present"
+          },
+          "400": {
+            "description": "Bad request: invalid redirect_uri."
+          },
+          "401": {
+            "description": "Unauthorized: invalid reset code."
+          }
+        }
+      }
+    },
+    "/api/auth/v1/verify_email/trigger": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Request a new email to verify email address.",
+        "operationId": "email_verification_request_handler",
+        "parameters": [
+          {
+            "name": "email",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Email verification sent or user not found, when redirect_uri not present."
+          },
+          "303": {
+            "description": "Email verification sent or user not found, when redirect_uri present."
+          },
+          "400": {
+            "description": "Malformed email address."
+          }
+        }
+      }
+    },
+    "/api/healthcheck": {
+      "get": {
+        "tags": [
+          "status"
+        ],
+        "operationId": "healthcheck_handler",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/records/v1/{name}": {
+      "get": {
+        "tags": [
+          "records"
+        ],
+        "summary": "Lists records matching the given filters",
+        "operationId": "list_records_handler",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching records."
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "records"
+        ],
+        "summary": "Create new record.",
+        "operationId": "create_record_handler",
+        "parameters": [
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "description": "Redirect user to this address upon successful record creation.\nThis only exists to support insertions via static HTML form actions.\n\nWe may want to have a different on-error redirect to better support the static HTML use-case.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Ids of successfully created records.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateRecordResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/records/v1/{name}/schema": {
+      "get": {
+        "tags": [
+          "records"
+        ],
+        "summary": "Retrieve json schema associated with given record api.",
+        "operationId": "json_schema_handler",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "JSON schema."
+          }
+        }
+      }
+    },
+    "/api/records/v1/{name}/subscribe/{record}": {
+      "get": {
+        "tags": [
+          "records"
+        ],
+        "summary": "Read record.",
+        "operationId": "add_subscription_sse_and_ws_handler",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "record",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Starts streaming changes to matching records via SSE/WebSocket"
+          }
+        }
+      }
+    },
+    "/api/records/v1/{name}/{record}": {
+      "get": {
+        "tags": [
+          "records"
+        ],
+        "summary": "Read record.",
+        "operationId": "read_record_handler",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "record",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Record contents.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "records"
+        ],
+        "summary": "Delete record.",
+        "operationId": "delete_record_handler",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "record",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful deletion."
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "records"
+        ],
+        "summary": "Update existing record.",
+        "operationId": "update_record_handler",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "record",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful update."
+          }
+        }
+      }
+    },
+    "/api/records/v1/{name}/{record}/file/{column_name}": {
+      "get": {
+        "tags": [
+          "records"
+        ],
+        "summary": "Read file associated with record.",
+        "description": "You may prefer using the more general \"files\" (plural) handler below. Since using unique\nfilenames does help with the content life-cycle, such as caching.",
+        "operationId": "get_uploaded_file_from_record_handler",
+        "responses": {
+          "200": {
+            "description": "File contents."
+          }
+        }
+      }
+    },
+    "/api/records/v1/{name}/{record}/files/{column_name}/{file_name}": {
+      "get": {
+        "tags": [
+          "records"
+        ],
+        "summary": "Read single file from list associated with record.",
+        "operationId": "get_uploaded_files_from_record_handler",
+        "responses": {
+          "200": {
+            "description": "File contents."
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AuthCodeToTokenRequest": {
+        "type": "object",
+        "properties": {
+          "authorization_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pkce_code_verifier": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "CallbackQuery": {
+        "type": "object",
+        "required": [
+          "state"
+        ],
+        "properties": {
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Authorization code. Absent when the provider reports an `error` instead, e.g. when\nthe user cancelled the consent dialog (Apple sends `error` + `state` without `code`)."
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "type": "string"
+          }
+        }
+      },
+      "ChangeEmailParams": {
+        "type": "object",
+        "properties": {
+          "err_redirect_uri": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Error redirect target for non-JSON requests."
+          },
+          "redirect_uri": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Success (and error if err_redirect_uri not present) redirect target for non-JSON requests."
+          }
+        }
+      },
+      "ChangeEmailRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ChangeEmailParams"
+          },
+          {
+            "type": "object",
+            "required": [
+              "csrf_token"
+            ],
+            "properties": {
+              "csrf_token": {
+                "type": "string"
+              },
+              "new_email": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "old_email": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Old email address. Only required in form mode."
+              }
+            }
+          }
+        ]
+      },
+      "ChangePasswordParams": {
+        "type": "object",
+        "properties": {
+          "err_redirect_uri": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Error redirect target for non-JSON requests."
+          },
+          "redirect_uri": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Success (and error if err_redirect_uri not present) redirect target for non-JSON requests."
+          }
+        }
+      },
+      "ChangePasswordRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ChangePasswordParams"
+          },
+          {
+            "type": "object",
+            "required": [
+              "old_password",
+              "new_password"
+            ],
+            "properties": {
+              "new_password": {
+                "type": "string"
+              },
+              "new_password_repeat": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "old_password": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "ChangeUsernameParams": {
+        "type": "object",
+        "properties": {
+          "err_redirect_uri": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Error redirect target for non-JSON requests."
+          },
+          "redirect_uri": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Success (and error if err_redirect_uri not present) redirect target for non-JSON requests."
+          }
+        }
+      },
+      "ChangeUsernameRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ChangeUsernameParams"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "new_username": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "ConfiguredOAuthProvidersResponse": {
+        "type": "object",
+        "required": [
+          "providers"
+        ],
+        "properties": {
+          "providers": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": false,
+              "prefixItems": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "List of tuples (<name>, <display_name>)."
+          }
+        }
+      },
+      "ConfirmRegisterTotpRequest": {
+        "type": "object",
+        "required": [
+          "totp_url",
+          "totp"
+        ],
+        "properties": {
+          "totp": {
+            "type": "string"
+          },
+          "totp_url": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateRecordResponse": {
+        "type": "object",
+        "required": [
+          "ids"
+        ],
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Url-Safe base64 encoded ids of the newly created record.\n\nTODO: When conflicting inserts are ignored, unlike for transactions, we currently return an\nawkward \"skipped\" id. Maybe we should just remove batch inserts in favor of transactions or at\nleast have the clients call the transaction endpoint instead."
+          }
+        }
+      },
+      "DisableTotpRequest": {
+        "type": "object",
+        "required": [
+          "totp"
+        ],
+        "properties": {
+          "totp": {
+            "type": "string"
+          }
+        }
+      },
+      "LoginInputParams": {
+        "type": "object",
+        "properties": {
+          "mfa_redirect_uri": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pkce_code_challenge": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "redirect_uri": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "response_type": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ResponseType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "LoginMfaRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/LoginInputParams"
+          },
+          {
+            "type": "object",
+            "required": [
+              "mfa_token"
+            ],
+            "properties": {
+              "mfa_token": {
+                "type": "string"
+              },
+              "totp": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "LoginRequest": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LoginInputParams"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "email_or_username",
+                  "password"
+                ],
+                "properties": {
+                  "email_or_username": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LoginInputParams"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "email",
+                  "password"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LoginInputParams"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "username",
+                  "password"
+                ],
+                "properties": {
+                  "password": {
+                    "type": "string"
+                  },
+                  "username": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "LoginResponse": {
+        "type": "object",
+        "required": [
+          "auth_token",
+          "refresh_token",
+          "csrf_token"
+        ],
+        "properties": {
+          "auth_token": {
+            "type": "string"
+          },
+          "csrf_token": {
+            "type": "string"
+          },
+          "refresh_token": {
+            "type": "string"
+          }
+        }
+      },
+      "LoginStatusResponse": {
+        "type": "object",
+        "properties": {
+          "auth_token": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "csrf_token": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "refresh_token": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "LogoutRequest": {
+        "type": "object",
+        "required": [
+          "refresh_token"
+        ],
+        "properties": {
+          "refresh_token": {
+            "type": "string"
+          }
+        }
+      },
+      "MfaTokenResponse": {
+        "type": "object",
+        "required": [
+          "mfa_token"
+        ],
+        "properties": {
+          "mfa_token": {
+            "type": "string"
+          }
+        }
+      },
+      "RefreshRequest": {
+        "type": "object",
+        "required": [
+          "refresh_token"
+        ],
+        "properties": {
+          "refresh_token": {
+            "type": "string"
+          }
+        }
+      },
+      "RefreshResponse": {
+        "type": "object",
+        "required": [
+          "auth_token",
+          "csrf_token"
+        ],
+        "properties": {
+          "auth_token": {
+            "type": "string"
+          },
+          "csrf_token": {
+            "type": "string"
+          }
+        }
+      },
+      "RegisterTotpResponse": {
+        "type": "object",
+        "required": [
+          "totp_url"
+        ],
+        "properties": {
+          "png": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "totp_url": {
+            "type": "string"
+          }
+        }
+      },
+      "RegisterUserParams": {
+        "type": "object",
+        "properties": {
+          "redirect_uri": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "RegisterUserRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/RegisterUserParams"
+          },
+          {
+            "type": "object",
+            "required": [
+              "password",
+              "password_repeat"
+            ],
+            "properties": {
+              "email": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "password": {
+                "type": "string"
+              },
+              "password_repeat": {
+                "type": "string"
+              },
+              "username": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "ResetPasswordParams": {
+        "type": "object",
+        "properties": {
+          "redirect_uri": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ResetPasswordRequest": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResetPasswordParams"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "email"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResetPasswordParams"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "username"
+                ],
+                "properties": {
+                  "username": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "ResetPasswordUpdateParams": {
+        "type": "object",
+        "properties": {
+          "redirect_uri": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ResetPasswordUpdateRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ResetPasswordUpdateParams"
+          },
+          {
+            "type": "object",
+            "required": [
+              "password",
+              "password_repeat",
+              "password_reset_token"
+            ],
+            "properties": {
+              "password": {
+                "type": "string"
+              },
+              "password_repeat": {
+                "type": "string"
+              },
+              "password_reset_token": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "ResponseType": {
+        "type": "string",
+        "description": "https://www.rfc-editor.org/rfc/rfc6749#section-3.1.1",
+        "enum": [
+          "token",
+          "code"
+        ]
+      },
+      "TokenResponse": {
+        "type": "object",
+        "required": [
+          "auth_token",
+          "refresh_token",
+          "csrf_token"
+        ],
+        "properties": {
+          "auth_token": {
+            "type": "string"
+          },
+          "csrf_token": {
+            "type": "string"
+          },
+          "refresh_token": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

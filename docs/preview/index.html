@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TengaSell — Zimbabwe's Online Auction Marketplace</title>
+<meta name="description" content="TengaSell is a full-stack auction marketplace for Zimbabwe: live auctions, best offers, location-aware selling, Paynow checkout, trust and governance tooling." />
+<meta property="og:title" content="TengaSell — Zimbabwe's Online Auction Marketplace" />
+<meta property="og:description" content="Live auctions, best offers, location-aware selling and Paynow checkout — built on Next.js 16 with 252 API routes and 8 microservices." />
+<meta property="og:type" content="website" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23F2A33C'/><text x='50' y='68' font-size='54' font-family='system-ui' font-weight='700' text-anchor='middle' fill='%230A0D10'>T</text></svg>" />
+<style>
+  :root{
+    --ink:#0A0D10; --panel:#11161B; --panel-2:#161D24; --line:#222C35;
+    --text:#E9EEF3; --muted:#93A1AE; --gold:#F2A33C; --gold-soft:rgba(242,163,60,.12);
+    --green:#4ADE80; --radius:16px; --max:1120px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--ink); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.6; -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit}
+  .wrap{max-width:var(--max); margin:0 auto; padding:0 24px}
+  .mono{font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace}
+
+  /* header */
+  header{
+    position:sticky; top:0; z-index:20; backdrop-filter:blur(12px);
+    background:rgba(10,13,16,.82); border-bottom:1px solid var(--line);
+  }
+  .nav{display:flex; align-items:center; justify-content:space-between; height:64px; gap:16px}
+  .brand{display:flex; align-items:center; gap:10px; font-weight:700; letter-spacing:-.02em; text-decoration:none}
+  .mark{
+    width:30px;height:30px;border-radius:9px;background:var(--gold);color:#0A0D10;
+    display:grid;place-items:center;font-weight:800;font-size:17px
+  }
+  .nav-links{display:flex; align-items:center; gap:22px; font-size:14px; color:var(--muted)}
+  .nav-links a{text-decoration:none}
+  .nav-links a:hover{color:var(--text)}
+  .btn{
+    display:inline-flex;align-items:center;gap:8px;padding:9px 16px;border-radius:10px;
+    font-size:14px;font-weight:600;text-decoration:none;border:1px solid var(--line);
+    transition:transform .15s ease, background .15s ease, border-color .15s ease;
+  }
+  .btn:hover{transform:translateY(-1px)}
+  .btn-primary{background:var(--gold); color:#0A0D10; border-color:transparent}
+  .btn-ghost{background:var(--panel); color:var(--text)}
+  .btn-ghost:hover{border-color:#33414D}
+  @media(max-width:720px){.nav-links{display:none}}
+
+  /* hero */
+  .hero{padding:88px 0 56px; position:relative; overflow:hidden}
+  .hero::before{
+    content:""; position:absolute; inset:-40% 40% auto -10%; height:520px;
+    background:radial-gradient(600px 300px at 30% 40%, rgba(242,163,60,.16), transparent 70%);
+    pointer-events:none;
+  }
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:8px;font-size:12.5px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--gold);border:1px solid rgba(242,163,60,.3);
+    background:var(--gold-soft);padding:6px 12px;border-radius:999px;font-weight:600
+  }
+  h1{
+    font-size:clamp(2.6rem,6vw,4.4rem); line-height:1.03; letter-spacing:-.035em;
+    margin:22px 0 0; font-weight:800; max-width:16ch;
+  }
+  h1 .accent{color:var(--gold)}
+  .lede{font-size:clamp(1.02rem,1.6vw,1.2rem); color:var(--muted); max-width:62ch; margin:20px 0 0}
+  .cta-row{display:flex; flex-wrap:wrap; gap:12px; margin-top:30px}
+
+  .stats{
+    display:grid; grid-template-columns:repeat(4,1fr); gap:1px; margin-top:52px;
+    background:var(--line); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden;
+  }
+  .stat{background:var(--panel); padding:20px 22px}
+  .stat b{display:block; font-size:clamp(1.4rem,2.4vw,1.9rem); letter-spacing:-.03em; font-weight:700}
+  .stat span{font-size:12.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.07em}
+  @media(max-width:720px){.stats{grid-template-columns:repeat(2,1fr)}}
+
+  /* sections */
+  section{padding:64px 0; border-top:1px solid var(--line)}
+  .sec-head{display:flex; align-items:flex-end; justify-content:space-between; gap:20px; margin-bottom:32px}
+  h2{font-size:clamp(1.5rem,2.6vw,2.05rem); letter-spacing:-.03em; margin:0; font-weight:700}
+  .sec-head p{margin:0; color:var(--muted); font-size:14.5px; max-width:46ch}
+
+  /* gallery */
+  .gallery{display:grid; grid-template-columns:repeat(3,1fr); gap:16px}
+  @media(max-width:900px){.gallery{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:600px){.gallery{grid-template-columns:1fr}}
+  figure{margin:0; background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden}
+  figure img{display:block; width:100%; height:auto; border-bottom:1px solid var(--line)}
+  figcaption{padding:12px 14px; font-size:13px; color:var(--muted)}
+  figcaption b{color:var(--text); font-weight:600; display:block; font-size:13.5px}
+
+  /* capability cards */
+  .cards{display:grid; grid-template-columns:repeat(3,1fr); gap:16px}
+  @media(max-width:900px){.cards{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:600px){.cards{grid-template-columns:1fr}}
+  .card{
+    background:linear-gradient(180deg,var(--panel),var(--panel-2));
+    border:1px solid var(--line); border-radius:var(--radius); padding:22px;
+  }
+  .card h3{margin:0 0 8px; font-size:15.5px; letter-spacing:-.01em}
+  .card p{margin:0; font-size:14px; color:var(--muted)}
+  .pill{
+    display:inline-block; font-size:11.5px; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--gold); background:var(--gold-soft); border-radius:6px; padding:3px 8px; margin-bottom:12px; font-weight:600
+  }
+
+  /* architecture */
+  .arch{display:grid; grid-template-columns:1.05fr .95fr; gap:28px; align-items:start}
+  @media(max-width:900px){.arch{grid-template-columns:1fr}}
+  pre.diagram{
+    margin:0; background:#0C1116; border:1px solid var(--line); border-radius:var(--radius);
+    padding:20px; overflow-x:auto; font-size:12.4px; line-height:1.75; color:#B8C6D2;
+  }
+  .diagram .g{color:var(--gold)}
+  .layers{width:100%; border-collapse:collapse; font-size:14px}
+  .layers td{padding:11px 0; border-bottom:1px solid var(--line); vertical-align:top}
+  .layers tr:last-child td{border-bottom:0}
+  .layers td:first-child{color:var(--muted); width:34%; padding-right:16px}
+
+  /* verification */
+  .checks{display:grid; grid-template-columns:repeat(2,1fr); gap:12px}
+  @media(max-width:700px){.checks{grid-template-columns:1fr}}
+  .check{display:flex; gap:11px; align-items:flex-start; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--green); margin-top:7px; flex:none; box-shadow:0 0 0 4px rgba(74,222,128,.12)}
+  .check b{font-weight:600; font-size:14px; display:block}
+  .check span{font-size:13px; color:var(--muted)}
+
+  /* callout */
+  .callout{
+    display:flex; gap:16px; align-items:flex-start; background:var(--gold-soft);
+    border:1px solid rgba(242,163,60,.32); border-radius:var(--radius); padding:22px 24px;
+  }
+  .callout h3{margin:0 0 6px; font-size:16px}
+  .callout p{margin:0; color:#D6C4A6; font-size:14.5px; max-width:78ch}
+  .callout .mono{color:var(--gold)}
+
+  /* footer */
+  footer{border-top:1px solid var(--line); padding:34px 0 46px; color:var(--muted); font-size:13.5px}
+  .foot{display:flex; flex-wrap:wrap; gap:14px; justify-content:space-between; align-items:center}
+  .foot a{text-decoration:none; color:var(--muted)}
+  .foot a:hover{color:var(--text)}
+  .foot-links{display:flex; gap:20px; flex-wrap:wrap}
+  a:focus-visible,.btn:focus-visible{outline:2px solid var(--gold); outline-offset:3px; border-radius:6px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <a class="brand" href="#top"><span class="mark">T</span> TengaSell</a>
+    <nav class="nav-links" aria-label="Sections">
+      <a href="#product">Product</a>
+      <a href="#capabilities">Capabilities</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#verification">Verification</a>
+    </nav>
+    <a class="btn btn-primary" href="https://github.com/kudzimusar/tengasell-auction">View repository</a>
+  </div>
+</header>
+
+<main id="top">
+
+  <div class="wrap hero">
+    <span class="eyebrow">Zimbabwe · Auction marketplace</span>
+    <h1>Sell it. Bid it.<br /><span class="accent">Settle it.</span></h1>
+    <p class="lede">
+      TengaSell is a full-stack auction marketplace built for Zimbabwean commerce — live auction
+      rooms, structured best-offer negotiation, location-aware listing and pickup, and Paynow
+      checkout, wrapped in the trust, moderation and finance controls a real marketplace needs.
+    </p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="https://github.com/kudzimusar/tengasell-auction">Source on GitHub</a>
+      <a class="btn btn-ghost" href="https://github.com/kudzimusar/tengasell-auction/blob/main/worklog.md">Read the engineering log</a>
+      <a class="btn btn-ghost" href="https://github.com/kudzimusar/tengasell-auction/actions">CI runs</a>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><b>252</b><span>API route handlers</span></div>
+      <div class="stat"><b>8</b><span>Backend services</span></div>
+      <div class="stat"><b>40</b><span>Domain modules</span></div>
+      <div class="stat"><b>390→1920</b><span>px UAT viewports</span></div>
+    </div>
+  </div>
+
+  <section id="product">
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <h2>What it looks like</h2>
+          <p>Captured from the running application during the project's own UAT passes — desktop and mobile.</p>
+        </div>
+      </div>
+      <div class="gallery">
+        <figure>
+          <img src="./assets/home.png" alt="TengaSell home page with auction listings and categories" loading="lazy" />
+          <figcaption><b>Marketplace home</b>Category rails, featured and closing-soon auctions.</figcaption>
+        </figure>
+        <figure>
+          <img src="./assets/sell-map.png" alt="Sell flow with a map for choosing item location" loading="lazy" />
+          <figcaption><b>Location-aware selling</b>Map pin drives pickup distance and delivery options.</figcaption>
+        </figure>
+        <figure>
+          <img src="./assets/sell-review.png" alt="Sell flow review step before publishing a listing" loading="lazy" />
+          <figcaption><b>Listing review</b>Draft → media → pricing → review → publish.</figcaption>
+        </figure>
+        <figure>
+          <img src="./assets/checkout.png" alt="Checkout page with delivery and payment options" loading="lazy" />
+          <figcaption><b>Checkout</b>Delivery vs pickup, fees, Paynow hand-off.</figcaption>
+        </figure>
+        <figure>
+          <img src="./assets/comms.png" alt="Communications center showing buyer and seller threads" loading="lazy" />
+          <figcaption><b>Comms centre</b>Threads, outbid alerts, WhatsApp/email delivery.</figcaption>
+        </figure>
+        <figure>
+          <img src="./assets/admin.png" alt="Admin console overview with moderation and platform health" loading="lazy" />
+          <figcaption><b>Admin console</b>Moderation, trust tickets, platform health, smoke checks.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section id="capabilities">
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <h2>Built for the whole trade loop</h2>
+          <p>Not a listings page — the settlement, dispute and governance path is part of the product.</p>
+        </div>
+      </div>
+      <div class="cards">
+        <article class="card">
+          <span class="pill">Auctions</span>
+          <h3>Live rooms &amp; timed close</h3>
+          <p>Scheduled start/end, bid increments, hammer and auto-close, anti-sniping, retraction handling and outbid notifications.</p>
+        </article>
+        <article class="card">
+          <span class="pill">Offers</span>
+          <h3>Best-offer negotiation</h3>
+          <p>Counter-offer loop that converts directly into an order without waiting for an auction to end.</p>
+        </article>
+        <article class="card">
+          <span class="pill">Selling</span>
+          <h3>Location-aware listing</h3>
+          <p>MapLibre pin selection with a tile-caching GIS service, pickup radius, delivery bands and fee preview.</p>
+        </article>
+        <article class="card">
+          <span class="pill">Payments</span>
+          <h3>Paynow &amp; ledger</h3>
+          <p>Paynow hand-off and callback handling, commission calculation, finance ledger and reconciliation hooks.</p>
+        </article>
+        <article class="card">
+          <span class="pill">Trust</span>
+          <h3>Moderation &amp; compliance</h3>
+          <p>Trust tickets, risk scoring, moderation queues, compliance console and staff RBAC with MFA flows.</p>
+        </article>
+        <article class="card">
+          <span class="pill">Ops</span>
+          <h3>Status, smoke &amp; audits</h3>
+          <p>Public status page, incident history, golden-endpoint smoke contract, plus SAST/DAST evidence packs.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section id="architecture">
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <h2>How it is put together</h2>
+          <p>A client-rendered SPA over a Next.js route-handler API, with domain services behind it.</p>
+        </div>
+      </div>
+      <div class="arch">
+        <pre class="diagram"><span class="g">Browser</span> — TengaSell SPA (React 19, client-only)
+        │  fetch · WebSocket
+        ▼
+<span class="g">Next.js 16</span> — 252 Route Handlers
+        auth · listings · bids · orders
+        payments · comms · trust · admin
+        │
+        ▼  Prisma 6 → SQLite
+<span class="g">mini-services</span>
+        trade-engine     finance-service
+        comms-service    trust-service
+        govern-service   gis-service (tiles)
+        trailbase-db
+        │
+        ▼
+<span class="g">Caddy</span> gateway · CI/CD · Pages preview</pre>
+        <div>
+          <table class="layers">
+            <tr><td>UI</td><td>Next.js 16, React 19, Tailwind 4, shadcn/Radix, framer-motion, recharts</td></tr>
+            <tr><td>Data layer</td><td>Prisma 6 with SQLite per-service databases; TanStack Query + Zustand in the client</td></tr>
+            <tr><td>Auth</td><td>next-auth with password, MFA, recovery and staff role model</td></tr>
+            <tr><td>Realtime</td><td>socket.io for live auction rooms and bid fan-out</td></tr>
+            <tr><td>Maps</td><td>MapLibre GL plus GIS microservice with on-disk tile cache</td></tr>
+            <tr><td>Gateway</td><td>Caddy reverse proxy and static asset serving</td></tr>
+            <tr><td>CI</td><td>GitHub Actions: install → Prisma → lint → typecheck → build → boot &amp; probe</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="verification">
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <h2>Evidence, not adjectives</h2>
+          <p>The repository carries the verification trail: smoke contracts, security scans and UAT screenshots.</p>
+        </div>
+      </div>
+      <div class="checks">
+        <div class="check"><span class="dot" aria-hidden="true"></span><div><b>Golden-endpoint smoke</b><span><span class="mono">ops/smoke.ts</span> — the same contract the admin console runs.</span></div></div>
+        <div class="check"><span class="dot" aria-hidden="true"></span><div><b>SAST / DAST packs</b><span><span class="mono">ops/reports/</span> — findings with dispositions, not a green badge.</span></div></div>
+        <div class="check"><span class="dot" aria-hidden="true"></span><div><b>Responsive UAT evidence</b><span><span class="mono">screenshots/</span> — 390 px through 1920 px captures.</span></div></div>
+        <div class="check"><span class="dot" aria-hidden="true"></span><div><b>Backup &amp; restore drill</b><span><span class="mono">ops/backup.ts</span>, <span class="mono">restore-test.ts</span> — verified recovery path.</span></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="callout">
+        <div>
+          <h3>This site is a static preview — the app needs a Node runtime</h3>
+          <p>
+            GitHub Pages serves static files only. TengaSell runs on 252 server routes with SQLite,
+            WebSockets and microservices, so the live application is deployed to a Node host
+            (Vercel, Render or Fly.io) from the same repository. This page exists so the product,
+            architecture and evidence can be reviewed without a login. Full deployment notes are in
+            <span class="mono">README.md</span>.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <span>© TengaSell · Zimbabwe auction marketplace · preview site</span>
+    <div class="foot-links">
+      <a href="https://github.com/kudzimusar/tengasell-auction">Repository</a>
+      <a href="https://github.com/kudzimusar/tengasell-auction/blob/main/README.md">Documentation</a>
+      <a href="https://github.com/kudzimusar/tengasell-auction/blob/main/CHANGELOG.md">Changelog</a>
+      <a href="https://github.com/kudzimusar/tengasell-auction/issues">Issues</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,109 @@
+# Tengasell — production GIS stack (docker compose)
+#
+# Replaces the sandbox mini-service (mini-services/gis-service, port 3004)
+# with the real open-source engines. The Next.js BFF already speaks these
+# exact API contracts — switch it over with:
+#   GIS_BASE_URL=http://nominatim:8088        (geocode endpoints)
+#   GIS_ROUTE_BASE_URL=http://osrm:5000       (routing endpoints)   [optional split]
+#   GIS_TILE_BASE_URL=http://tiles:8080       (tile endpoints)      [optional split]
+# The BFF defaults everything to GIS_BASE_URL; per-engine overrides allow
+# mixed deployments where each engine runs on its own host.
+#
+# Data downloads (run once, mounted as volumes):
+#   Zimbabwe OSM extract:  https://download.geofabrik.de/africa/zimbabwe-latest.osm.pbf
+#   Photon Africa extract: https://download.graphhopper.com/public/photon/africa-latest.tar.bz2
+#   Vector tiles: build with tilemaker/planetiler from the OSM extract
+#                 (see README.md), or use any zimbabwe.mbtiles
+#
+# Resource notes (small VPS-friendly):
+#   · OSRM car profile on Zimbabwe: ~1 GB RAM, ~5 min preprocessing
+#   · Photon (Africa): ~2 GB RAM
+#   · Nominatim (Zimbabwe only): ~4 GB RAM + PostgreSQL
+#   · TileServer GL: ~256 MB RAM per .mbtiles file
+
+services:
+  # ── Geocoding (forward + reverse) — replaces Google Geocoding API ──────────
+  nominatim:
+    image: mediagis/nominatim:4.4
+    container_name: tengasell-nominatim
+    environment:
+      PBF_URL: https://download.geofabrik.de/africa/zimbabwe-latest.osm.pbf
+      REPLICATION_URL: https://download.geofabrik.de/africa/zimbabwe-updates/
+      NOMINATIM_PASSWORD: ${NOMINATIM_DB_PASSWORD:?set in .env}
+      IMPORT_WIKIPEDIA: "false"
+    volumes:
+      - nominatim-data:/var/lib/postgresql
+    ports:
+      - "8088:8080"
+    shm_size: 1g
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/status"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  # ── Autocomplete (type-ahead) — Photon, reverse-proxy style /api ──────────
+  photon:
+    image: ghcr.io/komoot/photon:0.6.3
+    container_name: tengasell-photon
+    environment:
+      JAVA_OPTS: -Xmx2G
+    volumes:
+      - ./data/photon:/photon_data
+    # Put the Africa extract at ./data/photon/africa-latest.tar.bz2 first
+    # (or an unzipped ./data/photon/photon_data). The image searches
+    # /photon_data/elasticsearch for an existing index; if absent it imports
+    # any .tar.bz2 archives found in /photon_data.
+    ports:
+      - "2322:2322"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:2322/api?q=harare&limit=1"]
+      interval: 30s
+      timeout: 5s
+      retries: 10
+
+  # ── Routing (route + table) — replaces Google Directions / Distance Matrix ─
+  osrm:
+    image: ghcr.io/project-osrm/osrm-backend:latest
+    container_name: tengasell-osrm
+    command: osrm-routed --algorithm mld /data/zimbabwe-latest.osrm
+    volumes:
+      - ./data/osrm:/data
+    # Preprocess once (see README) so /data/zimbabwe-latest.osrm exists:
+    #   docker compose run --rm osrm osrm-extract -p /data/car.lua /data/zimbabwe-latest.osm.pbf
+    #   docker compose run --rm osrm osrm-partition /data/zimbabwe-latest.osrm
+    #   docker compose run --rm osrm osrm-customize /data/zimbabwe-latest.osrm
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/route/v1/driving/31.05,-17.83;28.58,-20.15"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+
+  # ── Map tiles (vector/raster) — replaces Google Maps JS API ────────────────
+  tiles:
+    image: maptiler/tileserver-gl:latest
+    container_name: tengasell-tiles
+    command: --mbtiles /data/zimbabwe.mbtiles
+    volumes:
+      - ./data/tiles:/data
+      - ./tileserver-config:/config
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  nominatim-data:

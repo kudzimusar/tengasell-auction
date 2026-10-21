@@ -1,0 +1,135 @@
+name: CI
+
+# Verified locally before this workflow was committed:
+#   npm ci → prisma generate → prisma db push → next build → boot standalone → probe.
+# Probes assert real behaviour: / = 200, /api/public/status = 200 {"ok":true},
+# /api/v1/listings = 401 (auth guard is expected to reject anonymous callers).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-smoke:
+    name: Build and smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      DATABASE_URL: file:${{ github.workspace }}/ci.db
+      NEXT_TELEMETRY_DISABLED: "1"
+      CI: "true"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Create CI database
+        run: npx prisma db push --skip-generate
+
+      - name: Production build
+        run: npm run build
+
+      - name: Boot standalone server and probe endpoints
+        run: |
+          set -euo pipefail
+          PORT=3100 node .next/standalone/server.js &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+
+          READY=0
+          for i in $(seq 1 60); do
+            if curl -fsS -o /dev/null http://127.0.0.1:3100/api/public/status 2>/dev/null; then
+              echo "server ready after ${i}s"
+              READY=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$READY" -ne 1 ]; then
+            echo "::error::standalone server did not become ready"
+            exit 1
+          fi
+
+          check() {
+            local path="$1" expected="$2" code
+            code="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:3100${path}")"
+            echo "GET ${path} -> ${code} (expected ${expected})"
+            test "$code" = "$expected"
+          }
+
+          check "/" 200
+          check "/api/public/status" 200
+          check "/api/v1/listings" 401
+
+          body="$(curl -s http://127.0.0.1:3100/api/public/status)"
+          echo "$body" | head -c 300; echo
+          echo "$body" | grep -q '"ok":true'
+          echo "smoke contract satisfied"
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-diagnostics
+          path: |
+            build.log
+            npm-install.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  quality:
+    name: Lint and typecheck (baseline debt — non-blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # The imported codebase carries pre-existing debt: 18 ESLint errors
+    # (react-hooks/set-state-in-effect) and 312 TypeScript diagnostics that the
+    # app has always suppressed via `typescript.ignoreBuildErrors`. This job
+    # reports both without blocking merges; it is NOT a green light.
+    continue-on-error: true
+    env:
+      DATABASE_URL: file:${{ github.workspace }}/ci.db
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: TypeScript
+        run: npx tsc --noEmit

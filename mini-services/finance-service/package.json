@@ -1,0 +1,11 @@
+{
+  "name": "finance-service",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "description": "Tengasell finance core — double-entry ledger, escrow, fees + VAT, seller balances, payouts (dual approval + KYC), refunds + credit notes, invoices, receipts, chargebacks, reconciliation and tax packs on port 3006.",
+  "scripts": {
+    "dev": "bun --hot index.ts",
+    "start": "bun index.ts"
+  }
+}

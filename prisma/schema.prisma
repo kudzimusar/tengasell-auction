@@ -1,0 +1,1114 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ── Identity & Access (IAM / EXP) ─────────────────────────────
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  handle          String    @unique
+  passwordHash    String
+  name            String
+  phone           String?
+  locale          String    @default("en")
+  role            String    @default("BUYER") // BUYER|SELLER|SUPPORT|MODERATOR|FINANCE|COMPLIANCE|ADMIN
+  status          String    @default("ACTIVE") // ACTIVE|PENDING|SUSPENDED|BANNED|DELETION_PENDING|DELETED
+  statusReason    String?
+  emailVerifiedAt DateTime?
+  mfaEnabled      Boolean   @default(false)
+  riskScore       Int       @default(0)
+  avatarEmoji     String    @default("🙂")
+  bio             String?
+  city            String?
+  country         String    @default("ZW")
+  isSeller        Boolean   @default(false)
+  deletedAt       DateTime?
+  deletionReason  String?
+  lastLoginAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model SellerProfile {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  shopName          String
+  slug              String   @unique
+  bio               String?
+  status            String   @default("PENDING") // PENDING|VERIFIED|SUSPENDED|REJECTED
+  identityVerified  Boolean  @default(false)
+  businessVerified  Boolean  @default(false)
+  taxVerified       Boolean  @default(false)
+  payoutVerified    Boolean  @default(false)
+  documents         String   @default("[]") // JSON [{name,ref,kind,uploadedAt}]
+  verificationNotes String?
+  healthScore       Int      @default(100)
+  ratingAvg         Float    @default(0)
+  ratingCount       Int      @default(0)
+  appealState       String?  // SUBMITTED|UNDER_REVIEW|UPHELD|REVERSED
+  payoutMethod     String?  // JSON {type:MOCK_BANK,bankName,acctMask}
+  joinedAt          DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model SessionRecord {
+  id          String    @id @default(cuid())
+  userId      String
+  ip          String?
+  userAgent   String?
+  createdAt   DateTime  @default(now())
+  revokedAt   DateTime?
+  lastSeenAt  DateTime?
+}
+
+model AuthEvent {
+  id         String   @id @default(cuid())
+  email      String
+  kind       String // LOGIN_OK|LOGIN_FAIL|LOCKOUT|REGISTER|MFA|STEPUP|LOGOUT|RECOVERY
+  ip         String?
+  userAgent  String?
+  requestId  String?
+  createdAt  DateTime @default(now())
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model StepUpToken {
+  id        String    @id @default(cuid())
+  userId    String
+  action    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model StaffGrant {
+  id          String    @id @default(cuid())
+  userId      String
+  role        String // SUPPORT|MODERATOR|FINANCE|COMPLIANCE|ADMIN
+  grantedBy   String
+  reason      String
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+}
+
+// ── Marketplace (MKT) ────────────────────────────────────────
+model Category {
+  id       String     @id @default(cuid())
+  slug     String     @unique
+  name     String
+  nameJa   String
+  icon     String     @default("📦")
+  parentId String?
+  sort     Int        @default(0)
+  active   Boolean    @default(true)
+}
+
+model Listing {
+  id               String    @id @default(cuid())
+  sellerId         String
+  categoryId       String
+  title            String
+  titleJa          String?
+  description      String
+  condition        String    @default("USED") // NEW|USED|REFURB
+  type             String    @default("AUCTION") // AUCTION|BUY_NOW
+  startingPrice    Float
+  buyNowPrice      Float?
+  currentPrice     Float
+  stock            Int       @default(1)
+  images           String    @default("[]") // JSON string[]
+  status           String    @default("PENDING_REVIEW") // DRAFT|PENDING_REVIEW|ACTIVE|REJECTED|SUSPENDED|ENDED|SOLD|CANCELLED
+  rejectReason     String?
+  endsAt           DateTime?
+  viewCount        Int       @default(0)
+  bidCount         Int       @default(0)
+  watchCount       Int       @default(0)
+  ratingAvg        Float     @default(0)
+  version          Int       @default(1)
+  publishedAt      DateTime?
+  endedAt          DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+model ListingVersion {
+  id          String   @id @default(cuid())
+  listingId   String
+  version     Int
+  snapshot    String // JSON
+  changedBy   String
+  changeNote  String?
+  createdAt   DateTime @default(now())
+}
+
+model Bid {
+  id        String   @id @default(cuid())
+  listingId String
+  bidderId  String
+  amount    Float
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model Watch {
+  id        String   @id @default(cuid())
+  userId    String
+  listingId String
+  createdAt DateTime @default(now())
+  @@unique([userId, listingId])
+}
+
+model SavedSearch {
+  id        String   @id @default(cuid())
+  userId    String
+  label     String
+  query     String
+  createdAt DateTime @default(now())
+}
+
+model Order {
+  id              String    @id @default(cuid())
+  listingId       String
+  buyerId         String
+  sellerId        String
+  type            String    @default("AUCTION") // AUCTION|BUY_NOW
+  amount          Float
+  buyerFee        Float     @default(0)
+  sellerFee       Float     @default(0)
+  vatAmount       Float     @default(0)
+  totalCharged    Float
+  currency        String    @default("USD")
+  status          String    @default("PENDING_PAYMENT") // PENDING_PAYMENT|PAID|SHIPPED|DELIVERED|COMPLETED|CANCELLED|REFUND_PENDING|REFUNDED|DISPUTED
+  paymentMethod   String?
+  shippingAddress  String?   // JSON {name,phone,city,street,notes}
+  trackingCode    String?
+  carrier         String?
+  proofOfDelivery String?   // JSON {deliveredAt,note}
+  placedAt        DateTime  @default(now())
+  paidAt          DateTime?
+  shippedAt       DateTime?
+  deliveredAt     DateTime?
+  completedAt     DateTime?
+  cancelledAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model OrderEvent {
+  id        String   @id @default(cuid())
+  orderId   String
+  type      String
+  actorId   String?
+  data      String   @default("{}") // JSON
+  createdAt DateTime @default(now())
+}
+
+model Payment {
+  id          String    @id @default(cuid())
+  orderId     String
+  method      String // MOCK_CARD|MOCK_WALLET|MOCK_ECOCASH
+  status      String // AUTHORIZED|CAPTURED|FAILED|REVERSED
+  authRef     String?
+  captureRef  String?
+  amount      Float
+  currency    String    @default("USD")
+  idempotencyKey String @unique
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Refund {
+  id          String    @id @default(cuid())
+  orderId     String
+  amount      Float
+  type        String    @default("FULL") // FULL|PARTIAL
+  reason      String
+  status      String    @default("REQUESTED") // REQUESTED|APPROVED|PROCESSED|REJECTED
+  requestedBy String
+  approvedBy  String?
+  processedAt DateTime?
+  reversalRef String?
+  createdAt   DateTime  @default(now())
+}
+
+model Review {
+  id             String    @id @default(cuid())
+  orderId        String    @unique
+  listingId      String
+  authorId       String
+  sellerId       String
+  rating         Int
+  title          String?
+  body           String?
+  status         String    @default("PUBLISHED") // PUBLISHED|HIDDEN|REMOVED
+  moderationNote String?
+  createdAt      DateTime  @default(now())
+}
+
+model Dispute {
+  id          String    @id @default(cuid())
+  orderId     String
+  openedBy    String
+  reason      String
+  details     String?
+  status      String    @default("OPEN") // OPEN|UNDER_REVIEW|RESOLVED_BUYER|RESOLVED_SELLER|CLOSED
+  resolution  String?
+  assignedTo  String?
+  evidence    String    @default("[]") // JSON
+  openedAt     DateTime  @default(now())
+  resolvedAt   DateTime?
+}
+
+// ── Trust & Safety (TNS) ─────────────────────────────────────
+model AbuseReport {
+  id          String    @id @default(cuid())
+  reporterId  String?
+  targetType  String // LISTING|USER|MESSAGE|REVIEW
+  targetId    String
+  reason      String // PROHIBITED|COUNTERFEIT|SCAM|ABUSE|SPAM|OTHER
+  details     String?
+  status      String    @default("OPEN") // OPEN|REVIEWING|ACTIONED|DISMISSED
+  handledBy   String?
+  actionTaken String?
+  evidence    String    @default("[]") // JSON
+  createdAt   DateTime  @default(now())
+  resolvedAt  DateTime?
+}
+
+model Enforcement {
+  id         String    @id @default(cuid())
+  userId     String
+  level      String // WARNING|RESTRICTION|SUSPENSION|BAN
+  reason     String
+  reportId   String?
+  issuedBy   String
+  notes      String?
+  expiresAt  DateTime?
+  liftedAt    DateTime?
+  liftedBy    String?
+  createdAt  DateTime  @default(now())
+}
+
+model Appeal {
+  id            String   @id @default(cuid())
+  enforcementId String
+  userId        String
+  statement     String
+  status        String   @default("SUBMITTED") // SUBMITTED|UNDER_REVIEW|UPHELD|REVERSED
+  decidedBy     String?
+  decidedAt     DateTime?
+  decisionNote  String?
+  createdAt     DateTime @default(now())
+}
+
+// ── Communications (MSG) ─────────────────────────────────────
+model MessageThread {
+  id               String    @id @default(cuid())
+  listingId        String?
+  orderId          String?
+  buyerId          String
+  sellerId         String
+  subject          String
+  status           String    @default("OPEN") // OPEN|MEDIATED|CLOSED
+  assignedTo       String?
+  lastMessageAt    DateTime  @default(now())
+  createdAt        DateTime  @default(now())
+}
+
+model Message {
+  id             String   @id @default(cuid())
+  threadId       String
+  senderId       String?
+  senderRole     String // BUYER|SELLER|COMPANY|SYSTEM
+  body           String
+  moderationNote String?
+  redacted       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  type      String
+  params    String    @default("{}") // JSON
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model NotificationPref {
+  id      String @id @default(cuid())
+  userId  String
+  channel String // EMAIL|INAPP
+  event   String // OUTBID|WIN|ORDER|SHIP|MSG|MARKETING|DIGEST
+  enabled Boolean @default(true)
+  @@unique([userId, channel, event])
+}
+
+model Template {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  type      String   @default("TRANSACTIONAL") // TRANSACTIONAL|MARKETING
+  subjectEn String
+  subjectJa String
+  bodyEn    String
+  bodyJa    String
+  version   Int      @default(1)
+  updatedAt DateTime @updatedAt
+}
+
+model Campaign {
+  id          String    @id @default(cuid())
+  name        String
+  segment     String    @default("{}") // JSON rules
+  channel     String    @default("EMAIL") // EMAIL|INAPP
+  templateKey String
+  status      String    @default("DRAFT") // DRAFT|PENDING_APPROVAL|SCHEDULED|SENT|CANCELLED
+  scheduledAt DateTime?
+  sentAt      DateTime?
+  createdBy   String
+  approvedBy   String?
+  stats       String    @default("{}") // JSON {queued,sent,suppressed,opened,clicked,unsubscribed}
+  createdAt   DateTime  @default(now())
+}
+
+model CampaignRecipient {
+  id              String   @id @default(cuid())
+  campaignId      String
+  userId          String
+  email           String
+  status          String   @default("QUEUED") // QUEUED|SENT|SUPPRESSED
+  suppressedReason String?
+  createdAt       DateTime @default(now())
+}
+
+model EmailOutbox {
+  id          String    @id @default(cuid())
+  toEmail     String
+  userId      String?
+  subject     String
+  body        String
+  templateKey String?
+  campaignId  String?
+  kind        String    @default("TRANSACTIONAL") // TRANSACTIONAL|MARKETING
+  status      String    @default("QUEUED") // QUEUED|SENT|FAILED|RATE_CAPPED
+  providerRef String?
+  sentAt      DateTime?
+  openedAt    DateTime?
+  clickedAt   DateTime?
+  unsubToken  String?
+  channel     String    @default("EMAIL") // EMAIL|INAPP|TELEGRAM|WHATSAPP|SMS|SOCIAL
+  channelAccountId String? // ChannelAccount.id when routed to a linked external channel
+  createdAt   DateTime  @default(now())
+}
+
+// ── TUCS L1: Channel identity (link/verify/double opt-in/1-per-channel 24h marketing cap) ──
+model ChannelAccount {
+  id              String    @id @default(cuid())
+  userId          String
+  channel         String    // TELEGRAM|WHATSAPP|EMAIL|SMS|SOCIAL
+  handle          String    // @telegram | +2637xxxxxxxx | email | @social handle
+  label           String?   // user-friendly name e.g. "My iPhone"
+  status          String    @default("PENDING") // PENDING|LINKED|UNLINKED
+  verifyCode      String?   // 6-digit sandbox mock code (real providers deliver out-of-band)
+  verifyExpiresAt DateTime?
+  verifiedAt      DateTime?
+  doubleOptInAt   DateTime? // marketing consent timestamp (only after LINKED)
+  marketingOptIn  Boolean   @default(false)
+  transactionalOn Boolean   @default(true)
+  lastMarketingAt DateTime? // frequency cap: max 1 marketing msg / channel / 24h
+  unsubToken      String    @unique
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  @@unique([userId, channel, handle])
+  @@index([userId])
+  @@index([channel, status])
+}
+
+model Suppression {
+  id        String   @id @default(cuid())
+  userId    String?
+  email     String
+  reason    String
+  token     String   @unique
+  createdAt DateTime @default(now())
+}
+
+model ConsentRecord {
+  id         String    @id @default(cuid())
+  userId     String
+  purpose    String // MARKETING|COOKIES_ANALYTICS|TERMS|PRIVACY
+  granted    Boolean
+  source     String?
+  grantedAt  DateTime?
+  withdrawnAt DateTime?
+  evidence   String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+}
+
+// ── CMS ───────────────────────────────────────────────────────
+model Article {
+  id            String    @id @default(cuid())
+  slug          String    @unique
+  type          String    @default("HELP") // HELP|POLICY|ANNOUNCEMENT|SELLER_DOC|RUNBOOK|KB|ADR|CHANGELOG|API_DOC
+  title         String
+  titleJa       String
+  body          String
+  bodyJa        String?
+  status        String    @default("DRAFT") // DRAFT|IN_REVIEW|APPROVED|SCHEDULED|PUBLISHED|UNPUBLISHED|ARCHIVED
+  authorId      String
+  reviewerId    String?
+  publisherId   String?
+  scheduledFor  DateTime?
+  publishedAt   DateTime?
+  unpublishAt   DateTime?
+  version       Int       @default(1)
+  seoDescription String?
+  category      String?
+  createdAt     DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model ArticleVersion {
+  id         String   @id @default(cuid())
+  articleId  String
+  version    Int
+  snapshot   String // JSON
+  changedBy  String
+  changeNote String?
+  createdAt  DateTime @default(now())
+}
+
+model MediaAsset {
+  id          String   @id @default(cuid())
+  name        String
+  url         String
+  altText     String
+  credit      String?
+  licence     String   @default("PLATFORM_OWNED")
+  uploadedBy  String
+  createdAt   DateTime @default(now())
+}
+
+// ── Control plane (CTL) ───────────────────────────────────────
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorId     String?
+  actorRole   String?
+  action      String
+  targetType  String?
+  targetId    String?
+  before      String?  // JSON
+  after       String?  // JSON
+  reason      String?
+  requestId   String?
+  ip          String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+}
+
+model FeatureFlag {
+  key         String   @id
+  description String?
+  enabled     Boolean  @default(false)
+  rolloutNote String?
+  updatedBy   String?
+  updatedAt   DateTime @updatedAt
+}
+
+model ConfigSetting {
+  key         String   @id
+  value       String   @default("{}") // JSON
+  description String?
+  requiresApproval Boolean @default(false)
+  updatedBy   String?
+  updatedAt   DateTime @updatedAt
+}
+
+model ReasonCode {
+  key      String  @id
+  label    String
+  labelJa  String?
+  category String
+  active   Boolean @default(true)
+}
+
+model ApprovalRequest {
+  id          String    @id @default(cuid())
+  type        String // REFUND|PAYOUT|CONFIG|SUSPENSION|ARTICLE_PUBLISH
+  payload     String    @default("{}") // JSON
+  requestedBy String
+  status      String    @default("PENDING") // PENDING|APPROVED|REJECTED|EXPIRED
+  decidedBy   String?
+  decidedAt   DateTime?
+  reason      String?
+  createdAt   DateTime  @default(now())
+}
+
+// ── Support (SUP) ─────────────────────────────────────────────
+model Ticket {
+  id              String    @id @default(cuid())
+  userId          String
+  subject         String
+  category        String    @default("GENERAL") // GENERAL|ORDER|LISTING|PAYOUT|ACCOUNT|PRIVACY
+  status          String    @default("OPEN") // OPEN|IN_PROGRESS|WAITING|CLOSED
+  priority        String    @default("NORMAL") // LOW|NORMAL|HIGH|URGENT
+  assignedTo      String?
+  slaDueAt        DateTime
+  firstResponseAt DateTime?
+  resolvedAt      DateTime?
+  satisfaction    Int?
+  identityVerified Boolean  @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+model TicketMessage {
+  id        String   @id @default(cuid())
+  ticketId  String
+  authorId  String?
+  role      String // USER|SUPPORT|SYSTEM
+  body      String
+  internal  Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+// ── Finance (FIN) ────────────────────────────────────────────
+model LedgerEntry {
+  id        String   @id @default(cuid())
+  orderRef  String?
+  account   String // PLATFORM_REVENUE|SELLER_PAYABLE|VAT_PAYABLE|BUYER_REFUNDS|PAYOUT_CLEARING|PETTY_CASH
+  direction String // DEBIT|CREDIT
+  amount    Float
+  currency  String   @default("USD")
+  memo      String
+  refs      String   @default("{}") // JSON {orderId,paymentId,refundId,payoutId}
+  postedBy  String?
+  createdAt DateTime @default(now())
+}
+
+model Payout {
+  id             String    @id @default(cuid())
+  sellerId       String
+  amount         Float
+  method         String    @default("MOCK_BANK")
+  status         String    @default("PENDING") // PENDING|APPROVED|PAID|FAILED|REVERSED
+  batchRef       String?
+  idempotencyKey String    @unique
+  requestedBy    String
+  approvedBy     String?
+  reversalOf     String?
+  processedAt    DateTime?
+  failedReason   String?
+  createdAt      DateTime  @default(now())
+}
+
+model Invoice {
+  id        String   @id @default(cuid())
+  number    String   @unique
+  orderId   String?
+  toUserId  String
+  kind      String   @default("SALE") // SALE|COMMISSION|FEE
+  lines     String   @default("[]") // JSON
+  total     Float
+  vatAmount Float    @default(0)
+  issuedAt  DateTime @default(now())
+}
+
+model TaxLine {
+  id          String  @id @default(cuid())
+  orderId     String
+  kind        String  @default("VAT")
+  rate        Float   @default(15)
+  amount      Float
+  jurisdiction String @default("ZW")
+  remitted    Boolean @default(false)
+}
+
+model ReconciliationRun {
+  id          String   @id @default(cuid())
+  periodStart DateTime
+  periodEnd   DateTime
+  expected    String   @default("{}") // JSON
+  actual      String   @default("{}")
+  variance    String   @default("{}")
+  status      String   @default("BALANCED") // BALANCED|VARIANCE
+  runBy       String?
+  notes       String?
+  ranAt       DateTime @default(now())
+}
+
+model MonthlyClose {
+  period   String   @id // YYYY-MM
+  status   String   @default("OPEN") // OPEN|CLOSED
+  totals   String   @default("{}") // JSON
+  closedBy String?
+  closedAt DateTime?
+}
+
+// ── Privacy (PRV) ────────────────────────────────────────────
+model DataInventory {
+  id          String  @id @default(cuid())
+  asset       String
+  category    String // IDENTITY|CONTACT|FINANCIAL|CONTENT|BEHAVIOURAL|TECHNICAL
+  fields      String  @default("[]") // JSON
+  purpose     String
+  legalBasis  String
+  retention   String
+  owner       String
+  systems     String  @default("[]")
+  residency  String  @default("ZW")
+}
+
+model DsarRequest {
+  id             String    @id @default(cuid())
+  userId         String
+  type           String // ACCESS|CORRECTION|DELETION|PORTABILITY|RESTRICTION|OBJECTION
+  details        String?
+  status         String    @default("SUBMITTED") // SUBMITTED|VERIFYING|IN_PROGRESS|COMPLETED|REJECTED
+  identityVerified Boolean  @default(false)
+  assignedTo     String?
+  dueAt          DateTime
+  completedAt    DateTime?
+  resultRef      String?
+  exportRef      String?
+  createdAt      DateTime  @default(now())
+}
+
+model RetentionRule {
+  id        String    @id @default(cuid())
+  dataType  String
+  keepDays  Int
+  basis     String
+  legalHold Boolean   @default(false)
+  lastRunAt DateTime?
+}
+
+model Processor {
+  id             String   @id @default(cuid())
+  name           String
+  purpose        String
+  dataCategories String   @default("[]") // JSON
+  country        String
+  contractRef    String?
+  dpiaDone       Boolean  @default(false)
+  subprocessors  String   @default("[]") // JSON
+  kind           String   @default("PROCESSOR") // PROCESSOR|SUBPROCESSOR
+}
+
+model PrivacyIncident {
+  id            String    @id @default(cuid())
+  title         String
+  severity      String    @default("LOW") // LOW|MEDIUM|HIGH|CRITICAL
+  description   String
+  status        String    @default("TRIAGE") // TRIAGE|CONTAINED|NOTIFIED|CLOSED
+  detectedAt    DateTime  @default(now())
+  containedAt   DateTime?
+  notifiedAt    DateTime?
+  notifications String    @default("[]") // JSON [{who,when,ref}]
+  owner         String?
+  closedAt      DateTime?
+}
+
+// ── Legal & Governance (LEG / GOV / RSK) ─────────────────────
+model Policy {
+  id              String    @id @default(cuid())
+  key             String    @unique
+  title           String
+  version         Int       @default(1)
+  status          String    @default("PUBLISHED") // DRAFT|PUBLISHED|RETIRED
+  body            String
+  ownerRole       String    @default("COMPLIANCE")
+  effectiveAt     DateTime  @default(now())
+  acceptanceRequired Boolean @default(false)
+  jurisdictions   String    @default("[\"ZW\",\"GLOBAL\"]")
+  updatedAt       DateTime  @updatedAt
+}
+
+model PolicyAcceptance {
+  id         String   @id @default(cuid())
+  policyKey  String
+  userId     String
+  version    Int
+  acceptedAt DateTime @default(now())
+  ip         String?
+}
+
+model LegalRequest {
+  id          String    @id @default(cuid())
+  ref         String    @unique
+  receivedFrom String
+  type        String // SUBPOENA|LAW_ENFORCEMENT|GOV_REQUEST|TAX_AUTHORITY
+  description String
+  status      String    @default("UNDER_REVIEW") // UNDER_REVIEW|SCOPED|FULFILLED|REJECTED|CLOSED
+  reviewer    String?
+  scopeNote   String?
+  minimizationNote String?
+  responseRef String?
+  receivedAt  DateTime  @default(now())
+  dueAt       DateTime?
+  closedAt    DateTime?
+}
+
+model Licence {
+  id          String    @id @default(cuid())
+  name        String
+  authority   String
+  jurisdiction String
+  number      String
+  status      String    @default("ACTIVE") // ACTIVE|PENDING_RENEWAL|EXPIRED
+  issuedAt    DateTime
+  expiresAt   DateTime?
+  evidenceRef String?
+  owner       String?
+}
+
+model RegulatoryReport {
+  id          String    @id @default(cuid())
+  kind        String // TAX|MARKETPLACE|COMPLIANCE|RECALL
+  period      String
+  status      String    @default("DRAFT") // DRAFT|APPROVED|SUBMITTED
+  payload     String    @default("{}") // JSON
+  generatedBy String?
+  approvedBy  String?
+  submittedAt DateTime?
+  evidenceRef String?
+  createdAt   DateTime  @default(now())
+}
+
+model LegalHold {
+  id        String    @id @default(cuid())
+  subject   String
+  scope     String
+  orderedBy String
+  note      String?
+  orderedAt DateTime  @default(now())
+  releasedAt DateTime?
+}
+
+model SanctionsScreening {
+  id          String    @id @default(cuid())
+  subjectType String // USER|SELLER
+  subjectId   String
+  result      String   @default("CLEAR") // CLEAR|HIT|REVIEW
+  source      String   @default("INTERNAL_LIST")
+  note        String?
+  checkedAt   DateTime  @default(now())
+}
+
+model RiskItem {
+  id          String   @id @default(cuid())
+  title       String
+  category    String // SECURITY|PRIVACY|FINANCIAL|OPERATIONAL|LEGAL|MARKETPLACE
+  description String
+  likelihood  Int      @default(2) // 1-5
+  impact      Int      @default(2) // 1-5
+  owner       String?
+  treatment   String   @default("MITIGATE") // MITIGATE|ACCEPT|TRANSFER|AVOID
+  status      String   @default("OPEN") // OPEN|MITIGATED|CLOSED
+  controlsMapped String @default("[]") // JSON MSCS ids
+  reviewAt    DateTime?
+  createdAt   DateTime @default(now())
+}
+
+model RiskException {
+  id             String    @id @default(cuid())
+  exceptionId    String    @unique // RSK-EX-###
+  controls       String    @default("[]") // JSON MSCS ids
+  reason         String
+  riskStatement  String
+  criticality    String    @default("C2") // C0-C4
+  compensating   String    @default("[]") // JSON
+  owner          String
+  approver       String
+  startDate      DateTime  @default(now())
+  expiry         DateTime
+  monitoring     String?
+  status         String    @default("ACTIVE") // ACTIVE|EXPIRED|CLOSED
+  closureEvidence String?
+  createdAt      DateTime  @default(now())
+}
+
+model InternalAudit {
+  id         String    @id @default(cuid())
+  scope      String
+  performedBy String
+  performedAt DateTime @default(now())
+  findings   String    @default("[]") // JSON [{controlId,code,note}]
+  status     String    @default("COMPLETED")
+}
+
+model Partner {
+  id        String   @id @default(cuid())
+  name      String
+  kind      String   @default("LOGISTICS") // LOGISTICS|PAYMENT|MARKETING
+  status    String   @default("ACTIVE")
+  contact   String?
+  contractRef String?
+  onboardedAt DateTime @default(now())
+  notes     String?
+}
+
+// ── MSCS Registry & Certification ────────────────────────────
+model MscsControl {
+  id               String   @id // canonical e.g. MKT-017
+  domain           String
+  domainName       String
+  name             String
+  floor            String // M1..M4
+  criticality       String // C0..C4
+  evidenceFloor    String   @default("[]") // JSON ["E1","E2"]
+  applicability    String   @default("R") // R|C|NA|F
+  applicabilityNote String?
+  status           String   @default("S00") // S00..S90
+  statusNote       String?
+  ownerRole        String?
+  evidenceRefs     String   @default("[]") // JSON EV ids
+  updatedAt        DateTime @updatedAt
+}
+
+model MscsEvidence {
+  id            String   @id @default(cuid()) // EV-###
+  controlId     String?
+  evidenceClass String // E1..E6
+  description   String
+  source        String
+  authority     String?
+  observed      String
+  expected      String
+  capturedBy    String
+  integrityRef  String?
+  capturedAt    DateTime  @default(now())
+  validUntil    DateTime?
+}
+
+model MscsFinding {
+  id         String    @id @default(cuid())
+  controlId  String
+  code       String // F-IMP|F-EVD|F-AUTH|F-ENV|F-POL|F-RSK
+  note       String
+  status     String    @default("OPEN") // OPEN|ACCEPTED|CLOSED|WAIVED
+  owner      String?
+  dueAt      DateTime?
+  resolvedAt DateTime?
+  createdAt  DateTime  @default(now())
+}
+
+model MscsAssessment {
+  id              String    @id @default(cuid())
+  declaration     String    @default("{}") // JSON Template A
+  profile         String    @default("M2")
+  scope           String
+  versionAuthority String
+  environment     String
+  score           Float?
+  gates           String    @default("{}") // JSON {A:bool,B:bool,C:bool,D:bool}
+  status          String    @default("IN_PROGRESS") // IN_PROGRESS|COMPLETE
+  assessmentLead  String
+  startedAt       DateTime  @default(now())
+  completedAt     DateTime?
+}
+
+model MscsCertification {
+  id                 String   @id @default(cuid()) // MSCS-CERT-###
+  assessmentId       String
+  profile            String
+  weightedScore      Float
+  gatesPassed        String    @default("[]") // JSON
+  conditions         String    @default("[]") // JSON
+  riskExceptions     String    @default("[]") // JSON ids
+  disposition        String // PASS|PASS_WITH_CONDITIONS|FAIL
+  issuedAt           DateTime  @default(now())
+  reviewAt            DateTime
+  assessmentLead      String
+  independentVerifier String
+  authority          String
+}
+
+// ── Operations (OPS / INC / BCP / REL) ────────────────────────
+model AppLog {
+  id        String   @id @default(cuid())
+  level     String   @default("info") // info|warn|error
+  source    String
+  message   String
+  context   String   @default("{}") // JSON
+  requestId String?
+  createdAt DateTime @default(now())
+}
+
+model MetricDaily {
+  date          String   @id // YYYY-MM-DD
+  gmv           Float    @default(0)
+  orders        Int      @default(0)
+  users         Int      @default(0)
+  newUsers      Int      @default(0)
+  activeListings Int     @default(0)
+  bids          Int      @default(0)
+  disputes      Int      @default(0)
+  tickets       Int      @default(0)
+  availabilityPct Float  @default(99.9)
+  latencyP95Ms  Int      @default(120)
+  errorRate     Float    @default(0.1)
+}
+
+model Incident {
+  id            String    @id @default(cuid())
+  ref           String    @unique // INC-###
+  severity      String    @default("SEV3") // SEV1..SEV4
+  status        String    @default("OPEN") // OPEN|INVESTIGATING|MITIGATED|RESOLVED|CLOSED
+  commander     String?
+  title         String
+  summary       String?
+  impact        String?
+  startedAt     DateTime  @default(now())
+  detectedAt    DateTime  @default(now())
+  mitigatedAt   DateTime?
+  resolvedAt    DateTime?
+  postmortemRef String?
+  notifications String    @default("[]") // JSON
+  regulatoryNotification Boolean @default(false)
+}
+
+model StatusEvent {
+  id         String    @id @default(cuid())
+  component   String   @default("core") // core|payments|search|comms
+  status      String   @default("OPERATIONAL") // OPERATIONAL|DEGRADED|DOWN|MAINTENANCE
+  message     String?
+  startedAt   DateTime  @default(now())
+  endedAt     DateTime?
+}
+
+model BackupRun {
+  id         String    @id @default(cuid())
+  kind       String    @default("SCHEDULED") // SCHEDULED|MANUAL
+  scope      String    @default("full")
+  sizeBytes  Int?
+  checksum   String?
+  status     String    @default("OK") // OK|FAILED
+  storageRef String?
+  createdAt  DateTime  @default(now())
+  verifiedAt DateTime?
+}
+
+model RestoreTest {
+  id           String   @id @default(cuid())
+  backupRunId  String
+  scope        String
+  checks       String   @default("[]") // JSON [{name,ok}]
+  result       String   @default("PASS") // PASS|FAIL
+  performedBy  String
+  performedAt  DateTime @default(now())
+  notes        String?
+}
+
+model BcpPlan {
+  id             String    @id @default(cuid())
+  scenario       String // RPO_RTO|REGION_FAILURE|CREDENTIAL_COMPROMISE|PROVIDER_OUTAGE|ALTERNATE_COMMS|EMERGENCY_ACCESS
+  rpoMinutes     Int?
+  rtoMinutes     Int?
+  owner          String?
+  steps          String    @default("[]") // JSON
+  lastExerciseAt DateTime?
+  notes          String?
+}
+
+model BreakGlassAccess {
+  id          String    @id @default(cuid())
+  requestedBy  String
+  approvedBy   String?
+  reason       String
+  grantedAt    DateTime?
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  createdAt    DateTime  @default(now())
+}
+
+model ReleaseRecord {
+  id           String   @id @default(cuid())
+  version      String   @unique
+  notes        String
+  artifacts    String   @default("[]") // JSON
+  sbom          String  @default("[]") // JSON deps
+  rolledBack   Boolean  @default(false)
+  approvedBy   String?
+  releasedAt   DateTime @default(now())
+}
+
+// ── Developer platform (API / DEV / INT) ─────────────────────
+model ApiKey {
+  id          String    @id @default(cuid())
+  userId      String
+  name        String
+  prefix      String    @unique // tga_live_xxxx
+  keyHash     String    @unique
+  scopes      String    @default("[\"read\"]") // JSON
+  ratePerMin  Int       @default(60)
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+}
+
+model DeveloperApp {
+  id            String    @id @default(cuid())
+  userId        String
+  name          String
+  clientId      String    @unique
+  clientSecretHash String
+  redirectUris  String    @default("[]")
+  scopes        String    @default("[]")
+  sandbox       Boolean   @default(true)
+  status        String    @default("ACTIVE") // ACTIVE|SUSPENDED
+  createdAt     DateTime  @default(now())
+}
+
+model ApiRequestLog {
+  id        String   @id @default(cuid())
+  apiKeyId  String?
+  route     String
+  method    String
+  status    Int
+  latencyMs Int
+  requestId String?
+  ip        String?
+  createdAt DateTime @default(now())
+}
+
+model WebhookEndpoint {
+  id           String    @id @default(cuid())
+  userId       String
+  url          String
+  secret       String
+  events       String    @default("[]") // JSON ["order.created","bid.placed"]
+  status       String    @default("ACTIVE") // ACTIVE|SUSPENDED|DEAD
+  failureCount Int       @default(0)
+  createdAt    DateTime  @default(now())
+}
+
+model WebhookDelivery {
+  id            String    @id @default(cuid())
+  endpointId    String
+  event         String
+  payload       String    @default("{}")
+  signature     String?
+  status        String    @default("PENDING") // PENDING|DELIVERED|FAILED|DEAD
+  attempts      Int       @default(0)
+  lastAttemptAt DateTime?
+  responseCode  Int?
+  nextRetryAt   DateTime?
+  createdAt     DateTime  @default(now())
+}

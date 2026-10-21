@@ -1,0 +1,75 @@
+nxs:
+  version: 1.0
+
+product:
+  type: marketplace
+  name: Tengasell
+  tagline: "a snap to your happy deal"
+  personality:
+    - calm
+    - immediate
+    - trustworthy
+    - tactile
+  region: Zimbabwe (global-ready)
+  currency: USD
+  platforms:
+    web_spa: true          # This build: responsive web app (single route, hash slugs)
+    ios_native: planned    # NXS native targets documented for the React Native phase
+    android_native: planned
+
+experience:
+  density: comfortable
+  motion: expressive-restrained   # one controlled expressive layer (gold energy)
+  haptics: not-applicable-web     # semantic haptics reserved for native phase
+  voice: enabled                  # Tenga AI assistant (text-first, voice planned)
+  realtime: enabled               # socket.io trade engine (bids, chat, notifications)
+
+navigation:
+  model: adaptive
+  compact: bottom_tabs            # mobile bottom tab bar
+  expanded: header_categories     # desktop header + category rail
+  continuity: scroll-position-restored-on-back
+  slugs: hash-router              # #/item/{id}, #/c/{category}, #/search, ...
+
+internationalization:
+  default: en
+  launch:
+    - en
+    - ja            # NXS language test matrix
+  future:
+    - sn            # Shona
+    - nr            # Ndebele
+  rtl_ready: true   # logical CSS properties (ms/me/ps/pe) throughout
+  pseudolocalization: partial
+
+accessibility:
+  dynamic_text: required          # rem-based scale, layout reflow allowed
+  screen_reader: required         # semantic landmarks, aria labels
+  reduced_motion: required        # framer-motion useReducedMotion + CSS fallback
+  high_contrast: required         # WCAG AA on all text
+  touch_targets: 44px minimum
+
+visual:
+  surface_style: calm             # spacing-first, cards only where containment has meaning
+  depth: subtle
+  expressive_energy_layer: enabled # gold glow on focus/live-bid/energy states only
+  palette:
+    primary_teal: "#19717B"
+    accent_gold: "#DFAE2E"
+    deep_gold: "#AF7A14"
+    light_teal: "#6CBEC2"
+    tag_orange: "#C47D1A"
+
+marketplace_rules:
+  bidding: proxy-autobid          # Yahoo-style: bid your max, system bids the minimum
+  anti_snipe: soft-close          # bid in final 5min extends by 5min (max 15x)
+  buy_now: disappears-after-first-bid
+  reserve_price: optional
+  increments: tiered              # $1/$2/$5/$10/$25 by price band
+  payment_sla_hours: 48
+  shipping_sla_days: 3
+  dispute_window_days: 7
+  payments: [ecocash, visa, mastercard, paypal, zipit-bank, cash-on-delivery]
+
+certification:
+  level: strict

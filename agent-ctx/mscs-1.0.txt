@@ -1,0 +1,10027 @@
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+┃┃┃┃ 11-11 Tech
+Build what matters. Prove what works.
+
+MASTER SOFTWARE
+
+Capability Standard
+MSCS 1.0
+Framework Specification • Capability Registry • Audit • Certification • API • AI/MCP
+PURPOSE
+
+A proprietary 11-11 Tech standard for determining whether a software product is architecturally complete, operationally
+controllable, evidence-backed and ready for its declared maturity profile - before it is called complete, launched, sold or
+certified.
+
+DOCUMENT CONTROL
+
+EDITION
+
+Proprietary Framework Specification
+
+VERSION
+
+MSCS 1.0
+
+ISSUED
+
+20 October 2026
+
+FRAMEWORK CUSTODIAN
+
+11-11 Tech
+
+CLASSIFICATION
+
+11-11 Tech Proprietary • Controlled Client Reference
+
+RELATED STANDARD
+
+UDPCS 1.0 — Universal Digital Platform Capability Standard
+A formal capability, assurance and certification framework from 11-11 Tech.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 1
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+FRAMEWORK AUTHORITY
+
+MSCS 1.0 Intellectual Property & Use Notice
+MSCS is designed as a durable 11-11 Tech methodology with defined terminology, namespaces, conformance rules
+and productization pathways.
+11-11 TECH PROPRIETARY METHODOLOGY
+
+The MSCS control taxonomy, identifiers, maturity model, evidence model, certification logic, defined framework terms,
+templates and machine-readable registry design are presented as an integrated 11-11 Tech methodology. External standards
+referenced in MSCS remain the property of their respective owners.
+
+Controlled use principles
+ MSCS documents may be shared with clients as part of 11-11 Tech engagements or under separately agreed commercial
+terms.
+
+ Internal client use does not automatically grant the right to resell, republish, rebrand or create a competing commercial
+certification product from the framework.
+
+ Capability IDs are stable framework references. Projects may extend MSCS with project-specific controls, but should not
+redefine canonical IDs.
+
+ MSCS certification is an 11-11 Tech framework determination. It does not replace ISO certification, statutory approval,
+professional legal/accounting advice or a regulator decision.
+
+ Trademark, patent or other formal registrations are separate legal processes. The framework should be reviewed by qualified
+counsel before commercial licensing terms are finalized.
+
+Defined 11-11 Tech framework terms
+Term
+
+Defined meaning
+
+MSCS
+
+Master Software Capability Standard - the normative framework.
+
+Capability Mirror
+
+The completeness test requiring material product capabilities to be reflected across company
+control, data, security, operations and governance.
+
+MSCS Registry
+
+The canonical machine-readable collection of controls, profiles, dependencies, evidence rules and
+lifecycle metadata.
+
+MSCS Audit File
+
+The reconstructable evidence package supporting an assessment or certification decision.
+
+MSCS Certification Gate
+
+The score-plus-mandatory-gate decision logic used to determine conformance.
+
+MSCS Control Plane
+
+The future operational product for portfolio readiness, findings, evidence, certification and drift
+monitoring.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 2
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+EXECUTIVE STANDARD
+
+What MSCS changes
+MSCS turns architecture completeness from an opinion into a versioned, addressable and evidence-backed control
+system.
+
+Figure 1 — MSCS is designed as both a standard and a product platform.
+
+UDPCS 1.0 provides the broad capability map used to discover what a digital company may need. MSCS 1.0 is the
+normative companion: it assigns durable IDs, profiles, evidence requirements, audit states, certification gates and
+governance rules so those capabilities can be assessed consistently across projects.
+CORE DOCTRINE
+
+A product capability is not complete merely because its UI or backend exists. It is complete when the required experience,
+control, platform, operations and governance responsibilities are defined, implemented and evidenced for the project’s declared
+maturity.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 3
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+NORMATIVE CORE
+
+Language, scope and non-negotiable principles
+MSCS uses explicit normative language so teams, auditors and automation can reach the same interpretation.
+Word
+
+Meaning
+
+MUST / REQUIRED
+
+Mandatory for conformance when the control applies to the target profile.
+
+MUST NOT
+
+Prohibited condition; violation is a blocker unless the control is legitimately not applicable.
+
+SHOULD
+
+Strong recommendation. Deviation requires documented rationale when material.
+
+MAY
+
+Permitted implementation choice.
+
+N/A
+
+Not applicable only with a documented reason. N/A is not a synonym for “not built yet”.
+
+FUTURE
+
+Explicitly deferred capability outside the current target maturity; cannot be used to defer a control required
+by the declared profile.
+
+Foundational principles
+ Capability identity is stable: canonical IDs are immutable once issued.
+ Applicability is explicit: every control is Required, Conditional, Optional, Not Applicable or Future.
+ Authority is exact: certification attaches to a defined project, version/release, environment and evidence state.
+ Proof is stronger than claim: implementation, tests, runtime and operational evidence are distinct assurance classes.
+ Critical failures override percentages: a 95% score cannot hide an unproven payment, identity, privacy, backup or privilegedadmin control.
+
+ Agent authority is separate from API authority: exposing an API never automatically authorizes an AI agent to use it.
+ Regulatory readiness is mapped, not invented: M4 does not claim external statutory certification.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 4
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+ARCHITECTURE MODEL
+
+The Five-Plane Operating Model
+MSCS audits software as a business operating system, not as a collection of screens and endpoints.
+
+Figure 2 — The five operating planes used by MSCS.
+
+Plane
+
+Audit question
+
+Typical systems
+
+Experience
+
+Who receives value and through which product
+surface?
+
+Customer apps, seller/provider portals, partner surfaces,
+CMS/editorial studio, public website.
+
+Control
+
+How can authorized staff inspect, approve,
+correct, suspend, refund, restore or override?
+
+Admin, support, finance, moderation, compliance and configuration
+consoles.
+
+Platform
+
+What authoritative services expose identity, data
+and controlled interfaces?
+
+Databases, services, API gateway, events, developer platform,
+MCP/agent gateway.
+
+Operations
+
+How is the service built, deployed, observed,
+secured and recovered?
+
+SDLC, cloud, monitoring, on-call, incident, backups, DR and
+release systems.
+
+Governance
+
+How is company authority, law, privacy,
+regulation, risk and assurance handled?
+
+Corporate, legal, finance, compliance, risk, audit and executive
+governance.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 5
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+CONTROL NAMESPACE
+
+Canonical IDs & Capability Records
+MSCS controls must remain addressable through design, implementation, testing, runtime evidence, findings and
+certification.
+
+Figure 3 — Canonical control records make MSCS machine-readable and traceable.
+
+Identifier syntax
+CANONICAL FORM
+
+<DOMAIN>-<NNN> is the baseline identifier, for example MKT-017. Product implementations may use qualified aliases such as
+MKT-TRX-017, but the canonical registry ID remains stable.
+
+Field
+
+Required content
+
+Capability ID
+
+Immutable canonical identifier.
+
+Domain
+
+Canonical prefix and domain owner.
+
+Capability name
+
+Short, stable name.
+
+Definition
+
+What the control means and what it intentionally excludes.
+
+Business objective
+
+Why the control exists.
+
+Applicability
+
+R / C / O / N/A / F plus rationale where needed.
+
+Maturity floor
+
+Default M1-M4 floor; project profile may elevate it.
+
+Criticality
+
+C0-C4 risk class.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 6
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+Field
+
+Required content
+
+Interfaces
+
+Customer, internal, API, MCP, partner or regulator surfaces.
+
+Dependencies
+
+Capabilities or external services required first.
+
+Assurance
+
+Security, privacy, legal, finance and audit requirements.
+
+Evidence
+
+Required evidence classes and accepted artifacts.
+
+Owner
+
+Accountable project/team role.
+
+Lifecycle
+
+Active, deprecated, retired, superseded.
+
+Certification state
+
+Assessment and certification status for the exact project authority.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 7
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+CANONICAL NAMESPACE
+
+37 MSCS Capability Domains
+These prefixes are reserved within MSCS 1.0. Project-specific extensions must not redefine a canonical prefix or capability ID.
+#
+
+Prefix
+
+Domain
+
+Purpose
+
+Base
+controls
+
+01
+
+STR-
+
+Strategy & Business Model
+
+Defines purpose, market, value, economics and governing product outcomes.
+
+9
+
+02
+
+EXP-
+
+Customer Experience & Product
+
+Defines public/customer journeys, self-service and usable product states.
+
+15
+
+03
+
+IAM-
+
+Identity & Access
+
+Controls authentication, sessions, roles, service identities and privileged access.
+
+17
+
+04
+
+ORG-
+
+Organizations & Multi-Tenancy
+
+Controls tenants, teams, memberships, isolation and delegated administration.
+
+12
+
+05
+
+MKT-
+
+Marketplace
+
+Controls seller/provider acquisition, listings, marketplace interaction and trust.
+
+30
+
+06
+
+COM-
+
+Commerce & Transactions
+
+Controls pricing, checkout, payments, refunds, commissions, payouts and transaction state.
+
+24
+
+07
+
+CMS-
+
+Content Management
+
+Controls structured content, editorial workflow, media, publishing and content APIs.
+
+30
+
+08
+
+SRC-
+
+Search & Discovery
+
+Controls search, taxonomy, filters, ranking, recommendations and discoverability.
+
+12
+
+09
+
+MSG-
+
+Communications & Notifications
+
+Controls email, SMS, push, inbox, templates, preferences and delivery.
+
+15
+
+10
+
+CTL-
+
+Administrative Control Plane
+
+Provides internal authority to inspect, approve, correct, suspend, restore and report.
+
+25
+
+11
+
+SUP-
+
+Customer Support / CRM
+
+Provides scoped case management, customer context, escalation and resolution workflows.
+
+15
+
+12
+
+TNS-
+
+Trust, Safety & Moderation
+
+Controls abuse, fraud, reports, enforcement, appeals and platform integrity.
+
+14
+
+13
+
+FIN-
+
+Finance & Accounting
+
+Controls financial truth, liabilities, reconciliation, tax, reporting and close.
+
+20
+
+14
+
+CORP-
+
+Corporate Administration
+
+Controls legal entities, people, assets, procurement, vendors and delegated authority.
+
+15
+
+15
+
+GRW-
+
+Sales, Marketing & Growth
+
+Controls acquisition, CRM, campaigns, attribution, lifecycle and experimentation.
+
+16
+
+16
+
+PRT-
+
+Partners & Vendors
+
+Controls external partner onboarding, contracts, credentials, risk and offboarding.
+
+12
+
+17
+
+DAT-
+
+Data Platform & Governance
+
+Controls data architecture, ownership, quality, lineage, retention, backup and access.
+
+20
+
+18
+
+BI-
+
+Analytics & Business Intelligence
+
+Controls metrics, dashboards, funnels, cohorts, forecasts and canonical definitions.
+
+13
+
+19
+
+API-
+
+API Platform
+
+Controls software-to-software access, scopes, rate limits, versioning and webhooks.
+
+20
+
+20
+
+DEV-
+
+Developer Platform
+
+Controls developer onboarding, applications, credentials, sandboxes, SDKs and support.
+
+20
+
+21
+
+MCP-
+
+AI / MCP / Agent Platform
+
+Controls agent identity, tools, resources, consent, human approval and execution policy.
+
+25
+
+22
+
+INT-
+
+Integrations & Event Architecture
+
+Controls connectors, events, queues, imports/exports, retries and third-party health.
+
+16
+
+23
+
+SEC-
+
+Cybersecurity
+
+Controls threat, authentication, authorization, cryptography, vulnerability and security operations.
+
+25
+
+24
+
+PRV-
+
+Privacy
+
+Controls data rights, consent, legal basis, retention, processors and privacy incidents.
+
+18
+
+25
+
+LEG-
+
+Legal
+
+Controls terms, contracts, policies, legal requests, IP process and records obligations.
+
+15
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 8
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+#
+
+Prefix
+
+Domain
+
+Purpose
+
+Base
+controls
+
+26
+
+GOV-
+
+Government & Regulation
+
+Controls licensing, regulatory reporting, tax/government interfaces and regulated evidence.
+
+14
+
+27
+
+ACC-
+
+Accessibility
+
+Controls accessible interaction, content, authentication and verification.
+
+10
+
+28
+
+I18N-
+
+Localization & Internationalization
+
+Controls locales, languages, currencies, formats, RTL and regional variation.
+
+10
+
+29
+
+INF-
+
+Infrastructure & Cloud
+
+Controls environments, compute, databases, networking, scaling, regions and cost.
+
+17
+
+30
+
+ENG-
+
+Engineering & SDLC
+
+Controls source, review, testing, build, migration, releases, rollback and change.
+
+20
+
+31
+
+OPS-
+
+Operations & Reliability
+
+Controls logs, metrics, traces, monitoring, SLOs, on-call and service health.
+
+18
+
+32
+
+INC-
+
+Incident Management
+
+Controls severity, declaration, command, communication, recovery and postmortem.
+
+12
+
+33
+
+BCP-
+
+Business Continuity & Disaster Recovery
+
+Controls RPO/RTO, backup, restore, provider/region failure and continuity exercises.
+
+13
+
+34
+
+REL-
+
+Release & Distribution
+
+Controls web/mobile distribution, signing, stores, rollout, rollback and version tracking.
+
+12
+
+35
+
+DOC-
+
+Documentation & Knowledge
+
+Controls customer, engineering, operations, security and compliance knowledge.
+
+12
+
+36
+
+EXE-
+
+Executive Governance
+
+Controls executive visibility, strategic decisions, portfolio health and dependencies.
+
+8
+
+37
+
+RSK-
+
+Risk, Audit & Assurance
+
+Controls risk ownership, control mapping, exceptions, audits and corrective action.
+
+10
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 9
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+MATURITY PROFILES
+
+M1 / M2 / M3 / M4
+A project declares a target profile before assessment. Profiles are cumulative but applicability remains contextual.
+
+Figure 4 — The four MSCS maturity profiles.
+
+Profile
+
+Certification intent
+
+Minimum organizational expectation
+
+M1 — MVP Ready
+
+The bounded product can legitimately serve early users.
+
+Core user journey; authoritative identity/data; minimum admin control; essential
+security/privacy/legal controls; monitoring and backup baseline.
+
+M2 — Operationally Ready
+
+The company can repeatedly operate the product safely.
+
+Support; finance/reconciliation; role separation; observability; incident; runbooks;
+restore proof; documented operational ownership.
+
+M3 — Enterprise Ready
+
+The product can support organizational scale and delegated
+operations.
+
+Enterprise tenancy/IAM; SSO/SCIM where applicable; advanced audit; SLOs; data
+governance; developer platform; vendor and continuity governance.
+
+M4 — Regulated Readiness
+
+Mapped regulatory obligations are implemented with formal
+evidence.
+
+Formal control ownership; retention; legal holds; regulator reporting; segregation of
+duties; periodic review; auditable approvals; jurisdiction-specific evidence.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 10
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+Profile
+
+20 October 2026
+
+Certification intent
+
+Minimum organizational expectation
+
+PROFILE RULE
+
+M4 is not “better software” than M3. It is a different assurance posture driven by legal or industry obligations. A project may be M2 with selected M4 controls where its risk
+model requires them.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 11
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+ASSESSMENT STATE
+
+Status, criticality and applicability
+MSCS separates whether something exists from whether it has been objectively proven.
+Status
+
+Code
+
+Meaning
+
+Not Assessed
+
+S00
+
+No determination yet.
+
+Required
+
+S10
+
+Control is in scope but work has not begun.
+
+Designed
+
+S20
+
+Architecture / workflow approved.
+
+Implemented
+
+S30
+
+Source/configuration exists.
+
+Integrated
+
+S40
+
+Works with required dependencies.
+
+Tested
+
+S50
+
+Defined tests pass.
+
+Evidenced
+
+S60
+
+Objective evidence package exists.
+
+Certified
+
+S70
+
+MSCS disposition accepted for the exact authority.
+
+Live
+
+S80
+
+Operating in intended environment.
+
+Monitored
+
+S90
+
+Ongoing service/evidence monitoring exists.
+
+Criticality classes
+Class
+
+Meaning
+
+Typical examples
+
+C0
+
+Informational / convenience
+
+Theme preference, non-material presentation.
+
+C1
+
+Standard
+
+Saved searches, ordinary documentation or analytics views.
+
+C2
+
+Important
+
+Listings, CMS workflow, API compatibility, operational integrations.
+
+C3
+
+Critical
+
+Authentication, payments, privileged admin, privacy, backup/restore, security boundary.
+
+C4
+
+Safety / regulatory critical
+
+Controls where failure can create material safety, statutory or high-impact regulated harm.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 12
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+ASSURANCE
+
+Evidence Classes
+MSCS makes the difference between source, test, runtime, operational, governance and external evidence explicit.
+
+Figure 5 — The MSCS evidence ladder.
+
+Class
+
+Evidence type
+
+Examples
+
+E1
+
+Implementation
+
+Source, migrations, schemas, configuration, infrastructure-as-code.
+
+E2
+
+Verification
+
+Unit/integration/contract/E2E/security/accessibility tests, physical UAT.
+
+E3
+
+Runtime
+
+Deployed HTTP responses, real logs, database state, device behavior, real transactions.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 13
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+Class
+
+Evidence type
+
+Examples
+
+E4
+
+Operational
+
+Runbooks, alerts, reconciliation, restore test, incident exercise, support cases.
+
+E5
+
+Governance
+
+Approval, policy, contract, risk acceptance, periodic access review, compliance evidence.
+
+E6
+
+External
+
+Provider confirmation, independent assurance, app-store decision, regulator or certification-body evidence.
+
+EVIDENCE RULE
+
+The higher the maturity and criticality, the stronger the required evidence. C3/C4 controls ordinarily require runtime proof; M2+ adds operational evidence; M4 adds
+governance evidence and external evidence where the obligation depends on a third party.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 14
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+AUDIT DISCIPLINE
+
+Finding Taxonomy
+A real standard must distinguish a product defect from an evidence defect, an authority problem or an external dependency.
+Code
+
+Finding class
+
+Definition / treatment
+
+F-IMP
+
+Implementation defect
+
+Required behavior or control is absent, incorrect or insecure. Remediate implementation.
+
+F-EVD
+
+Evidence defect
+
+Capability may exist, but required proof is absent, stale, incomplete or non-reproducible. Remediate evidence/harness.
+
+F-AUTH
+
+Authority / custody defect
+
+Assessment cannot prove the exact branch, release, environment, identity or authorized writer. Stop and recustody.
+
+F-ENV
+
+Environment / external gate
+
+Provider, account, policy window, staging condition or external service prevents valid verification. Do not invent success.
+
+F-POL
+
+Owner / policy decision
+
+Implementation choice requires explicit business/governance authority rather than technical inference.
+
+F-RSK
+
+Accepted risk / exception
+
+Known deviation is formally documented, time-bounded, owned and approved at the required authority level.
+
+Formal dispositions
+Disposition
+
+Meaning
+
+PASS
+
+Target profile requirements and mandatory gates are satisfied.
+
+PASS WITH CONDITIONS
+
+No blocking control is unresolved, but time-bounded remediation or monitoring conditions remain.
+
+FAIL
+
+One or more mandatory controls, evidence floors or critical gates fail.
+
+NOT APPLICABLE
+
+Control legitimately does not apply and the rationale is recorded.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 15
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+CERTIFICATION LOGIC
+
+Score + Mandatory Gates
+Management needs a score; engineering and governance need rules that prevent percentages from hiding critical failures.
+
+Figure 6 — Weighted readiness is informative; mandatory gates are decisive.
+
+Profile
+
+Indicative weighted threshold
+
+Mandatory conditions
+
+M1
+
+≥ 85%
+
+All applicable required C3/C4 controls at least Evidenced; no unapproved high-risk exceptions; core product/control plane works.
+
+M2
+
+≥ 90%
+
+M1 plus operational evidence, support, observability, incident and restore/reconciliation gates.
+
+M3
+
+≥ 92%
+
+M2 plus enterprise IAM/tenancy, data governance, SLO/developer/vendor controls where applicable.
+
+M4
+
+≥ 95%
+
+M3 plus mapped regulatory controls, governance evidence, periodic review and any required external evidence.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 16
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+CERTIFICATION
+
+Lifecycle & Authority
+Certification is a controlled decision attached to an exact project state, not a permanent adjective.
+
+Figure 7 — MSCS certification lifecycle.
+
+Certification authority record
+Field
+
+Required value
+
+Project
+
+Named product / service / system.
+
+Target profile
+
+M1 / M2 / M3 / M4 plus any selected higher controls.
+
+Scope
+
+Applications, services, tenants, jurisdictions and exclusions.
+
+Version authority
+
+Release number, source commit/SHA, build or immutable deployment reference.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 17
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+Field
+
+Required value
+
+Environment authority
+
+Staging, production or other exact environment being certified.
+
+Evidence cutoff
+
+Timestamp after which evidence is not part of the decision.
+
+Findings
+
+Open, accepted, closed and waived findings with owners.
+
+Disposition
+
+PASS / PASS WITH CONDITIONS / FAIL / N/A.
+
+Certification validity
+
+Issue date, review date, expiry / recertification triggers.
+
+Approver
+
+Named authorized 11-11 Tech assessor/certification authority and client owner where required.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 18
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+EVIDENCE PACKAGE
+
+The MSCS Audit File
+A certification decision must be reconstructable without relying on memory, screenshots alone or specialist claims.
+
+Figure 8 — Minimum structure of an MSCS audit file.
+
+EXACT-HEAD CUSTODY
+
+When source code is in scope, the audit file should identify the exact source authority (for example repository, branch, commit SHA), changed files, relevant tests, deployed
+environment and evidence produced from that authority. A specialist or implementation agent cannot self-certify its own return.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 19
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+Evidence manifest fields
+Field
+
+Purpose
+
+Evidence ID
+
+Stable reference used by controls and findings.
+
+Control IDs
+
+One or more controls supported by the artifact.
+
+Evidence class
+
+E1-E6.
+
+Source
+
+Repository, system, provider, file, database or human-approved record.
+
+Authority
+
+Version/SHA/deployment/environment/account context.
+
+Observed result
+
+What was actually proven.
+
+Expected result
+
+Pass condition.
+
+Captured at
+
+Timestamp and timezone.
+
+Captured by
+
+Actor / tool / authorized role.
+
+Integrity reference
+
+Hash, immutable URL, provider ID or equivalent where appropriate.
+
+Validity
+
+Expiry / re-test condition for time-sensitive evidence.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 20
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+COMPLETENESS TEST
+
+The MSCS Capability Mirror
+Every material feature is examined across fifteen questions before it is treated as complete.
+Mirror question
+
+Required design answer
+
+01 Customer
+
+Who uses it and what outcome/state transition is expected?
+
+02 Business owner
+
+Who owns policy and the business outcome?
+
+03 Admin control
+
+Who can inspect, approve, correct, suspend, restore or override?
+
+04 Permission
+
+What authority is required and what is explicitly forbidden?
+
+05 Data
+
+What authoritative records are created, changed, retained or deleted?
+
+06 Audit
+
+Which material actions must be traceable and tamper-resistant?
+
+07 Finance
+
+Does revenue, liability, commission, tax, settlement or reconciliation change?
+
+08 Legal / regulatory
+
+Which contract, law, policy or reporting obligation is triggered?
+
+09 Security
+
+How can it be forged, abused, escalated, leaked or taken over?
+
+10 Support
+
+What context and scoped actions are required to resolve user problems?
+
+11 Operations
+
+What failures, retries, alerts, queues and runbooks exist?
+
+12 Analytics
+
+How are success, failure, quality and business impact measured?
+
+13 API
+
+Does software need governed access or parity?
+
+14 AI / MCP
+
+Should an agent act; what consent, scope and human approval are required?
+
+15 Recovery
+
+Can the state be rolled back, restored, reconciled or reconstructed?
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 21
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+PRODUCTIZATION
+
+Machine-Readable Registry
+The canonical source of truth should be data, not a manually maintained PDF table.
+
+Figure 9 — One registry can drive documents, audits, CI/CD, APIs and AI tooling.
+
+Canonical record example
+{
+"id": "MKT-017",
+"domain": "MKT",
+"name": "Order lifecycle",
+"version": "1.0",
+"status": "active",
+"default_maturity": "M1",
+"criticality": "C2",
+"applicability": "required_if_marketplace",
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 22
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+"evidence_floor": [
+"E1",
+"E2",
+"E3"
+],
+"planes": [
+"experience",
+"control",
+"platform",
+"operations",
+"governance"
+],
+"dependencies": [
+"IAM-002",
+"DAT-001",
+"COM-007"
+],
+"owner_role": "Marketplace Product Owner",
+"interfaces": [
+"customer",
+"seller",
+"admin",
+"api"
+],
+"certification_rule": "No orphaned transaction state; state transitions authorized, auditable and recoverable."
+}
+
+Registry lifecycle rules
+ Major version: breaking semantic change to the framework, profile or canonical control meaning.
+ Minor version: additive controls, mappings, evidence rules or domain extensions that remain backward compatible.
+ Patch version: editorial clarification or metadata correction with no change to control intent.
+ Canonical IDs are never reused. Retired controls remain addressable with lifecycle=retired and, where relevant, superseded_by.
+ Generated DOCX/PDF, API responses, dashboards and MCP resources should be projections of the same registry version.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 23
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+PLATFORM PRODUCT
+
+MSCS API & MCP Surface
+MSCS becomes commercially defensible when the same framework can be queried and enforced by tools, developers and agents.
+Surface
+
+Representative operations
+
+Authority model
+
+MSCS API
+
+GET controls/domains/profiles; POST assessments; POST evidence; GET findings; POST
+certification requests.
+
+OAuth/service identity; organization scope; project RBAC;
+immutable audit.
+
+MSCS MCP Resources
+
+Control definitions, domain maps, project status, evidence references, certification policy.
+
+Read scopes; tenant/project isolation; policy filtering.
+
+MSCS MCP Tools
+
+Assess control, create finding, attach evidence, request verification, calculate readiness.
+
+Explicit tool scopes; human approval for certification or risk
+acceptance.
+
+CI/CD Gate
+
+Compare changed services against required controls and evidence; fail release on mandatory
+blockers.
+
+Workload identity; repository/project binding; signed result.
+
+Portfolio Dashboard
+
+Aggregate project maturity, drift, blockers and certification expiry.
+
+Enterprise RBAC, delegated administration and audit.
+
+AGENT BOUNDARY
+
+An AI agent may help collect evidence, map controls and prepare findings, but final certification, legal applicability, risk acceptance and privileged changes require the
+authority defined by the organization. API access does not automatically confer agent authority.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 24
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+FRAMEWORK GOVERNANCE
+
+How MSCS itself is controlled
+A standard is only credible if changes to the standard are versioned, reviewed and traceable.
+Role
+
+Responsibility
+
+Framework Custodian — 11-11 Tech
+
+Owns canonical MSCS specification, namespaces, releases and commercial policy.
+
+Domain Steward
+
+Maintains one or more capability domains, control definitions, mappings and evidence guidance.
+
+Assessment Lead
+
+Scopes a project, validates applicability and coordinates evidence.
+
+Independent Verifier
+
+Re-checks material claims and critical controls; does not self-accept implementation returns.
+
+Certification Authority
+
+Issues final MSCS disposition under defined authority.
+
+Client Control Owner
+
+Owns implementation, operational evidence and accepted exceptions in the client organization.
+
+Legal / Regulatory Advisor
+
+Confirms jurisdiction-specific obligations where professional interpretation is required.
+
+Change proposal process
+Stage
+
+Required artifact
+
+1. Proposal
+
+Control/domain change request with rationale and impact.
+
+2. Classification
+
+Major/minor/patch plus affected profiles, mappings and clients.
+
+3. Review
+
+Domain and framework review; legal/security review where relevant.
+
+4. Decision
+
+Accept, amend, reject or defer with authority recorded.
+
+5. Release
+
+Registry update, change log, generated documents and migration guidance.
+
+6. Transition
+
+Deprecation window, project impact analysis and certification migration rules.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 25
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+COMMERCIAL MODEL
+
+How MSCS can be sold without becoming “just a PDF”
+The commercial asset is the methodology + registry + audit process + tooling + certification relationship.
+Offer
+
+What the client receives
+
+MSCS Discovery
+
+Capability and plane map; project declaration; applicable domain profile; major architecture gaps.
+
+MSCS Architecture Gap Assessment
+
+Control-level assessment with findings, criticality, dependencies and remediation plan.
+
+MSCS Launch Readiness
+
+M1/M2 readiness audit with evidence file and formal disposition.
+
+MSCS Enterprise Readiness
+
+M3 profile assessment including enterprise IAM, governance, SLO, developer/data/vendor controls.
+
+MSCS Regulated Readiness
+
+M4 mapping and evidence programme scoped to applicable legal/industry obligations; does not replace statutory certification.
+
+MSCS AI / MCP Readiness
+
+Agent identity, authorization, tool/resource governance, human approval, data-loss and audit assessment.
+
+MSCS Continuous Assurance
+
+Control-plane monitoring, evidence expiry, project drift, exceptions and recertification.
+
+MSCS Platform License
+
+Registry/API/tooling access under agreed project, enterprise or partner commercial terms.
+
+Recommended licensing boundaries
+ Client Reference: read/use internally for the named engagement or project.
+ Project License: apply the registry and templates to one defined software product/project.
+ Enterprise License: apply the framework across an organization’s portfolio with defined seats/automation rights.
+ Partner / Assessor License: trained third parties may perform defined MSCS services under quality and branding controls.
+ Platform / API License: programmatic use of registry, scoring, control-plane or MCP services under metered or enterprise terms.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 26
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+ADOPTION
+
+MSCS Project Operating Sequence
+Use the framework at project inception, not as a compliance exercise after the product is already built.
+Wave
+
+Primary activity
+
+Outputs
+
+W0 — Declare
+
+Define business model, markets, users, data, money flows, target maturity and known
+regulatory drivers.
+
+Project Declaration; target profile; initial applicability map.
+
+W1 — Architect
+
+Map required capabilities across five planes and assign owners/dependencies.
+
+Architecture map; control scope; N/A rationale; implementation
+plan.
+
+W2 — Build + mirror
+
+Implement product capability together with its admin, data, security, operations and
+governance counterpart.
+
+Source/config; control-plane functions; tests.
+
+W3 — Evidence
+
+Collect verification, runtime and operational proof as controls become ready.
+
+Evidence Manifest; dashboards; runbooks; test outputs.
+
+W4 — Assess
+
+Classify findings, remediate blockers, verify exact authority.
+
+Findings register; remediation; risk exceptions.
+
+W5 — Certify
+
+Apply score + gates and issue exact-scope disposition.
+
+Certification record; expiry/renewal conditions.
+
+W6 — Monitor
+
+Detect drift, changed dependencies and evidence expiry.
+
+Continuous assurance dashboard; recertification triggers.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 27
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+WORKED EXAMPLE 01
+
+Marketplace Seller Payout
+A payout cannot be certified from a “Send payout” button alone.
+Plane / concern
+
+MSCS requirement
+
+Experience
+
+Seller sees balance, destination, expected payout state and failure status.
+
+Control
+
+Authorized finance/operator can inspect, hold or resolve permitted payout states under scoped authority.
+
+Platform
+
+Ledger, transaction lineage and payment-provider references are authoritative and reconcilable.
+
+Operations
+
+Failures, retries, stuck states and provider incidents are observable with runbooks.
+
+Governance
+
+Identity/tax/legal requirements are enforced where applicable; material changes are auditable.
+
+Recovery
+
+Reversal/adjustment behavior is defined; duplicate payouts are prevented through idempotency/ledger controls.
+
+Evidence
+
+Implementation + automated verification + runtime provider/ledger evidence + reconciliation evidence.
+
+LIKELY CONTROL CLUSTER
+
+COM-017 Payout • FIN-009 Reconciliation • IAM-010 Privileged access • CTL-011 Refund/financial authority • DAT-020 Data access audit • OPS-009 Alerts • TNS risk
+controls where applicable.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 28
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+WORKED EXAMPLE 02
+
+CMS Publishing
+Publishing requires authority, workflow, evidence and recovery - not only a published flag.
+Concern
+
+MSCS interpretation
+
+Authoring
+
+Draft, preview and validation states are separated from public delivery.
+
+Editorial authority
+
+Roles distinguish author, reviewer, approver and publisher where the business requires separation.
+
+Audit
+
+Content version, actor, approval and publish event are traceable.
+
+Distribution
+
+Delivery APIs/caches/search are updated consistently; partial publish failure is detectable.
+
+Correction
+
+Version history and rollback/correction behavior are defined.
+
+Legal / rights
+
+Rights, licensing, embargo, corrections or legal review are enforced where applicable.
+
+Evidence
+
+Workflow tests + runtime publish proof + audit event + rollback/correction proof for critical content systems.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 29
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+WORKED EXAMPLE 03
+
+AI / MCP Tool Access
+The presence of an API endpoint is not permission for an agent to invoke it.
+Control question
+
+Required answer
+
+Agent identity
+
+Which agent/client/workload is acting?
+
+User authority
+
+Whose authority is being exercised, and is it current?
+
+Tool scope
+
+What exact action is allowed?
+
+Resource scope
+
+Which records/tenants/resources are visible?
+
+Consent
+
+What does the user understand and approve?
+
+Human approval
+
+Which actions require a confirmation step or privileged reviewer?
+
+Secrets
+
+Can the agent access or expose credentials?
+
+Audit
+
+Can the organization reconstruct the invocation, actor, arguments, result and policy decision?
+
+Recovery
+
+Can the action be reversed or compensated?
+
+Revocation
+
+Can the tool/server/user grant be disabled immediately?
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 30
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+CANONICAL REGISTRY
+
+MSCS 1.0 Base Control Library
+The following registry is the canonical baseline control namespace for MSCS 1.0. Default maturity and criticality are starting floors; project risk or law may
+elevate them.
+The MSCS 1.0 base registry contains 609 canonical controls across 37 domains. Control names are intentionally concise; formal machine-readable records should
+carry definitions, dependencies, applicability rules and evidence requirements.
+REGISTRY RULE
+
+A project may add local controls using a separate project namespace, but must not renumber or redefine canonical MSCS IDs. If a control is retired, its ID remains reserved
+forever.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 31
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+STR DOMAIN
+
+Strategy & Business Model
+Defines purpose, market, value, economics and governing product outcomes.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+STR-001
+
+Product mission defined
+
+M1
+
+C2
+
+E1+E2
+
+STR-002
+
+Target user definition
+
+M1
+
+C2
+
+E1+E2
+
+STR-003
+
+Business model
+
+M1
+
+C2
+
+E1+E2
+
+STR-004
+
+Revenue model
+
+M2
+
+C2
+
+E1+E2+E4
+
+STR-005
+
+Market positioning
+
+M2
+
+C2
+
+E1+E2+E4
+
+STR-006
+
+Product roadmap
+
+M2
+
+C2
+
+E1+E2+E4
+
+STR-007
+
+KPI framework
+
+M2
+
+C2
+
+E1+E2+E4
+
+STR-008
+
+Portfolio governance
+
+M3
+
+C2
+
+E1+E2+E4
+
+STR-009
+
+Regulatory market-entry assessment
+
+M4
+
+C2
+
+E1+E2+E4+E5
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 32
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+EXP DOMAIN
+
+Customer Experience & Product
+Defines public/customer journeys, self-service and usable product states.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+EXP-001
+
+Registration
+
+M1
+
+C2
+
+E1+E2
+
+EXP-002
+
+Login
+
+M1
+
+C2
+
+E1+E2
+
+EXP-003
+
+Account recovery
+
+M1
+
+C2
+
+E1+E2
+
+EXP-004
+
+User profile
+
+M1
+
+C2
+
+E1+E2
+
+EXP-005
+
+User preferences
+
+M1
+
+C2
+
+E1+E2
+
+EXP-006
+
+Navigation
+
+M1
+
+C2
+
+E1+E2
+
+EXP-007
+
+Responsive UI
+
+M1
+
+C2
+
+E1+E2
+
+EXP-008
+
+Mobile experience
+
+M2
+
+C2
+
+E1+E2+E4
+
+EXP-009
+
+User onboarding
+
+M2
+
+C2
+
+E1+E2+E4
+
+EXP-010
+
+Self-service account management
+
+M2
+
+C2
+
+E1+E2+E4
+
+EXP-011
+
+Error handling
+
+M2
+
+C2
+
+E1+E2+E4
+
+EXP-012
+
+Offline / degraded-state UX
+
+M2
+
+C2
+
+E1+E2+E4
+
+EXP-013
+
+Account termination
+
+M2
+
+C2
+
+E1+E2+E4
+
+EXP-014
+
+Help access
+
+M2
+
+C2
+
+E1+E2+E4
+
+EXP-015
+
+User feedback
+
+M2
+
+C2
+
+E1+E2+E4
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 33
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+IAM DOMAIN
+
+Identity & Access
+Controls authentication, sessions, roles, service identities and privileged access.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+IAM-001
+
+User identity
+
+M1
+
+C3
+
+E1+E2+E3
+
+IAM-002
+
+Authentication
+
+M1
+
+C3
+
+E1+E2+E3
+
+IAM-003
+
+Password security
+
+M1
+
+C3
+
+E1+E2+E3
+
+IAM-004
+
+MFA
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+IAM-005
+
+Passkeys
+
+M3
+
+C3
+
+E1+E2+E3+E4
+
+IAM-006
+
+Session management
+
+M1
+
+C3
+
+E1+E2+E3
+
+IAM-007
+
+Account recovery authority
+
+M1
+
+C3
+
+E1+E2+E3
+
+IAM-008
+
+RBAC
+
+M1
+
+C3
+
+E1+E2+E3
+
+IAM-009
+
+ABAC
+
+M3
+
+C3
+
+E1+E2+E3+E4
+
+IAM-010
+
+Privileged access
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+IAM-011
+
+Service identities
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+IAM-012
+
+OAuth
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+IAM-013
+
+SSO
+
+M3
+
+C3
+
+E1+E2+E3+E4
+
+IAM-014
+
+SCIM
+
+M3
+
+C3
+
+E1+E2+E3+E4
+
+IAM-015
+
+Access reviews
+
+M3
+
+C3
+
+E1+E2+E3+E4
+
+IAM-016
+
+Credential revocation
+
+M1
+
+C3
+
+E1+E2+E3
+
+IAM-017
+
+Device / session inventory
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 34
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+ORG DOMAIN
+
+Organizations & Multi-Tenancy
+Controls tenants, teams, memberships, isolation and delegated administration.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+ORG-001
+
+Organization entity
+
+M2
+
+C2
+
+E1+E2+E4
+
+ORG-002
+
+Membership
+
+M2
+
+C2
+
+E1+E2+E4
+
+ORG-003
+
+Invitations
+
+M2
+
+C2
+
+E1+E2+E4
+
+ORG-004
+
+Teams
+
+M3
+
+C2
+
+E1+E2+E4
+
+ORG-005
+
+Departments
+
+M3
+
+C2
+
+E1+E2+E4
+
+ORG-006
+
+Tenant boundaries
+
+M3
+
+C2
+
+E1+E2+E4
+
+ORG-007
+
+Tenant configuration
+
+M3
+
+C2
+
+E1+E2+E4
+
+ORG-008
+
+Delegated administration
+
+M3
+
+C2
+
+E1+E2+E4
+
+ORG-009
+
+Tenant billing
+
+M3
+
+C2
+
+E1+E2+E4
+
+ORG-010
+
+Tenant analytics
+
+M3
+
+C2
+
+E1+E2+E4
+
+ORG-011
+
+Tenant data export
+
+M3
+
+C2
+
+E1+E2+E4
+
+ORG-012
+
+Tenant deletion
+
+M3
+
+C2
+
+E1+E2+E4
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 35
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+MKT DOMAIN
+
+Marketplace
+Controls seller/provider acquisition, listings, marketplace interaction and trust.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+MKT-001
+
+Seller registration
+
+M1
+
+C2
+
+E1+E2
+
+MKT-002
+
+Seller identity
+
+M1
+
+C2
+
+E1+E2
+
+MKT-003
+
+Seller business verification
+
+M1
+
+C2
+
+E1+E2
+
+MKT-004
+
+Seller approval
+
+M1
+
+C2
+
+E1+E2
+
+MKT-005
+
+Seller suspension
+
+M1
+
+C2
+
+E1+E2
+
+MKT-006
+
+Seller profile
+
+M1
+
+C2
+
+E1+E2
+
+MKT-007
+
+Listing creation
+
+M1
+
+C2
+
+E1+E2
+
+MKT-008
+
+Listing moderation
+
+M1
+
+C2
+
+E1+E2
+
+MKT-009
+
+Listing versioning
+
+M1
+
+C2
+
+E1+E2
+
+MKT-010
+
+Catalog classification
+
+M1
+
+C2
+
+E1+E2
+
+MKT-011
+
+Inventory
+
+M1
+
+C2
+
+E1+E2
+
+MKT-012
+
+Availability
+
+M1
+
+C2
+
+E1+E2
+
+MKT-013
+
+Buyer discovery
+
+M1
+
+C2
+
+E1+E2
+
+MKT-014
+
+Marketplace search
+
+M1
+
+C2
+
+E1+E2
+
+MKT-015
+
+Buyer-seller communication
+
+M1
+
+C2
+
+E1+E2
+
+MKT-016
+
+Transaction initiation
+
+M2
+
+C2
+
+E1+E2+E4
+
+MKT-017
+
+Order lifecycle
+
+M2
+
+C2
+
+E1+E2+E4
+
+MKT-018
+
+Seller fulfilment
+
+M2
+
+C2
+
+E1+E2+E4
+
+MKT-019
+
+Buyer confirmation
+
+M2
+
+C2
+
+E1+E2+E4
+
+MKT-020
+
+Reviews
+
+M2
+
+C2
+
+E1+E2+E4
+
+MKT-021
+
+Ratings
+
+M2
+
+C2
+
+E1+E2+E4
+
+MKT-022
+
+Complaints
+
+M2
+
+C2
+
+E1+E2+E4
+
+MKT-023
+
+Returns
+
+M2
+
+C2
+
+E1+E2+E4
+
+MKT-024
+
+Disputes
+
+M2
+
+C2
+
+E1+E2+E4
+
+MKT-025
+
+Seller analytics
+
+M2
+
+C2
+
+E1+E2+E4
+
+MKT-026
+
+Seller account health
+
+M2
+
+C2
+
+E1+E2+E4
+
+MKT-027
+
+Marketplace policy
+
+M2
+
+C2
+
+E1+E2+E4
+
+MKT-028
+
+Seller appeals
+
+M2
+
+C2
+
+E1+E2+E4
+
+MKT-029
+
+Prohibited goods / services controls
+
+M2
+
+C2
+
+E1+E2+E4
+
+MKT-030
+
+Marketplace fraud controls
+
+M2
+
+C2
+
+E1+E2+E4
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 36
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+COM DOMAIN
+
+Commerce & Transactions
+Controls pricing, checkout, payments, refunds, commissions, payouts and transaction state.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+COM-001
+
+Pricing
+
+M1
+
+C2
+
+E1+E2
+
+COM-002
+
+Taxes
+
+M1
+
+C3
+
+E1+E2+E3
+
+COM-003
+
+Discounts
+
+M1
+
+C2
+
+E1+E2
+
+COM-004
+
+Coupons
+
+M1
+
+C2
+
+E1+E2
+
+COM-005
+
+Cart
+
+M1
+
+C2
+
+E1+E2
+
+COM-006
+
+Checkout
+
+M1
+
+C2
+
+E1+E2
+
+COM-007
+
+Payment authorization
+
+M1
+
+C3
+
+E1+E2+E3
+
+COM-008
+
+Payment capture
+
+M1
+
+C3
+
+E1+E2+E3
+
+COM-009
+
+Payment failure
+
+M1
+
+C3
+
+E1+E2+E3
+
+COM-010
+
+Refund
+
+M1
+
+C3
+
+E1+E2+E3
+
+COM-011
+
+Partial refund
+
+M1
+
+C3
+
+E1+E2+E3
+
+COM-012
+
+Cancellation
+
+M1
+
+C2
+
+E1+E2
+
+COM-013
+
+Platform fee
+
+M2
+
+C2
+
+E1+E2+E4
+
+COM-014
+
+Seller commission
+
+M2
+
+C2
+
+E1+E2+E4
+
+COM-015
+
+Split settlement
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+COM-016
+
+Wallet / balance
+
+M2
+
+C2
+
+E1+E2+E4
+
+COM-017
+
+Payout
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+COM-018
+
+Payout reversal
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+COM-019
+
+Invoice
+
+M2
+
+C2
+
+E1+E2+E4
+
+COM-020
+
+Receipt
+
+M2
+
+C2
+
+E1+E2+E4
+
+COM-021
+
+Subscription
+
+M2
+
+C2
+
+E1+E2+E4
+
+COM-022
+
+Renewal
+
+M2
+
+C2
+
+E1+E2+E4
+
+COM-023
+
+Chargeback
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+COM-024
+
+Reconciliation
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 37
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+CMS DOMAIN
+
+Content Management
+Controls structured content, editorial workflow, media, publishing and content APIs.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+CMS-001
+
+Content models
+
+M1
+
+C2
+
+E1+E2
+
+CMS-002
+
+Content types
+
+M1
+
+C2
+
+E1+E2
+
+CMS-003
+
+Fields
+
+M1
+
+C2
+
+E1+E2
+
+CMS-004
+
+Taxonomy
+
+M1
+
+C2
+
+E1+E2
+
+CMS-005
+
+Authoring
+
+M1
+
+C2
+
+E1+E2
+
+CMS-006
+
+Rich content
+
+M1
+
+C2
+
+E1+E2
+
+CMS-007
+
+Media
+
+M1
+
+C2
+
+E1+E2
+
+CMS-008
+
+Drafts
+
+M1
+
+C2
+
+E1+E2
+
+CMS-009
+
+Autosave
+
+M1
+
+C2
+
+E1+E2
+
+CMS-010
+
+Preview
+
+M1
+
+C2
+
+E1+E2
+
+CMS-011
+
+Editorial workflow
+
+M1
+
+C2
+
+E1+E2
+
+CMS-012
+
+Review
+
+M1
+
+C2
+
+E1+E2
+
+CMS-013
+
+Approval
+
+M1
+
+C2
+
+E1+E2
+
+CMS-014
+
+Publishing
+
+M1
+
+C2
+
+E1+E2
+
+CMS-015
+
+Scheduling
+
+M1
+
+C2
+
+E1+E2
+
+CMS-016
+
+Embargo
+
+M2
+
+C2
+
+E1+E2+E4
+
+CMS-017
+
+Unpublishing
+
+M2
+
+C2
+
+E1+E2+E4
+
+CMS-018
+
+Version history
+
+M2
+
+C2
+
+E1+E2+E4
+
+CMS-019
+
+Rollback
+
+M2
+
+C2
+
+E1+E2+E4
+
+CMS-020
+
+Corrections
+
+M2
+
+C2
+
+E1+E2+E4
+
+CMS-021
+
+Localization
+
+M2
+
+C2
+
+E1+E2+E4
+
+CMS-022
+
+Syndication
+
+M2
+
+C2
+
+E1+E2+E4
+
+CMS-023
+
+Rights management
+
+M2
+
+C2
+
+E1+E2+E4
+
+CMS-024
+
+Asset licensing
+
+M2
+
+C2
+
+E1+E2+E4
+
+CMS-025
+
+Author management
+
+M2
+
+C2
+
+E1+E2+E4
+
+CMS-026
+
+Content audit log
+
+M2
+
+C2
+
+E1+E2+E4
+
+CMS-027
+
+Management API
+
+M2
+
+C2
+
+E1+E2+E4
+
+CMS-028
+
+Delivery API
+
+M2
+
+C2
+
+E1+E2+E4
+
+CMS-029
+
+Preview API
+
+M2
+
+C2
+
+E1+E2+E4
+
+CMS-030
+
+Webhooks
+
+M2
+
+C2
+
+E1+E2+E4
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 38
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+SRC DOMAIN
+
+Search & Discovery
+Controls search, taxonomy, filters, ranking, recommendations and discoverability.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+SRC-001
+
+Search index
+
+M1
+
+C2
+
+E1+E2
+
+SRC-002
+
+Search query
+
+M1
+
+C2
+
+E1+E2
+
+SRC-003
+
+Filters
+
+M1
+
+C2
+
+E1+E2
+
+SRC-004
+
+Sorting
+
+M1
+
+C2
+
+E1+E2
+
+SRC-005
+
+Taxonomy / facets
+
+M1
+
+C2
+
+E1+E2
+
+SRC-006
+
+Autocomplete
+
+M2
+
+C2
+
+E1+E2+E4
+
+SRC-007
+
+Relevance ranking
+
+M2
+
+C2
+
+E1+E2+E4
+
+SRC-008
+
+Recommendations
+
+M2
+
+C2
+
+E1+E2+E4
+
+SRC-009
+
+Saved searches
+
+M2
+
+C2
+
+E1+E2+E4
+
+SRC-010
+
+Recent searches
+
+M2
+
+C2
+
+E1+E2+E4
+
+SRC-011
+
+Zero-result handling
+
+M2
+
+C2
+
+E1+E2+E4
+
+SRC-012
+
+Search quality analytics
+
+M2
+
+C2
+
+E1+E2+E4
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 39
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+MSG DOMAIN
+
+Communications & Notifications
+Controls email, SMS, push, inbox, templates, preferences and delivery.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+MSG-001
+
+Transactional email
+
+M1
+
+C2
+
+E1+E2
+
+MSG-002
+
+SMS
+
+M1
+
+C2
+
+E1+E2
+
+MSG-003
+
+Push notifications
+
+M1
+
+C2
+
+E1+E2
+
+MSG-004
+
+In-app notifications
+
+M1
+
+C2
+
+E1+E2
+
+MSG-005
+
+Inbox / message centre
+
+M1
+
+C2
+
+E1+E2
+
+MSG-006
+
+Notification preferences
+
+M2
+
+C2
+
+E1+E2+E4
+
+MSG-007
+
+Template management
+
+M2
+
+C2
+
+E1+E2+E4
+
+MSG-008
+
+Localization
+
+M2
+
+C2
+
+E1+E2+E4
+
+MSG-009
+
+Delivery status
+
+M2
+
+C2
+
+E1+E2+E4
+
+MSG-010
+
+Retry / failure handling
+
+M2
+
+C2
+
+E1+E2+E4
+
+MSG-011
+
+Unsubscribe / suppression
+
+M2
+
+C2
+
+E1+E2+E4
+
+MSG-012
+
+Communication audit
+
+M2
+
+C2
+
+E1+E2+E4
+
+MSG-013
+
+Campaign segmentation
+
+M2
+
+C2
+
+E1+E2+E4
+
+MSG-014
+
+Provider health
+
+M2
+
+C2
+
+E1+E2+E4
+
+MSG-015
+
+Emergency notifications
+
+M2
+
+C2
+
+E1+E2+E4
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 40
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+CTL DOMAIN
+
+Administrative Control Plane
+Provides internal authority to inspect, approve, correct, suspend, restore and report.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+CTL-001
+
+Admin authentication
+
+M1
+
+C3
+
+E1+E2+E3
+
+CTL-002
+
+Admin RBAC
+
+M1
+
+C3
+
+E1+E2+E3
+
+CTL-003
+
+User lookup
+
+M1
+
+C2
+
+E1+E2
+
+CTL-004
+
+User account inspection
+
+M1
+
+C2
+
+E1+E2
+
+CTL-005
+
+User suspension
+
+M1
+
+C3
+
+E1+E2+E3
+
+CTL-006
+
+User restoration
+
+M1
+
+C3
+
+E1+E2+E3
+
+CTL-007
+
+Role administration
+
+M1
+
+C2
+
+E1+E2
+
+CTL-008
+
+Seller administration
+
+M1
+
+C2
+
+E1+E2
+
+CTL-009
+
+Marketplace administration
+
+M1
+
+C2
+
+E1+E2
+
+CTL-010
+
+Transaction inspection
+
+M1
+
+C2
+
+E1+E2
+
+CTL-011
+
+Refund authority
+
+M1
+
+C3
+
+E1+E2+E3
+
+CTL-012
+
+Dispute administration
+
+M1
+
+C2
+
+E1+E2
+
+CTL-013
+
+CMS administration
+
+M2
+
+C2
+
+E1+E2+E4
+
+CTL-014
+
+Configuration management
+
+M2
+
+C2
+
+E1+E2+E4
+
+CTL-015
+
+Feature flags
+
+M2
+
+C2
+
+E1+E2+E4
+
+CTL-016
+
+Business rules
+
+M2
+
+C2
+
+E1+E2+E4
+
+CTL-017
+
+Moderation queue
+
+M2
+
+C2
+
+E1+E2+E4
+
+CTL-018
+
+Audit log
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+CTL-019
+
+Administrative reason codes
+
+M2
+
+C2
+
+E1+E2+E4
+
+CTL-020
+
+Sensitive-action confirmation
+
+M2
+
+C2
+
+E1+E2+E4
+
+CTL-021
+
+Dual approval
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+CTL-022
+
+Emergency controls
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+CTL-023
+
+System health view
+
+M2
+
+C2
+
+E1+E2+E4
+
+CTL-024
+
+Admin activity monitoring
+
+M2
+
+C2
+
+E1+E2+E4
+
+CTL-025
+
+Export / reporting
+
+M2
+
+C2
+
+E1+E2+E4
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 41
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+SUP DOMAIN
+
+Customer Support / CRM
+Provides scoped case management, customer context, escalation and resolution workflows.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+SUP-001
+
+Customer record
+
+M2
+
+C2
+
+E1+E2+E4
+
+SUP-002
+
+Contact history
+
+M2
+
+C2
+
+E1+E2+E4
+
+SUP-003
+
+Ticketing
+
+M2
+
+C2
+
+E1+E2+E4
+
+SUP-004
+
+Assignment
+
+M2
+
+C2
+
+E1+E2+E4
+
+SUP-005
+
+Escalation
+
+M2
+
+C2
+
+E1+E2+E4
+
+SUP-006
+
+SLA
+
+M2
+
+C2
+
+E1+E2+E4
+
+SUP-007
+
+Internal notes
+
+M2
+
+C2
+
+E1+E2+E4
+
+SUP-008
+
+Templates
+
+M2
+
+C2
+
+E1+E2+E4
+
+SUP-009
+
+Attachments
+
+M2
+
+C2
+
+E1+E2+E4
+
+SUP-010
+
+Identity verification
+
+M2
+
+C2
+
+E1+E2+E4
+
+SUP-011
+
+Refund support
+
+M2
+
+C2
+
+E1+E2+E4
+
+SUP-012
+
+Knowledge base
+
+M2
+
+C2
+
+E1+E2+E4
+
+SUP-013
+
+Complaint handling
+
+M2
+
+C2
+
+E1+E2+E4
+
+SUP-014
+
+Customer satisfaction
+
+M2
+
+C2
+
+E1+E2+E4
+
+SUP-015
+
+Channel integration
+
+M2
+
+C2
+
+E1+E2+E4
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 42
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+TNS DOMAIN
+
+Trust, Safety & Moderation
+Controls abuse, fraud, reports, enforcement, appeals and platform integrity.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+TNS-001
+
+Abuse reports
+
+M2
+
+C2
+
+E1+E2+E4
+
+TNS-002
+
+Fraud reports
+
+M2
+
+C2
+
+E1+E2+E4
+
+TNS-003
+
+Illegal-content reports
+
+M2
+
+C2
+
+E1+E2+E4
+
+TNS-004
+
+Scam detection
+
+M2
+
+C2
+
+E1+E2+E4
+
+TNS-005
+
+Risk scoring
+
+M2
+
+C2
+
+E1+E2+E4
+
+TNS-006
+
+Moderation queue
+
+M2
+
+C2
+
+E1+E2+E4
+
+TNS-007
+
+Evidence retention
+
+M2
+
+C2
+
+E1+E2+E4
+
+TNS-008
+
+Warning
+
+M2
+
+C2
+
+E1+E2+E4
+
+TNS-009
+
+Restriction
+
+M2
+
+C2
+
+E1+E2+E4
+
+TNS-010
+
+Suspension
+
+M2
+
+C2
+
+E1+E2+E4
+
+TNS-011
+
+Ban
+
+M2
+
+C2
+
+E1+E2+E4
+
+TNS-012
+
+Appeal
+
+M2
+
+C2
+
+E1+E2+E4
+
+TNS-013
+
+Reinstatement
+
+M2
+
+C2
+
+E1+E2+E4
+
+TNS-014
+
+Policy enforcement audit
+
+M2
+
+C2
+
+E1+E2+E4
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 43
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+FIN DOMAIN
+
+Finance & Accounting
+Controls financial truth, liabilities, reconciliation, tax, reporting and close.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+FIN-001
+
+Chart of accounts integration
+
+M2
+
+C2
+
+E1+E2+E4
+
+FIN-002
+
+Accounts receivable
+
+M2
+
+C2
+
+E1+E2+E4
+
+FIN-003
+
+Accounts payable
+
+M2
+
+C2
+
+E1+E2+E4
+
+FIN-004
+
+Invoice
+
+M2
+
+C2
+
+E1+E2+E4
+
+FIN-005
+
+Credit note
+
+M2
+
+C2
+
+E1+E2+E4
+
+FIN-006
+
+Platform revenue
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+FIN-007
+
+Seller liability
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+FIN-008
+
+Settlement
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+FIN-009
+
+Reconciliation
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+FIN-010
+
+Bank reconciliation
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+FIN-011
+
+Refund accounting
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+FIN-012
+
+Tax accounting
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+FIN-013
+
+Revenue recognition
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+FIN-014
+
+Currency handling
+
+M2
+
+C2
+
+E1+E2+E4
+
+FIN-015
+
+Expense management
+
+M2
+
+C2
+
+E1+E2+E4
+
+FIN-016
+
+Cost centres
+
+M2
+
+C2
+
+E1+E2+E4
+
+FIN-017
+
+Forecast
+
+M2
+
+C2
+
+E1+E2+E4
+
+FIN-018
+
+Monthly close
+
+M2
+
+C2
+
+E1+E2+E4
+
+FIN-019
+
+Financial reporting
+
+M2
+
+C2
+
+E1+E2+E4
+
+FIN-020
+
+Audit export
+
+M2
+
+C2
+
+E1+E2+E4
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 44
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+CORP DOMAIN
+
+Corporate Administration
+Controls legal entities, people, assets, procurement, vendors and delegated authority.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+CORP-001
+
+Legal entity registry
+
+M2
+
+C2
+
+E1+E2+E4
+
+CORP-002
+
+Ownership register
+
+M2
+
+C2
+
+E1+E2+E4
+
+CORP-003
+
+Director register
+
+M2
+
+C2
+
+E1+E2+E4
+
+CORP-004
+
+Corporate policies
+
+M2
+
+C2
+
+E1+E2+E4
+
+CORP-005
+
+Delegated authority
+
+M2
+
+C2
+
+E1+E2+E4
+
+CORP-006
+
+Contracts
+
+M2
+
+C2
+
+E1+E2+E4
+
+CORP-007
+
+Employee lifecycle
+
+M2
+
+C2
+
+E1+E2+E4
+
+CORP-008
+
+Contractor lifecycle
+
+M2
+
+C2
+
+E1+E2+E4
+
+CORP-009
+
+Asset management
+
+M2
+
+C2
+
+E1+E2+E4
+
+CORP-010
+
+Software licences
+
+M2
+
+C2
+
+E1+E2+E4
+
+CORP-011
+
+Domain ownership
+
+M2
+
+C2
+
+E1+E2+E4
+
+CORP-012
+
+Insurance
+
+M2
+
+C2
+
+E1+E2+E4
+
+CORP-013
+
+Procurement
+
+M2
+
+C2
+
+E1+E2+E4
+
+CORP-014
+
+Vendor records
+
+M2
+
+C2
+
+E1+E2+E4
+
+CORP-015
+
+Corporate approvals
+
+M2
+
+C2
+
+E1+E2+E4
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 45
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+GRW DOMAIN
+
+Sales, Marketing & Growth
+Controls acquisition, CRM, campaigns, attribution, lifecycle and experimentation.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+GRW-001
+
+CRM
+
+M2
+
+C1
+
+E1+E2+E4
+
+GRW-002
+
+Leads
+
+M2
+
+C1
+
+E1+E2+E4
+
+GRW-003
+
+Opportunities
+
+M2
+
+C1
+
+E1+E2+E4
+
+GRW-004
+
+Campaigns
+
+M2
+
+C1
+
+E1+E2+E4
+
+GRW-005
+
+Attribution
+
+M2
+
+C1
+
+E1+E2+E4
+
+GRW-006
+
+Landing pages
+
+M2
+
+C1
+
+E1+E2+E4
+
+GRW-007
+
+SEO
+
+M2
+
+C1
+
+E1+E2+E4
+
+GRW-008
+
+ASO
+
+M2
+
+C1
+
+E1+E2+E4
+
+GRW-009
+
+Lifecycle email
+
+M2
+
+C1
+
+E1+E2+E4
+
+GRW-010
+
+Push campaigns
+
+M2
+
+C1
+
+E1+E2+E4
+
+GRW-011
+
+Referrals
+
+M2
+
+C1
+
+E1+E2+E4
+
+GRW-012
+
+Affiliates
+
+M2
+
+C1
+
+E1+E2+E4
+
+GRW-013
+
+Experiments
+
+M2
+
+C1
+
+E1+E2+E4
+
+GRW-014
+
+Consent
+
+M2
+
+C1
+
+E1+E2+E4
+
+GRW-015
+
+Unsubscribe
+
+M2
+
+C1
+
+E1+E2+E4
+
+GRW-016
+
+Campaign analytics
+
+M2
+
+C1
+
+E1+E2+E4
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 46
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+PRT DOMAIN
+
+Partners & Vendors
+Controls external partner onboarding, contracts, credentials, risk and offboarding.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+PRT-001
+
+Partner registry
+
+M2
+
+C2
+
+E1+E2+E4
+
+PRT-002
+
+Partner onboarding
+
+M2
+
+C2
+
+E1+E2+E4
+
+PRT-003
+
+Contracts
+
+M2
+
+C2
+
+E1+E2+E4
+
+PRT-004
+
+Partner credentials
+
+M2
+
+C2
+
+E1+E2+E4
+
+PRT-005
+
+Certification
+
+M2
+
+C2
+
+E1+E2+E4
+
+PRT-006
+
+API access
+
+M2
+
+C2
+
+E1+E2+E4
+
+PRT-007
+
+Partner billing
+
+M2
+
+C2
+
+E1+E2+E4
+
+PRT-008
+
+Revenue sharing
+
+M2
+
+C2
+
+E1+E2+E4
+
+PRT-009
+
+Vendor risk
+
+M2
+
+C2
+
+E1+E2+E4
+
+PRT-010
+
+Renewal tracking
+
+M2
+
+C2
+
+E1+E2+E4
+
+PRT-011
+
+Subprocessors
+
+M2
+
+C2
+
+E1+E2+E4
+
+PRT-012
+
+Partner offboarding
+
+M2
+
+C2
+
+E1+E2+E4
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 47
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+DAT DOMAIN
+
+Data Platform & Governance
+Controls data architecture, ownership, quality, lineage, retention, backup and access.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+DAT-001
+
+Data architecture
+
+M1
+
+C2
+
+E1+E2
+
+DAT-002
+
+Schema governance
+
+M1
+
+C2
+
+E1+E2
+
+DAT-003
+
+Data ownership
+
+M1
+
+C2
+
+E1+E2
+
+DAT-004
+
+Data dictionary
+
+M1
+
+C2
+
+E1+E2
+
+DAT-005
+
+Data classification
+
+M1
+
+C2
+
+E1+E2
+
+DAT-006
+
+Data lineage
+
+M1
+
+C2
+
+E1+E2
+
+DAT-007
+
+Data quality
+
+M1
+
+C2
+
+E1+E2
+
+DAT-008
+
+Master data
+
+M1
+
+C2
+
+E1+E2
+
+DAT-009
+
+Data retention
+
+M1
+
+C2
+
+E1+E2
+
+DAT-010
+
+Data deletion
+
+M1
+
+C3
+
+E1+E2+E3
+
+DAT-011
+
+Data export
+
+M2
+
+C2
+
+E1+E2+E4
+
+DAT-012
+
+Backup
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+DAT-013
+
+Restore
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+DAT-014
+
+Archive
+
+M2
+
+C2
+
+E1+E2+E4
+
+DAT-015
+
+Data residency
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+DAT-016
+
+Encryption
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+DAT-017
+
+Warehouse / lake
+
+M2
+
+C2
+
+E1+E2+E4
+
+DAT-018
+
+Search indexing
+
+M2
+
+C2
+
+E1+E2+E4
+
+DAT-019
+
+Queue / event storage
+
+M2
+
+C2
+
+E1+E2+E4
+
+DAT-020
+
+Data access audit
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 48
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+BI DOMAIN
+
+Analytics & Business Intelligence
+Controls metrics, dashboards, funnels, cohorts, forecasts and canonical definitions.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+BI-001
+
+Product analytics
+
+M2
+
+C1
+
+E1+E2+E4
+
+BI-002
+
+Marketplace analytics
+
+M2
+
+C1
+
+E1+E2+E4
+
+BI-003
+
+Revenue analytics
+
+M2
+
+C1
+
+E1+E2+E4
+
+BI-004
+
+Customer analytics
+
+M2
+
+C1
+
+E1+E2+E4
+
+BI-005
+
+Content analytics
+
+M2
+
+C1
+
+E1+E2+E4
+
+BI-006
+
+Operational analytics
+
+M2
+
+C1
+
+E1+E2+E4
+
+BI-007
+
+Executive dashboards
+
+M2
+
+C1
+
+E1+E2+E4
+
+BI-008
+
+Metric dictionary
+
+M2
+
+C1
+
+E1+E2+E4
+
+BI-009
+
+Funnel analysis
+
+M2
+
+C1
+
+E1+E2+E4
+
+BI-010
+
+Retention
+
+M2
+
+C1
+
+E1+E2+E4
+
+BI-011
+
+Cohort analysis
+
+M2
+
+C1
+
+E1+E2+E4
+
+BI-012
+
+Forecasting
+
+M2
+
+C1
+
+E1+E2+E4
+
+BI-013
+
+Data freshness monitoring
+
+M2
+
+C1
+
+E1+E2+E4
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 49
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+API DOMAIN
+
+API Platform
+Controls software-to-software access, scopes, rate limits, versioning and webhooks.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+API-001
+
+API gateway
+
+M1
+
+C2
+
+E1+E2
+
+API-002
+
+Authentication
+
+M1
+
+C2
+
+E1+E2
+
+API-003
+
+Authorization
+
+M1
+
+C2
+
+E1+E2
+
+API-004
+
+Scopes
+
+M1
+
+C2
+
+E1+E2
+
+API-005
+
+Versioning
+
+M1
+
+C2
+
+E1+E2
+
+API-006
+
+Pagination
+
+M1
+
+C2
+
+E1+E2
+
+API-007
+
+Rate limits
+
+M1
+
+C2
+
+E1+E2
+
+API-008
+
+Quotas
+
+M1
+
+C2
+
+E1+E2
+
+API-009
+
+Idempotency
+
+M1
+
+C2
+
+E1+E2
+
+API-010
+
+Validation
+
+M1
+
+C2
+
+E1+E2
+
+API-011
+
+Error model
+
+M2
+
+C2
+
+E1+E2+E4
+
+API-012
+
+Request IDs
+
+M2
+
+C2
+
+E1+E2+E4
+
+API-013
+
+OpenAPI
+
+M2
+
+C2
+
+E1+E2+E4
+
+API-014
+
+API logs
+
+M2
+
+C2
+
+E1+E2+E4
+
+API-015
+
+API monitoring
+
+M2
+
+C2
+
+E1+E2+E4
+
+API-016
+
+Deprecation
+
+M2
+
+C2
+
+E1+E2+E4
+
+API-017
+
+Webhooks
+
+M2
+
+C2
+
+E1+E2+E4
+
+API-018
+
+Webhook signing
+
+M2
+
+C2
+
+E1+E2+E4
+
+API-019
+
+Webhook retries
+
+M2
+
+C2
+
+E1+E2+E4
+
+API-020
+
+API sandbox
+
+M2
+
+C2
+
+E1+E2+E4
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 50
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+DEV DOMAIN
+
+Developer Platform
+Controls developer onboarding, applications, credentials, sandboxes, SDKs and support.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+DEV-001
+
+Developer registration
+
+M2
+
+C2
+
+E1+E2+E4
+
+DEV-002
+
+Developer organization
+
+M2
+
+C2
+
+E1+E2+E4
+
+DEV-003
+
+Application registration
+
+M2
+
+C2
+
+E1+E2+E4
+
+DEV-004
+
+API credentials
+
+M3
+
+C2
+
+E1+E2+E4
+
+DEV-005
+
+OAuth client
+
+M3
+
+C2
+
+E1+E2+E4
+
+DEV-006
+
+Credential rotation
+
+M3
+
+C2
+
+E1+E2+E4
+
+DEV-007
+
+Sandbox
+
+M3
+
+C2
+
+E1+E2+E4
+
+DEV-008
+
+API explorer
+
+M3
+
+C2
+
+E1+E2+E4
+
+DEV-009
+
+Usage dashboard
+
+M3
+
+C2
+
+E1+E2+E4
+
+DEV-010
+
+Logs
+
+M3
+
+C2
+
+E1+E2+E4
+
+DEV-011
+
+Quotas
+
+M3
+
+C2
+
+E1+E2+E4
+
+DEV-012
+
+SDKs
+
+M3
+
+C2
+
+E1+E2+E4
+
+DEV-013
+
+Documentation
+
+M3
+
+C2
+
+E1+E2+E4
+
+DEV-014
+
+Tutorials
+
+M3
+
+C2
+
+E1+E2+E4
+
+DEV-015
+
+Sample applications
+
+M3
+
+C2
+
+E1+E2+E4
+
+DEV-016
+
+Changelog
+
+M3
+
+C2
+
+E1+E2+E4
+
+DEV-017
+
+Migration guides
+
+M3
+
+C2
+
+E1+E2+E4
+
+DEV-018
+
+Developer support
+
+M3
+
+C2
+
+E1+E2+E4
+
+DEV-019
+
+App review
+
+M3
+
+C2
+
+E1+E2+E4
+
+DEV-020
+
+Integration marketplace
+
+M3
+
+C2
+
+E1+E2+E4
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 51
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+MCP DOMAIN
+
+AI / MCP / Agent Platform
+Controls agent identity, tools, resources, consent, human approval and execution policy.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+MCP-001
+
+MCP server registry
+
+M3
+
+C2
+
+E1+E2+E4
+
+MCP-002
+
+Tool registry
+
+M3
+
+C2
+
+E1+E2+E4
+
+MCP-003
+
+Resource registry
+
+M3
+
+C2
+
+E1+E2+E4
+
+MCP-004
+
+Prompt registry
+
+M3
+
+C2
+
+E1+E2+E4
+
+MCP-005
+
+Agent identity
+
+M3
+
+C2
+
+E1+E2+E4
+
+MCP-006
+
+User authorization
+
+M3
+
+C3
+
+E1+E2+E3+E4
+
+MCP-007
+
+OAuth
+
+M3
+
+C3
+
+E1+E2+E3+E4
+
+MCP-008
+
+Tool scopes
+
+M3
+
+C2
+
+E1+E2+E4
+
+MCP-009
+
+Resource scopes
+
+M3
+
+C2
+
+E1+E2+E4
+
+MCP-010
+
+Consent
+
+M3
+
+C2
+
+E1+E2+E4
+
+MCP-011
+
+Human approval
+
+M4
+
+C3
+
+E1+E2+E3+E4+E5
+
+MCP-012
+
+Execution limits
+
+M3
+
+C2
+
+E1+E2+E4
+
+MCP-013
+
+Rate limits
+
+M3
+
+C2
+
+E1+E2+E4
+
+MCP-014
+
+Tool audit
+
+M4
+
+C3
+
+E1+E2+E3+E4+E5
+
+MCP-015
+
+Agent audit
+
+M4
+
+C3
+
+E1+E2+E3+E4+E5
+
+MCP-016
+
+Secret isolation
+
+M3
+
+C3
+
+E1+E2+E3+E4
+
+MCP-017
+
+Data-loss prevention
+
+M4
+
+C3
+
+E1+E2+E3+E4+E5
+
+MCP-018
+
+Sandbox
+
+M3
+
+C2
+
+E1+E2+E4
+
+MCP-019
+
+Tool versioning
+
+M3
+
+C2
+
+E1+E2+E4
+
+MCP-020
+
+Compatibility
+
+M3
+
+C2
+
+E1+E2+E4
+
+MCP-021
+
+Tool revocation
+
+M3
+
+C3
+
+E1+E2+E3+E4
+
+MCP-022
+
+Server disconnection
+
+M3
+
+C2
+
+E1+E2+E4
+
+MCP-023
+
+Long-running task control
+
+M3
+
+C2
+
+E1+E2+E4
+
+MCP-024
+
+Agent observability
+
+M3
+
+C2
+
+E1+E2+E4
+
+MCP-025
+
+AI policy enforcement
+
+M4
+
+C3
+
+E1+E2+E3+E4+E5
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 52
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+INT DOMAIN
+
+Integrations & Event Architecture
+Controls connectors, events, queues, imports/exports, retries and third-party health.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+INT-001
+
+Integration registry
+
+M2
+
+C2
+
+E1+E2+E4
+
+INT-002
+
+OAuth integrations
+
+M2
+
+C2
+
+E1+E2+E4
+
+INT-003
+
+Incoming webhooks
+
+M2
+
+C2
+
+E1+E2+E4
+
+INT-004
+
+Outgoing webhooks
+
+M2
+
+C2
+
+E1+E2+E4
+
+INT-005
+
+Event bus
+
+M2
+
+C2
+
+E1+E2+E4
+
+INT-006
+
+Queues
+
+M2
+
+C2
+
+E1+E2+E4
+
+INT-007
+
+Retry handling
+
+M2
+
+C2
+
+E1+E2+E4
+
+INT-008
+
+Dead-letter queues
+
+M2
+
+C2
+
+E1+E2+E4
+
+INT-009
+
+Imports
+
+M2
+
+C2
+
+E1+E2+E4
+
+INT-010
+
+Exports
+
+M2
+
+C2
+
+E1+E2+E4
+
+INT-011
+
+CSV
+
+M2
+
+C2
+
+E1+E2+E4
+
+INT-012
+
+SFTP
+
+M2
+
+C2
+
+E1+E2+E4
+
+INT-013
+
+Third-party health
+
+M2
+
+C2
+
+E1+E2+E4
+
+INT-014
+
+Integration ownership
+
+M2
+
+C2
+
+E1+E2+E4
+
+INT-015
+
+Integration SLA
+
+M2
+
+C2
+
+E1+E2+E4
+
+INT-016
+
+Version compatibility
+
+M2
+
+C2
+
+E1+E2+E4
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 53
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+SEC DOMAIN
+
+Cybersecurity
+Controls threat, authentication, authorization, cryptography, vulnerability and security operations.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+SEC-001
+
+Security governance
+
+M1
+
+C3
+
+E1+E2+E3
+
+SEC-002
+
+Threat modeling
+
+M1
+
+C3
+
+E1+E2+E3
+
+SEC-003
+
+Secure authentication
+
+M1
+
+C3
+
+E1+E2+E3
+
+SEC-004
+
+Authorization
+
+M1
+
+C3
+
+E1+E2+E3
+
+SEC-005
+
+Encryption at rest
+
+M1
+
+C3
+
+E1+E2+E3
+
+SEC-006
+
+Encryption in transit
+
+M1
+
+C3
+
+E1+E2+E3
+
+SEC-007
+
+Secrets management
+
+M1
+
+C3
+
+E1+E2+E3
+
+SEC-008
+
+Key rotation
+
+M1
+
+C3
+
+E1+E2+E3
+
+SEC-009
+
+Dependency scanning
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+SEC-010
+
+SAST
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+SEC-011
+
+DAST
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+SEC-012
+
+Vulnerability management
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+SEC-013
+
+Cloud IAM
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+SEC-014
+
+Network segmentation
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+SEC-015
+
+WAF
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+SEC-016
+
+DDoS protection
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+SEC-017
+
+Security logging
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+SEC-018
+
+SIEM
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+SEC-019
+
+Detection
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+SEC-020
+
+Security incident response
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+SEC-021
+
+Penetration testing
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+SEC-022
+
+Security review
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+SEC-023
+
+Privileged-access management
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+SEC-024
+
+Secure configuration
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+SEC-025
+
+Security training
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 54
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+PRV DOMAIN
+
+Privacy
+Controls data rights, consent, legal basis, retention, processors and privacy incidents.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+PRV-001
+
+Privacy notice
+
+M1
+
+C3
+
+E1+E2+E3
+
+PRV-002
+
+Consent
+
+M1
+
+C3
+
+E1+E2+E3
+
+PRV-003
+
+Purpose / legal basis
+
+M1
+
+C3
+
+E1+E2+E3
+
+PRV-004
+
+Data inventory
+
+M1
+
+C3
+
+E1+E2+E3
+
+PRV-005
+
+Data subject access
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+PRV-006
+
+Correction
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+PRV-007
+
+Deletion
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+PRV-008
+
+Portability
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+PRV-009
+
+Restriction
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+PRV-010
+
+Objection
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+PRV-011
+
+Consent withdrawal
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+PRV-012
+
+Retention
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+PRV-013
+
+Cookies
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+PRV-014
+
+Processor register
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+PRV-015
+
+Subprocessor register
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+PRV-016
+
+Privacy incident
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+PRV-017
+
+DPIA
+
+M4
+
+C3
+
+E1+E2+E3+E4+E5
+
+PRV-018
+
+Cross-border transfer
+
+M4
+
+C3
+
+E1+E2+E3+E4+E5
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 55
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+LEG DOMAIN
+
+Legal
+Controls terms, contracts, policies, legal requests, IP process and records obligations.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+LEG-001
+
+Terms of service
+
+M1
+
+C2
+
+E1+E2
+
+LEG-002
+
+Privacy policy
+
+M1
+
+C2
+
+E1+E2
+
+LEG-003
+
+Marketplace terms
+
+M1
+
+C2
+
+E1+E2
+
+LEG-004
+
+Seller agreement
+
+M1
+
+C2
+
+E1+E2
+
+LEG-005
+
+Developer terms
+
+M2
+
+C2
+
+E1+E2+E4
+
+LEG-006
+
+API terms
+
+M2
+
+C2
+
+E1+E2+E4
+
+LEG-007
+
+Acceptable-use policy
+
+M2
+
+C2
+
+E1+E2+E4
+
+LEG-008
+
+Refund policy
+
+M2
+
+C2
+
+E1+E2+E4
+
+LEG-009
+
+Subscription terms
+
+M2
+
+C2
+
+E1+E2+E4
+
+LEG-010
+
+IP policy
+
+M2
+
+C2
+
+E1+E2+E4
+
+LEG-011
+
+Copyright process
+
+M2
+
+C2
+
+E1+E2+E4
+
+LEG-012
+
+Legal request process
+
+M2
+
+C2
+
+E1+E2+E4
+
+LEG-013
+
+Contract management
+
+M2
+
+C2
+
+E1+E2+E4
+
+LEG-014
+
+Legal hold
+
+M4
+
+C2
+
+E1+E2+E4+E5
+
+LEG-015
+
+Records retention
+
+M4
+
+C2
+
+E1+E2+E4+E5
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 56
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+GOV DOMAIN
+
+Government & Regulation
+Controls licensing, regulatory reporting, tax/government interfaces and regulated evidence.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+GOV-001
+
+Regulatory applicability assessment
+
+M4
+
+C3
+
+E1+E2+E3+E4+E5
+
+GOV-002
+
+Licence register
+
+M4
+
+C3
+
+E1+E2+E3+E4+E5
+
+GOV-003
+
+Tax reporting
+
+M4
+
+C3
+
+E1+E2+E3+E4+E5
+
+GOV-004
+
+Marketplace reporting
+
+M4
+
+C3
+
+E1+E2+E3+E4+E5
+
+GOV-005
+
+Seller regulatory data
+
+M4
+
+C3
+
+E1+E2+E3+E4+E5
+
+GOV-006
+
+Compliance reporting
+
+M4
+
+C3
+
+E1+E2+E3+E4+E5
+
+GOV-007
+
+Lawful requests
+
+M4
+
+C3
+
+E1+E2+E3+E4+E5
+
+GOV-008
+
+Regulatory notices
+
+M4
+
+C3
+
+E1+E2+E3+E4+E5
+
+GOV-009
+
+Sanctions controls
+
+M4
+
+C3
+
+E1+E2+E3+E4+E5
+
+GOV-010
+
+Product recalls
+
+M4
+
+C3
+
+E1+E2+E3+E4+E5
+
+GOV-011
+
+Regulatory incident reporting
+
+M4
+
+C3
+
+E1+E2+E3+E4+E5
+
+GOV-012
+
+Government integrations
+
+M4
+
+C3
+
+E1+E2+E3+E4+E5
+
+GOV-013
+
+Regulator audit package
+
+M4
+
+C3
+
+E1+E2+E3+E4+E5
+
+GOV-014
+
+Regulatory retention
+
+M4
+
+C3
+
+E1+E2+E3+E4+E5
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 57
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+ACC DOMAIN
+
+Accessibility
+Controls accessible interaction, content, authentication and verification.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+ACC-001
+
+Keyboard navigation
+
+M1
+
+C2
+
+E1+E2
+
+ACC-002
+
+Screen-reader compatibility
+
+M1
+
+C2
+
+E1+E2
+
+ACC-003
+
+Focus management
+
+M1
+
+C2
+
+E1+E2
+
+ACC-004
+
+Contrast
+
+M1
+
+C2
+
+E1+E2
+
+ACC-005
+
+Text scaling
+
+M1
+
+C2
+
+E1+E2
+
+ACC-006
+
+Accessible authentication
+
+M1
+
+C2
+
+E1+E2
+
+ACC-007
+
+Captions
+
+M1
+
+C2
+
+E1+E2
+
+ACC-008
+
+Alt text
+
+M1
+
+C2
+
+E1+E2
+
+ACC-009
+
+Accessibility testing
+
+M1
+
+C2
+
+E1+E2
+
+ACC-010
+
+Accessibility statement
+
+M1
+
+C2
+
+E1+E2
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 58
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+I18N DOMAIN
+
+Localization & Internationalization
+Controls locales, languages, currencies, formats, RTL and regional variation.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+I18N-001
+
+Locale architecture
+
+M1
+
+C2
+
+E1+E2
+
+I18N-002
+
+Language switching
+
+M1
+
+C2
+
+E1+E2
+
+I18N-003
+
+Translation workflow
+
+M1
+
+C2
+
+E1+E2
+
+I18N-004
+
+Currency
+
+M1
+
+C2
+
+E1+E2
+
+I18N-005
+
+Time zones
+
+M1
+
+C2
+
+E1+E2
+
+I18N-006
+
+Date / time formats
+
+M1
+
+C2
+
+E1+E2
+
+I18N-007
+
+Number formats
+
+M1
+
+C2
+
+E1+E2
+
+I18N-008
+
+RTL
+
+M1
+
+C2
+
+E1+E2
+
+I18N-009
+
+Regional content
+
+M1
+
+C2
+
+E1+E2
+
+I18N-010
+
+Locale fallback
+
+M1
+
+C2
+
+E1+E2
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 59
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+INF DOMAIN
+
+Infrastructure & Cloud
+Controls environments, compute, databases, networking, scaling, regions and cost.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+INF-001
+
+Environment architecture
+
+M1
+
+C2
+
+E1+E2
+
+INF-002
+
+DNS
+
+M1
+
+C2
+
+E1+E2
+
+INF-003
+
+Certificates
+
+M1
+
+C2
+
+E1+E2
+
+INF-004
+
+CDN
+
+M1
+
+C2
+
+E1+E2
+
+INF-005
+
+Compute
+
+M1
+
+C2
+
+E1+E2
+
+INF-006
+
+Database
+
+M2
+
+C2
+
+E1+E2+E4
+
+INF-007
+
+Object storage
+
+M2
+
+C2
+
+E1+E2+E4
+
+INF-008
+
+Cache
+
+M2
+
+C2
+
+E1+E2+E4
+
+INF-009
+
+Queues
+
+M2
+
+C2
+
+E1+E2+E4
+
+INF-010
+
+Networking
+
+M2
+
+C2
+
+E1+E2+E4
+
+INF-011
+
+Secret store
+
+M2
+
+C2
+
+E1+E2+E4
+
+INF-012
+
+Region strategy
+
+M2
+
+C2
+
+E1+E2+E4
+
+INF-013
+
+Scaling
+
+M2
+
+C2
+
+E1+E2+E4
+
+INF-014
+
+Infrastructure as code
+
+M2
+
+C2
+
+E1+E2+E4
+
+INF-015
+
+Backup infrastructure
+
+M2
+
+C2
+
+E1+E2+E4
+
+INF-016
+
+Cost management
+
+M2
+
+C2
+
+E1+E2+E4
+
+INF-017
+
+Capacity management
+
+M2
+
+C2
+
+E1+E2+E4
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 60
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+ENG DOMAIN
+
+Engineering & SDLC
+Controls source, review, testing, build, migration, releases, rollback and change.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+ENG-001
+
+Source control
+
+M1
+
+C2
+
+E1+E2
+
+ENG-002
+
+Branching strategy
+
+M1
+
+C2
+
+E1+E2
+
+ENG-003
+
+Code review
+
+M1
+
+C2
+
+E1+E2
+
+ENG-004
+
+CI
+
+M1
+
+C2
+
+E1+E2
+
+ENG-005
+
+Unit tests
+
+M1
+
+C2
+
+E1+E2
+
+ENG-006
+
+Integration tests
+
+M2
+
+C2
+
+E1+E2+E4
+
+ENG-007
+
+E2E tests
+
+M2
+
+C2
+
+E1+E2+E4
+
+ENG-008
+
+Security tests
+
+M2
+
+C2
+
+E1+E2+E4
+
+ENG-009
+
+Performance tests
+
+M2
+
+C2
+
+E1+E2+E4
+
+ENG-010
+
+Accessibility tests
+
+M2
+
+C2
+
+E1+E2+E4
+
+ENG-011
+
+Build artifacts
+
+M2
+
+C2
+
+E1+E2+E4
+
+ENG-012
+
+Artifact registry
+
+M2
+
+C2
+
+E1+E2+E4
+
+ENG-013
+
+Dependency management
+
+M2
+
+C2
+
+E1+E2+E4
+
+ENG-014
+
+SBOM
+
+M2
+
+C2
+
+E1+E2+E4
+
+ENG-015
+
+Database migrations
+
+M2
+
+C2
+
+E1+E2+E4
+
+ENG-016
+
+Feature flags
+
+M2
+
+C2
+
+E1+E2+E4
+
+ENG-017
+
+Environment promotion
+
+M2
+
+C2
+
+E1+E2+E4
+
+ENG-018
+
+Release approvals
+
+M2
+
+C2
+
+E1+E2+E4
+
+ENG-019
+
+Rollback
+
+M2
+
+C2
+
+E1+E2+E4
+
+ENG-020
+
+Change management
+
+M2
+
+C2
+
+E1+E2+E4
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 61
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+OPS DOMAIN
+
+Operations & Reliability
+Controls logs, metrics, traces, monitoring, SLOs, on-call and service health.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+OPS-001
+
+Application logs
+
+M2
+
+C2
+
+E1+E2+E4
+
+OPS-002
+
+Infrastructure logs
+
+M2
+
+C2
+
+E1+E2+E4
+
+OPS-003
+
+Metrics
+
+M2
+
+C2
+
+E1+E2+E4
+
+OPS-004
+
+Tracing
+
+M2
+
+C2
+
+E1+E2+E4
+
+OPS-005
+
+Crash reporting
+
+M2
+
+C2
+
+E1+E2+E4
+
+OPS-006
+
+Uptime monitoring
+
+M2
+
+C2
+
+E1+E2+E4
+
+OPS-007
+
+Synthetic checks
+
+M2
+
+C2
+
+E1+E2+E4
+
+OPS-008
+
+Dashboards
+
+M2
+
+C2
+
+E1+E2+E4
+
+OPS-009
+
+Alerts
+
+M2
+
+C2
+
+E1+E2+E4
+
+OPS-010
+
+On-call
+
+M2
+
+C2
+
+E1+E2+E4
+
+OPS-011
+
+SLI
+
+M2
+
+C2
+
+E1+E2+E4
+
+OPS-012
+
+SLO
+
+M2
+
+C2
+
+E1+E2+E4
+
+OPS-013
+
+SLA
+
+M2
+
+C2
+
+E1+E2+E4
+
+OPS-014
+
+Error budgets
+
+M2
+
+C2
+
+E1+E2+E4
+
+OPS-015
+
+Runbooks
+
+M2
+
+C2
+
+E1+E2+E4
+
+OPS-016
+
+Capacity monitoring
+
+M2
+
+C2
+
+E1+E2+E4
+
+OPS-017
+
+Cost monitoring
+
+M2
+
+C2
+
+E1+E2+E4
+
+OPS-018
+
+Status page
+
+M2
+
+C2
+
+E1+E2+E4
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 62
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+INC DOMAIN
+
+Incident Management
+Controls severity, declaration, command, communication, recovery and postmortem.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+INC-001
+
+Severity model
+
+M2
+
+C2
+
+E1+E2+E4
+
+INC-002
+
+Incident declaration
+
+M2
+
+C2
+
+E1+E2+E4
+
+INC-003
+
+Incident commander
+
+M2
+
+C2
+
+E1+E2+E4
+
+INC-004
+
+Escalation
+
+M2
+
+C2
+
+E1+E2+E4
+
+INC-005
+
+Communications
+
+M2
+
+C2
+
+E1+E2+E4
+
+INC-006
+
+Containment
+
+M2
+
+C2
+
+E1+E2+E4
+
+INC-007
+
+Recovery
+
+M2
+
+C2
+
+E1+E2+E4
+
+INC-008
+
+Customer notification
+
+M2
+
+C2
+
+E1+E2+E4
+
+INC-009
+
+Regulatory notification
+
+M2
+
+C2
+
+E1+E2+E4
+
+INC-010
+
+Root cause analysis
+
+M2
+
+C2
+
+E1+E2+E4
+
+INC-011
+
+Postmortem
+
+M2
+
+C2
+
+E1+E2+E4
+
+INC-012
+
+Corrective actions
+
+M2
+
+C2
+
+E1+E2+E4
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 63
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+BCP DOMAIN
+
+Business Continuity & Disaster Recovery
+Controls RPO/RTO, backup, restore, provider/region failure and continuity exercises.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+BCP-001
+
+Business impact assessment
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+BCP-002
+
+RPO
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+BCP-003
+
+RTO
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+BCP-004
+
+Backups
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+BCP-005
+
+Restore test
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+BCP-006
+
+Disaster recovery
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+BCP-007
+
+Region failure
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+BCP-008
+
+Credential compromise
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+BCP-009
+
+Provider outage
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+BCP-010
+
+Alternate communications
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+BCP-011
+
+Emergency access
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+BCP-012
+
+Recovery validation
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+BCP-013
+
+Continuity exercises
+
+M2
+
+C3
+
+E1+E2+E3+E4
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 64
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+REL DOMAIN
+
+Release & Distribution
+Controls web/mobile distribution, signing, stores, rollout, rollback and version tracking.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+REL-001
+
+Web deployment
+
+M1
+
+C2
+
+E1+E2
+
+REL-002
+
+Mobile signing
+
+M1
+
+C2
+
+E1+E2
+
+REL-003
+
+Apple distribution
+
+M1
+
+C2
+
+E1+E2
+
+REL-004
+
+Google Play distribution
+
+M1
+
+C2
+
+E1+E2
+
+REL-005
+
+Beta distribution
+
+M1
+
+C2
+
+E1+E2
+
+REL-006
+
+Release notes
+
+M2
+
+C2
+
+E1+E2+E4
+
+REL-007
+
+Version tracking
+
+M2
+
+C2
+
+E1+E2+E4
+
+REL-008
+
+Phased rollout
+
+M2
+
+C2
+
+E1+E2+E4
+
+REL-009
+
+Rollback
+
+M2
+
+C2
+
+E1+E2+E4
+
+REL-010
+
+Store compliance
+
+M2
+
+C2
+
+E1+E2+E4
+
+REL-011
+
+Privacy declarations
+
+M2
+
+C2
+
+E1+E2+E4
+
+REL-012
+
+Crash monitoring
+
+M2
+
+C2
+
+E1+E2+E4
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 65
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+DOC DOMAIN
+
+Documentation & Knowledge
+Controls customer, engineering, operations, security and compliance knowledge.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+DOC-001
+
+Customer help
+
+M1
+
+C1
+
+E1+E2
+
+DOC-002
+
+Seller documentation
+
+M1
+
+C1
+
+E1+E2
+
+DOC-003
+
+Internal knowledge
+
+M1
+
+C1
+
+E1+E2
+
+DOC-004
+
+Engineering documentation
+
+M1
+
+C1
+
+E1+E2
+
+DOC-005
+
+API documentation
+
+M1
+
+C1
+
+E1+E2
+
+DOC-006
+
+MCP documentation
+
+M2
+
+C1
+
+E1+E2+E4
+
+DOC-007
+
+Support playbooks
+
+M2
+
+C1
+
+E1+E2+E4
+
+DOC-008
+
+Runbooks
+
+M2
+
+C1
+
+E1+E2+E4
+
+DOC-009
+
+Security playbooks
+
+M2
+
+C1
+
+E1+E2+E4
+
+DOC-010
+
+Compliance policies
+
+M2
+
+C1
+
+E1+E2+E4
+
+DOC-011
+
+Architecture records
+
+M2
+
+C1
+
+E1+E2+E4
+
+DOC-012
+
+Decision records
+
+M2
+
+C1
+
+E1+E2+E4
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 66
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+EXE DOMAIN
+
+Executive Governance
+Controls executive visibility, strategic decisions, portfolio health and dependencies.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+EXE-001
+
+Executive dashboard
+
+M3
+
+C1
+
+E1+E2+E4
+
+EXE-002
+
+Financial dashboard
+
+M3
+
+C1
+
+E1+E2+E4
+
+EXE-003
+
+Product dashboard
+
+M3
+
+C1
+
+E1+E2+E4
+
+EXE-004
+
+Risk dashboard
+
+M3
+
+C1
+
+E1+E2+E4
+
+EXE-005
+
+Security dashboard
+
+M3
+
+C1
+
+E1+E2+E4
+
+EXE-006
+
+Compliance dashboard
+
+M4
+
+C1
+
+E1+E2+E4+E5
+
+EXE-007
+
+Roadmap governance
+
+M4
+
+C1
+
+E1+E2+E4+E5
+
+EXE-008
+
+Strategic dependencies
+
+M4
+
+C1
+
+E1+E2+E4+E5
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 67
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+RSK DOMAIN
+
+Risk, Audit & Assurance
+Controls risk ownership, control mapping, exceptions, audits and corrective action.
+Control ID
+
+Capability
+
+Default floor
+
+Criticality
+
+Default evidence floor
+
+RSK-001
+
+Risk register
+
+M3
+
+C2
+
+E1+E2+E4
+
+RSK-002
+
+Risk ownership
+
+M3
+
+C2
+
+E1+E2+E4
+
+RSK-003
+
+Risk scoring
+
+M3
+
+C2
+
+E1+E2+E4
+
+RSK-004
+
+Control mapping
+
+M3
+
+C2
+
+E1+E2+E4
+
+RSK-005
+
+Exception management
+
+M3
+
+C2
+
+E1+E2+E4
+
+RSK-006
+
+Internal audit
+
+M4
+
+C2
+
+E1+E2+E4+E5
+
+RSK-007
+
+External audit
+
+M4
+
+C2
+
+E1+E2+E4+E5
+
+RSK-008
+
+Vendor risk
+
+M4
+
+C2
+
+E1+E2+E4+E5
+
+RSK-009
+
+Assurance evidence
+
+M4
+
+C2
+
+E1+E2+E4+E5
+
+RSK-010
+
+Corrective action tracking
+
+M4
+
+C2
+
+E1+E2+E4+E5
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 68
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+TEMPLATE A
+
+MSCS Project Declaration
+Complete before scoping controls. The declared profile becomes the basis of audit and certification.
+Field
+
+Project value
+
+Project / Product
+
+____________________________________________
+
+Business model
+
+____________________________________________
+
+Owner / accountable executive
+
+____________________________________________
+
+Target MSCS profile
+
+□ M1 □ M2 □ M3 □ M4
+
+Applicable markets / jurisdictions
+
+____________________________________________
+
+User types
+
+____________________________________________
+
+Marketplace
+
+□ Yes □ No □ Conditional
+
+CMS / publishing
+
+□ Yes □ No □ Conditional
+
+Payments / money movement
+
+□ Yes □ No □ Conditional
+
+External developers / APIs
+
+□ Yes □ No □ Conditional
+
+AI / MCP / agents
+
+□ Yes □ No □ Conditional
+
+Enterprise tenancy
+
+□ Yes □ No □ Conditional
+
+Regulated domain
+
+□ Yes □ No □ To be assessed
+
+Source authority
+
+Repository / branch / release / commit: __________________________
+
+Environment authority
+
+____________________________________________
+
+Assessment date
+
+____________________________________________
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 69
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+TEMPLATE B
+
+MSCS Control Assessment Worksheet
+Use one line per applicable control. The registry may generate this worksheet automatically in future MSCS tooling.
+ID
+
+Capability
+
+Applies
+
+Target
+
+Status
+
+Crit.
+
+Evidence
+
+Owner
+
+Finding / disposition
+
+IAM-002
+
+Authentication
+
+R
+
+M1
+
+S70
+
+C3
+
+EV-001, EV-002
+
+Identity
+
+PASS
+
+MKT-017
+
+Order lifecycle
+
+R
+
+M1
+
+S60
+
+C2
+
+EV-031, EV-032
+
+Marketplace
+
+Runtime recheck before cert
+
+FIN-009
+
+Reconciliation
+
+R
+
+M2
+
+S30
+
+C3
+
+EV-061
+
+Finance
+
+F-IMP / FAIL
+
+MCP-011
+
+Human approval
+
+C
+
+M3
+
+S50
+
+C3
+
+EV-090
+
+AI Platform
+
+F-EVD
+
+BCP-005
+
+Restore test
+
+R
+
+M2
+
+S10
+
+C3
+
+—
+
+SRE
+
+BLOCKER
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 70
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+TEMPLATE C
+
+Risk Exception / Temporary Deviation
+Exceptions are governance artifacts, not silent gaps.
+Field
+
+Required entry
+
+Exception ID
+
+RSK-EX-________________
+
+Affected controls
+
+____________________________________________
+
+Reason
+
+____________________________________________
+
+Risk statement
+
+____________________________________________
+
+Criticality
+
+□ C0 □ C1 □ C2 □ C3 □ C4
+
+Compensating controls
+
+____________________________________________
+
+Owner
+
+____________________________________________
+
+Approver
+
+____________________________________________
+
+Start date
+
+________________
+
+Expiry date
+
+________________
+
+Monitoring
+
+____________________________________________
+
+Closure / extension evidence
+
+____________________________________________
+
+C4 RULE
+
+C4 deviations ordinarily require the highest applicable governance authority and may be non-waivable where law, safety or external regulation makes the control mandatory.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 71
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+TEMPLATE D
+
+MSCS Certification Record
+The certification record is the formal output of an MSCS assessment.
+Field
+
+Certification value
+
+Certification ID
+
+MSCS-CERT-________________
+
+Project
+
+____________________________________________
+
+Profile
+
+□ M1 □ M2 □ M3 □ M4
+
+Scope
+
+____________________________________________
+
+Version / source authority
+
+____________________________________________
+
+Environment
+
+____________________________________________
+
+Weighted readiness score
+
+________ %
+
+Mandatory gates
+
+□A□B□C□D
+
+Open conditions
+
+____________________________________________
+
+Risk exceptions
+
+____________________________________________
+
+Disposition
+
+□ PASS □ PASS WITH CONDITIONS □ FAIL
+
+Issued
+
+________________
+
+Review / expiry
+
+________________
+
+Assessment lead
+
+____________________________________________
+
+Independent verifier
+
+____________________________________________
+
+Certification authority
+
+____________________________________________
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 72
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+PRODUCT ROADMAP
+
+From Standard to Platform
+The document is release 1 of the IP, not the final product.
+Product layer
+
+MSCS deliverable
+
+Commercial / technical value
+
+1 — Standard
+
+Versioned DOCX/PDF specification.
+
+Defines proprietary terminology, control model, profiles, audit logic and certification.
+
+2 — Registry
+
+Canonical JSON/YAML/database control catalog.
+
+Single source of truth for automation, mappings, versions and generated artifacts.
+
+3 — Auditor
+
+CLI / CI / web assessment engine.
+
+Automates applicability, evidence collection, findings and readiness scoring.
+
+4 — Control Plane
+
+Multi-project SaaS dashboard.
+
+Portfolio governance, remediation ownership, evidence expiry, certification and drift.
+
+5 — API
+
+Developer-facing MSCS service.
+
+Integrates readiness controls into client platforms, CI/CD and governance tools.
+
+6 — MCP
+
+Agent-facing MSCS server.
+
+Allows authorized AI systems to query controls, collect evidence and prepare
+assessments.
+
+7 — Certification Network
+
+Training, assessor governance and renewal.
+
+Scales delivery while preserving methodology quality and 11-11 Tech brand authority.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 73
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+Figure 10 — Productization makes MSCS an executable methodology, not only a publication.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 74
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+EXTERNAL ANCHORS
+
+Standards & Reference Mapping
+MSCS is an 11-11 Tech synthesis. External references anchor selected capability areas but do not make MSCS equivalent to those standards or certifications.
+Ref
+
+Authority
+
+Reference
+
+Use in MSCS
+
+R1
+
+NIST
+
+Cybersecurity Framework (CSF) 2.0
+
+Govern, Identify, Protect, Detect, Respond and Recover.
+
+R2
+
+OWASP
+
+Application Security Verification Standard (ASVS)
+
+Application-security verification and assurance structure.
+
+R3
+
+W3C
+
+Web Content Accessibility Guidelines (WCAG) 2.2
+
+Accessibility requirements for digital experiences.
+
+R4
+
+OpenAPI Initiative
+
+OpenAPI Specification
+
+Machine-readable HTTP API contracts and tooling.
+
+R5
+
+Model Context Protocol
+
+MCP Specification
+
+Agent tools/resources/prompts, authorization and protocol interoperability.
+
+R6
+
+AWS
+
+Well-Architected Framework
+
+Operational excellence, security, reliability, performance, cost and sustainability.
+
+R7
+
+European Commission
+
+GDPR guidance
+
+Privacy rights and governance obligations used as an example regulatory
+mapping.
+
+R8
+
+European Commission
+
+Digital Services Act
+
+Marketplace and intermediary responsibilities used as an example jurisdictional
+mapping.
+
+R9
+
+Apple
+
+App Review guidance
+
+Distribution and review expectations for mobile applications.
+
+R10
+
+Google Play
+
+User Data policy
+
+Distribution, privacy and account-deletion expectations for applicable apps.
+
+Reference links
+R1 NIST — Cybersecurity Framework (CSF) 2.0: https://www.nist.gov/publications/nist-cybersecurity-framework-csf-20
+R2 OWASP — Application Security Verification Standard (ASVS): https://owasp.org/projects/asvs
+R3 W3C — Web Content Accessibility Guidelines (WCAG) 2.2: https://www.w3.org/WAI/standards-guidelines/wcag/
+R4 OpenAPI Initiative — OpenAPI Specification: https://spec.openapis.org/oas/latest.html
+R5 Model Context Protocol — MCP Specification: https://modelcontextprotocol.io/specification/2026-07-28
+R6 AWS — Well-Architected Framework: https://docs.aws.amazon.com/wellarchitected/latest/framework/the-pillars-of-the-framework.html
+R7 European Commission — GDPR guidance: https://commission.europa.eu/law/law-topic/data-protection/information-individuals_en
+R8 European Commission — Digital Services Act: https://digital-strategy.ec.europa.eu/en/policies/digital-services-act
+R9 Apple — App Review guidance: https://developer.apple.com/help/app-review/before-submitting-for-review/complete-review
+R10 Google Play — User Data policy: https://support.google.com/googleplay/android-developer/answer/10144311?hl=en
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 75
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+GLOSSARY
+
+Canonical MSCS Terms
+Defined terms should be used consistently in client deliverables, tooling and certification records.
+Term
+
+Definition
+
+Applicable control
+
+A control included in the project scope by required/conditional determination.
+
+Authority
+
+Exact project state against which evidence and certification are valid.
+
+Capability
+
+An ability the product/company must possess and operate.
+
+Certification
+
+Formal MSCS determination for an exact scope/profile/version/environment.
+
+Control
+
+Addressable normative MSCS requirement represented by a canonical ID.
+
+Control Plane
+
+Internal administrative and operational authority over customer-facing capabilities.
+
+Evidence floor
+
+Minimum evidence classes required before a control can reach certification state.
+
+Finding
+
+Documented divergence between requirement/evidence and observed state.
+
+Maturity profile
+
+Cumulative readiness target M1-M4.
+
+Project namespace
+
+Client/project-specific extension IDs that do not redefine canonical MSCS IDs.
+
+Risk exception
+
+Time-bounded, owned, approved deviation with compensating controls.
+
+Runtime evidence
+
+Proof from the actual deployed/executing system rather than source or test intent.
+
+Selected M4 control
+
+A regulated-grade control applied to a lower-profile project because its risk/obligation requires it.
+
+Superseded control
+
+A retired canonical ID replaced by another control while preserving audit history.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 76
+
+┃┃┃┃ 11-11 Tech
+
+PROPRIETARY FRAMEWORK SPECIFICATION
+
+MASTER SOFTWARE CAPABILITY STANDARD — MSCS 1.0
+
+Build what matters. Prove what works.
+
+20 October 2026
+
+11-11 TECH
+
+MSCS 1.0 — The Standard for Declaring Software Architecturally
+Complete
+MSCS is designed to make completeness auditable, evidence-driven and repeatable across products, clients and industries.
+DEFINITION OF ARCHITECTURE COMPLETE
+
+Every applicable capability required for the target maturity has been identified; ownership, control surfaces, dependencies, data, security, operations and governance are
+defined; mandatory implementation has been built and objectively evidenced; critical gaps are closed or formally governed; and the exact project authority has passed the
+required MSCS certification gates.
+
+11-11 Tech MSCS service family
+Service
+
+Outcome
+
+MSCS Discovery
+
+Know what the software company needs before implementation.
+
+MSCS Audit
+
+Know what exists, what is missing and what is only claimed.
+
+MSCS Certification
+
+Know whether the declared maturity profile is objectively supported.
+
+MSCS Continuous Assurance
+
+Know when a previously acceptable system has drifted or evidence has expired.
+
+MSCS API / MCP
+
+Embed the framework directly into software delivery and AI-assisted engineering workflows.
+
+Build what matters. Prove what works.
+Tokyo-built. Africa-aware. Global by design.
+© 2026 11-11 Tech. MSCS 1.0 — Proprietary Framework Specification.
+MSCS provides architecture, product, operational and assurance guidance. It does not replace jurisdiction-specific legal, tax, accounting, cybersecurity, safety or regulatory advice or certification.
+
+11-11 TECH
+
+Tokyo-built. Africa-aware. Global by design.
+
+MSCS 1.0 • 77
+
+

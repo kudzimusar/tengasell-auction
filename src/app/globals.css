@@ -1,0 +1,262 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ═══════════════════════════════════════════════════════════════════════
+   TengaSell NXS design system — RESTORED 2026-10-20
+   Values reconstructed to the original build's exact palette, sourced from:
+   · nxs-experience-manifest.yaml (brand palette: teal #19717B / gold
+     #DFAE2E / deep gold #AF7A14 / light teal #6CBEC2 / tag orange #C47D1A)
+   · original agent worklogs (agent-ctx/11-a: "teal #19717b / gold #dfae2e
+     from globals.css")
+   · pixel-sampling of the original UAT screenshots (screenshots/1*.png):
+     teal-deep #0F4A50 (hero+footer), section #FFFFFF (header/strip),
+     canvas #FAFAF7 (page), border #E3E7E5, teal-tint #E6F1F2,
+     teal-soft #6CBEC2, gold-soft #F8ECC8, gold-on #3A2B05 (button text),
+     accent #F0F2F0, urgent #D14343, danger #C64141, foreground #1C2424,
+     muted-foreground #5C6A6A, dark: section #141E1E / canvas #0F1616 /
+     raised #1A2626 / border #273535 / foreground #E6ECEC / gold #E5BC49
+   The pre-restore reconstruction had only 7 brand tokens and lost the
+   teal-deep/section/gold-* families — which is why hero, footer, menu bar
+   and dropdowns rendered with no background. This file completes them.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  /* ── Original NXS brand tokens (restored, complete family) ── */
+  --color-teal: var(--teal);
+  --color-teal-deep: var(--teal-deep);
+  --color-teal-soft: var(--teal-soft);
+  --color-teal-tint: var(--teal-tint);
+  --color-gold: var(--gold);
+  --color-gold-deep: var(--gold-deep);
+  --color-gold-soft: var(--gold-soft);
+  --color-gold-on: var(--gold-on);
+  --color-ochre: var(--ochre);
+  --color-danger: var(--danger);
+  --color-warn: var(--warn);
+  --color-warn-foreground: var(--warn-foreground);
+  --color-raised: var(--raised);
+  --color-section: var(--section);
+  --color-canvas: var(--canvas);
+  --color-floating: var(--floating);
+  --color-urgent: var(--urgent);
+  --radius-card: 0.75rem;
+  --radius-control: 0.625rem;
+  --radius-pill: 9999px;
+}
+
+:root {
+  /* TengaSell brand: Teal #19717B / Gold #DFAE2E / Deep gold #AF7A14 (NXS) */
+  --radius: 0.5rem;
+  --background: #fafaf7; /* canvas — warm off-white page */
+  --foreground: #1c2424;
+  --card: #ffffff;
+  --card-foreground: #1c2424;
+  --popover: #ffffff;
+  --popover-foreground: #1c2424;
+  --primary: #19717b;
+  --primary-foreground: #ffffff;
+  --secondary: #f0f2f0;
+  --secondary-foreground: #14454e;
+  --muted: #f0f2f0;
+  --muted-foreground: #5c6a6a;
+  --accent: #f0f2f0;
+  --accent-foreground: #14454e;
+  --destructive: #c64141;
+  --border: #e3e7e5;
+  --input: #e3e7e5;
+  --ring: #19717b;
+  --chart-1: #19717b;
+  --chart-2: #dfae2e;
+  --chart-3: #af7a14;
+  --chart-4: #6cbec2;
+  --chart-5: #c47d1a;
+  /* Brand family */
+  --teal: #19717b;
+  --teal-deep: #0f4a50; /* hero panel, footer, headings on light */
+  --teal-soft: #6cbec2; /* light teal: text on teal-deep, live accents */
+  --teal-tint: #e6f1f2; /* palest teal: icon chips, tinted fills */
+  --gold: #dfae2e;
+  --gold-deep: #af7a14; /* hover gold, status text on gold-soft */
+  --gold-soft: #f8ecc8; /* light gold tint fills */
+  --gold-on: #3a2b05; /* text ON gold buttons (espresso) */
+  --ochre: #c47d1a; /* tag orange */
+  --danger: #c64141;
+  --warn: #af7a14;
+  --warn-foreground: #ffffff;
+  --urgent: #d14343; /* badges, ending-soon urgency */
+  --raised: #ffffff; /* raised surface (inputs, cards, sidebars) */
+  --section: #ffffff; /* header, tab bar, strips */
+  --canvas: #fafaf7; /* page canvas behind cards */
+  --floating: #ffffff; /* dropdowns, popovers, menus */
+  --sidebar: #ffffff;
+  --sidebar-foreground: #1c2424;
+  --sidebar-primary: #19717b;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f0f2f0;
+  --sidebar-accent-foreground: #14454e;
+  --sidebar-border: #e3e7e5;
+  --sidebar-ring: #19717b;
+}
+
+.dark {
+  --background: #0f1616;
+  --foreground: #e6ecec;
+  --card: #1a2626;
+  --card-foreground: #e6ecec;
+  --popover: #1a2626;
+  --popover-foreground: #e6ecec;
+  --primary: #3fa0ac;
+  --primary-foreground: #06181c;
+  --secondary: #1a2626;
+  --secondary-foreground: #d7e6e9;
+  --muted: #1e2b2b;
+  --muted-foreground: #93a8ad;
+  --accent: #223330;
+  --accent-foreground: #bfe3e6;
+  --destructive: #e05d4d;
+  --border: #273535;
+  --input: #273535;
+  --ring: #6cbec2;
+  --chart-1: #6cbec2;
+  --chart-2: #e5bc49;
+  --chart-3: #d1a03a;
+  --chart-4: #48c2ab;
+  --chart-5: #8ca3a8;
+  /* Brand family (dark) */
+  --teal: #6cbec2;
+  --teal-deep: #0f4a50; /* brand surfaces stay constant */
+  --teal-soft: #9bd2d8;
+  --teal-tint: #14343a;
+  --gold: #e5bc49;
+  --gold-deep: #d1a03a;
+  --gold-soft: #3a2f10;
+  --gold-on: #3a2b05; /* text on gold stays espresso */
+  --ochre: #d8974a;
+  --danger: #ef8a7d;
+  --warn: #d1a03a;
+  --warn-foreground: #231803;
+  --urgent: #e05d4d;
+  --raised: #1a2626;
+  --section: #141e1e;
+  --canvas: #0f1616;
+  --floating: #1a2626;
+  --sidebar: #141e1e;
+  --sidebar-foreground: #e6ecec;
+  --sidebar-primary: #3fa0ac;
+  --sidebar-primary-foreground: #06181c;
+  --sidebar-accent: #1a2626;
+  --sidebar-accent-foreground: #d7e6e9;
+  --sidebar-border: #273535;
+  --sidebar-ring: #6cbec2;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  /* 44px minimum touch targets for interactive elements (A11Y) */
+  button, [role="button"], a.btn-tap {
+    min-height: 44px;
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+/* ── Custom scrollbars (original utility: ts-scrollbar, 99 usages) ── */
+.ts-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+.ts-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.ts-scrollbar::-webkit-scrollbar-thumb { background: #c3d2d5; border-radius: 8px; }
+.ts-scrollbar::-webkit-scrollbar-thumb:hover { background: #9fb6bb; }
+.dark .ts-scrollbar::-webkit-scrollbar-thumb { background: #2e3f3f; }
+.dark .ts-scrollbar::-webkit-scrollbar-thumb:hover { background: #40595a; }
+/* rebuild-era alias kept for merged components */
+.tgs-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.tgs-scroll::-webkit-scrollbar-track { background: transparent; }
+.tgs-scroll::-webkit-scrollbar-thumb { background: #c3d2d5; border-radius: 8px; }
+.tgs-scroll::-webkit-scrollbar-thumb:hover { background: #9fb6bb; }
+
+.tgs-gradient-gold { background: linear-gradient(135deg, #dfae2e 0%, #af7a14 100%); }
+.tgs-gradient-teal { background: linear-gradient(135deg, #19717b 0%, #0f4a50 100%); }
+
+/* ── Original NXS typographic + numeric utilities (restored, complete) ── */
+@utility text-caption {
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+@utility text-label {
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+@utility text-body {
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+@utility text-title {
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  font-weight: 600;
+}
+@utility text-display {
+  font-size: 2.25rem;
+  line-height: 1.15;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+@utility ts-numeric {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+}
+@utility ts-safe-bottom {
+  padding-bottom: max(env(safe-area-inset-bottom), 0.25rem);
+}
+@utility safe-bottom {
+  padding-bottom: max(env(safe-area-inset-bottom), 0.25rem);
+}
+@utility safe-top {
+  padding-top: max(env(safe-area-inset-top), 0px);
+}

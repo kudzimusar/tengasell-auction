@@ -1,0 +1,183 @@
+# Tengasell — TrailBase configuration (proto2 text format)
+# Schema: https://github.com/trailbaseio/trailbase/blob/main/crates/core/proto/config.proto
+
+email {}
+
+server {
+  application_name: "Tengasell"
+  site_url: "https://tengasell.com"
+}
+
+auth {
+  # Username-based sign-in: instant login, no email verification blocker for the demo.
+  user_identifier: REQUIRE_USERNAME
+  auth_token_ttl_sec: 86400
+  refresh_token_ttl_sec: -1
+  password_minimal_length: 8
+}
+
+jobs {}
+
+# ---------------------------------------------------------------------------
+# Record APIs. Access rules are SQL expressions over _USER_, _ROW_, _REQ_.
+# ADMIN  == EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)
+# The trade-engine (port 3002) acts as the admin user for server-side writes.
+# ---------------------------------------------------------------------------
+
+record_apis: [
+  {
+    name: "categories"
+    table_name: "categories"
+    acl_world: [READ]
+    acl_authenticated: [CREATE, READ, UPDATE, DELETE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    delete_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "profiles"
+    table_name: "profiles"
+    acl_world: [READ]
+    acl_authenticated: [CREATE, READ, UPDATE, DELETE]
+    autofill_missing_user_id_columns: true
+    create_access_rule: "((_REQ_.user IS NULL) OR (_REQ_.user = _USER_.id) OR (EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)))"
+    update_access_rule: "(_ROW_.user = _USER_.id) OR (EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE))"
+    delete_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auctions"
+    table_name: "auctions"
+    acl_world: [READ]
+    acl_authenticated: [CREATE, READ, UPDATE, DELETE]
+    create_access_rule: "(_REQ_.user = _USER_.id) OR (EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE))"
+    update_access_rule: "((_ROW_.user = _USER_.id) AND (_ROW_.status = 'draft')) OR (EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE))"
+    delete_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    # Bids are written exclusively by the trade engine (proxy-bid integrity).
+    name: "bids"
+    table_name: "bids"
+    acl_world: [READ]
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "watchlist"
+    table_name: "watchlist"
+    acl_authenticated: [CREATE, READ, DELETE]
+    create_access_rule: "(_REQ_.user = _USER_.id) OR (EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE))"
+    read_access_rule: "(_ROW_.user = _USER_.id) OR (EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE))"
+    delete_access_rule: "(_ROW_.user = _USER_.id) OR (EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE))"
+  },
+  {
+    # Public Q&A on listings (Yahoo Auctions style)
+    name: "questions"
+    table_name: "questions"
+    acl_world: [READ]
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "(_REQ_.user = _USER_.id) OR (EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE))"
+    update_access_rule: "(_ROW_.user = _USER_.id) OR (EXISTS(SELECT 1 FROM auctions WHERE auctions.id = _ROW_.auction_id AND auctions.user = _USER_.id)) OR (EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE))"
+  },
+  {
+    name: "threads"
+    table_name: "threads"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    read_access_rule: "(_ROW_.buyer_user = _USER_.id) OR (_ROW_.seller_user = _USER_.id) OR (EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE))"
+    create_access_rule: "(_REQ_.buyer_user = _USER_.id) OR (_REQ_.seller_user = _USER_.id) OR (EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE))"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "messages"
+    table_name: "messages"
+    acl_authenticated: [CREATE, READ]
+    read_access_rule: "(EXISTS(SELECT 1 FROM threads WHERE threads.id = _ROW_.thread_id AND (threads.buyer_user = _USER_.id OR threads.seller_user = _USER_.id))) OR (EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE))"
+    create_access_rule: "(_REQ_.user = _USER_.id) OR (EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE))"
+  },
+  {
+    name: "orders"
+    table_name: "orders"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    read_access_rule: "(_ROW_.buyer_user = _USER_.id) OR (_ROW_.seller_user = _USER_.id) OR (EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE))"
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "(_ROW_.buyer_user = _USER_.id) OR (_ROW_.seller_user = _USER_.id) OR (EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE))"
+  },
+  {
+    name: "payments"
+    table_name: "payments"
+    acl_authenticated: [CREATE, READ]
+    read_access_rule: "(EXISTS(SELECT 1 FROM orders WHERE orders.id = _ROW_.order_id AND (orders.buyer_user = _USER_.id OR orders.seller_user = _USER_.id))) OR (EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE))"
+    # Admin-only create — the trade engine + /api/paynow/* routes settle
+    # orders by inserting payment rows with the admin token (bids pattern).
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    # Paynow payment sessions — written by the /api/paynow/* routes with the
+    # admin token only (same access pattern as `bids`: CREATE/UPDATE in the
+    # authenticated list, gated to admins by the SQL rules).
+    name: "paynow_sessions"
+    table_name: "paynow_sessions"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    read_access_rule: "(EXISTS(SELECT 1 FROM orders WHERE orders.id = _ROW_.order_id AND (orders.buyer_user = _USER_.id OR orders.seller_user = _USER_.id))) OR (EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE))"
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    # Public feedback (Yahoo Auctions-style ratings)
+    name: "ratings"
+    table_name: "ratings"
+    acl_world: [READ]
+    acl_authenticated: [CREATE, UPDATE]
+    create_access_rule: "(_REQ_.user = _USER_.id) OR (EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE))"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "notifications"
+    table_name: "notifications"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    read_access_rule: "(_ROW_.user = _USER_.id) OR (EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE))"
+    update_access_rule: "(_ROW_.user = _USER_.id) OR (EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE))"
+    # Admin-only create — the trade engine + /api/paynow/* routes insert
+    # system notifications (payment received, shipped, …) with the admin
+    # token (bids pattern).
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    # Agent/MCP audit trail — writable by any authenticated identity
+    name: "audit_events"
+    table_name: "audit_events"
+    acl_authenticated: [CREATE, READ]
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    # Gap-8: Saved searches — user-owned CRUD (watchlist pattern); the
+    # trade engine (admin) advances last_seen_id when alert matches fire.
+    name: "saved_searches"
+    table_name: "saved_searches"
+    acl_authenticated: [CREATE, READ, UPDATE, DELETE]
+    create_access_rule: "(_REQ_.user = _USER_.id) OR (EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE))"
+    read_access_rule: "(_ROW_.user = _USER_.id) OR (EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE))"
+    update_access_rule: "(_ROW_.user = _USER_.id) OR (EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE))"
+    delete_access_rule: "(_ROW_.user = _USER_.id) OR (EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE))"
+  },
+  {
+    # Gap-8: Best-Offer/haggle — public read (offer counts, like bids);
+    # ALL writes go through the trade engine (admin token) for validation.
+    name: "offers"
+    table_name: "offers"
+    acl_world: [READ]
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    # Gap-8: Live-room auction sessions — public read (room page); the
+    # engine (admin) drives host writes with host_user identity checks.
+    name: "live_sessions"
+    table_name: "live_sessions"
+    acl_world: [READ]
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  }
+]

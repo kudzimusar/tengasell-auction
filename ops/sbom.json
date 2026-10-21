@@ -1,0 +1,634 @@
+{
+  "generated_at": "2026-10-20T04:11:58.146Z",
+  "spec": "Tengasell v1 SBOM (first-party declared dependencies)",
+  "products": {
+    "app": {
+      "name": "tengasell-web",
+      "path": "package.json",
+      "lockfile": "bun.lock"
+    },
+    "services": [
+      {
+        "name": "trailbase-db",
+        "path": "mini-services/trailbase-db/package.json",
+        "note": "zero-dependency Bun service (node:http + bun:sqlite)"
+      },
+      {
+        "name": "trade-engine",
+        "path": "mini-services/trade-engine/package.json",
+        "note": "zero-dependency Bun service (node:http + bun:sqlite)"
+      },
+      {
+        "name": "gis-service",
+        "path": "mini-services/gis-service/package.json",
+        "note": "zero-dependency Bun service (node:http + bun:sqlite)"
+      },
+      {
+        "name": "comms-service",
+        "path": "mini-services/comms-service/package.json",
+        "note": "zero-dependency Bun service (node:http + bun:sqlite)"
+      },
+      {
+        "name": "finance-service",
+        "path": "mini-services/finance-service/package.json",
+        "note": "zero-dependency Bun service (node:http + bun:sqlite)"
+      },
+      {
+        "name": "trust-service",
+        "path": "mini-services/trust-service/package.json",
+        "note": "zero-dependency Bun service (node:http + bun:sqlite)"
+      },
+      {
+        "name": "govern-service",
+        "path": "mini-services/govern-service/package.json",
+        "note": "zero-dependency Bun service (node:http + bun:sqlite)"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "@dnd-kit/core",
+      "version": "^6.3.1",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@dnd-kit/sortable",
+      "version": "^10.0.0",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@dnd-kit/utilities",
+      "version": "^3.2.2",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@hookform/resolvers",
+      "version": "^5.1.1",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@mdxeditor/editor",
+      "version": "^3.39.1",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@prisma/client",
+      "version": "^6.11.1",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@radix-ui/react-accordion",
+      "version": "^1.2.11",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@radix-ui/react-alert-dialog",
+      "version": "^1.1.14",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@radix-ui/react-aspect-ratio",
+      "version": "^1.1.7",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@radix-ui/react-avatar",
+      "version": "^1.1.10",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@radix-ui/react-checkbox",
+      "version": "^1.3.2",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@radix-ui/react-collapsible",
+      "version": "^1.1.11",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@radix-ui/react-context-menu",
+      "version": "^2.2.15",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@radix-ui/react-dialog",
+      "version": "^1.1.14",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@radix-ui/react-dropdown-menu",
+      "version": "^2.1.15",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@radix-ui/react-hover-card",
+      "version": "^1.1.14",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@radix-ui/react-label",
+      "version": "^2.1.7",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@radix-ui/react-menubar",
+      "version": "^1.1.15",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@radix-ui/react-navigation-menu",
+      "version": "^1.2.13",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@radix-ui/react-popover",
+      "version": "^1.1.14",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@radix-ui/react-progress",
+      "version": "^1.1.7",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@radix-ui/react-radio-group",
+      "version": "^1.3.7",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@radix-ui/react-scroll-area",
+      "version": "^1.2.9",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@radix-ui/react-select",
+      "version": "^2.2.5",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@radix-ui/react-separator",
+      "version": "^1.1.7",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@radix-ui/react-slider",
+      "version": "^1.3.5",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@radix-ui/react-slot",
+      "version": "^1.2.3",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@radix-ui/react-switch",
+      "version": "^1.2.5",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@radix-ui/react-tabs",
+      "version": "^1.1.12",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@radix-ui/react-toast",
+      "version": "^1.2.14",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@radix-ui/react-toggle",
+      "version": "^1.1.9",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@radix-ui/react-toggle-group",
+      "version": "^1.1.10",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@radix-ui/react-tooltip",
+      "version": "^1.2.7",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@reactuses/core",
+      "version": "^6.0.5",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@tanstack/react-query",
+      "version": "^5.82.0",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@tanstack/react-table",
+      "version": "^8.21.3",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "class-variance-authority",
+      "version": "^0.7.1",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "clsx",
+      "version": "^2.1.1",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "cmdk",
+      "version": "^1.1.1",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "date-fns",
+      "version": "^4.1.0",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "embla-carousel-react",
+      "version": "^8.6.0",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "framer-motion",
+      "version": "^12.23.2",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "input-otp",
+      "version": "^1.4.2",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "lucide-react",
+      "version": "^0.525.0",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "maplibre-gl",
+      "version": "^6.15.0",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "next",
+      "version": "^16.1.1",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "next-auth",
+      "version": "^4.24.11",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "next-intl",
+      "version": "^4.3.4",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "next-themes",
+      "version": "^0.4.6",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "prisma",
+      "version": "^6.11.1",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "react",
+      "version": "^19.0.0",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "react-day-picker",
+      "version": "^9.8.0",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "react-dom",
+      "version": "^19.0.0",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "react-hook-form",
+      "version": "^7.60.0",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "react-markdown",
+      "version": "^10.1.0",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "react-resizable-panels",
+      "version": "^3.0.3",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "react-syntax-highlighter",
+      "version": "^15.6.1",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "recharts",
+      "version": "^2.15.4",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "sharp",
+      "version": "^0.34.3",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "socket.io",
+      "version": "^4.8.4",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "socket.io-client",
+      "version": "^4.8.4",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "sonner",
+      "version": "^2.0.6",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "tailwind-merge",
+      "version": "^3.3.1",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "tailwindcss-animate",
+      "version": "^1.0.7",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "uuid",
+      "version": "^11.1.0",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "vaul",
+      "version": "^1.1.2",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "z-ai-web-dev-sdk",
+      "version": "^0.0.18",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "zod",
+      "version": "^4.0.2",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "zustand",
+      "version": "^5.0.6",
+      "type": "direct",
+      "scope": "app",
+      "dev": false
+    },
+    {
+      "name": "@tailwindcss/postcss",
+      "version": "^4",
+      "type": "direct",
+      "scope": "app",
+      "dev": true
+    },
+    {
+      "name": "@types/react",
+      "version": "^19",
+      "type": "direct",
+      "scope": "app",
+      "dev": true
+    },
+    {
+      "name": "@types/react-dom",
+      "version": "^19",
+      "type": "direct",
+      "scope": "app",
+      "dev": true
+    },
+    {
+      "name": "bun-types",
+      "version": "^1.3.4",
+      "type": "direct",
+      "scope": "app",
+      "dev": true
+    },
+    {
+      "name": "eslint",
+      "version": "^9",
+      "type": "direct",
+      "scope": "app",
+      "dev": true
+    },
+    {
+      "name": "eslint-config-next",
+      "version": "^16.1.1",
+      "type": "direct",
+      "scope": "app",
+      "dev": true
+    },
+    {
+      "name": "tailwindcss",
+      "version": "^4",
+      "type": "direct",
+      "scope": "app",
+      "dev": true
+    },
+    {
+      "name": "tw-animate-css",
+      "version": "^1.3.5",
+      "type": "direct",
+      "scope": "app",
+      "dev": true
+    },
+    {
+      "name": "typescript",
+      "version": "^5",
+      "type": "direct",
+      "scope": "app",
+      "dev": true
+    },
+    {
+      "name": "socket.io",
+      "version": "^4.8.4",
+      "type": "direct",
+      "scope": "service",
+      "dev": false
+    }
+  ],
+  "runtimes": [
+    {
+      "name": "bun",
+      "version": "v24.3.0",
+      "note": "service runtime (mini-services + ops scripts)"
+    },
+    {
+      "name": "node",
+      "version": "24 (platform-managed dev server)",
+      "note": "Next.js dev-server runtime; node:sqlite BFF helpers"
+    },
+    {
+      "name": "sqlite",
+      "version": "3.53 (TrailBase) / bun:sqlite + node:sqlite",
+      "note": "embedded database engine"
+    },
+    {
+      "name": "trailbase",
+      "version": "0.35.0",
+      "note": "Rust backend binary (mini-services/trailbase-db)"
+    }
+  ],
+  "component_count": 79,
+  "direct_count": 70,
+  "dev_count": 9,
+  "notes": [
+    "Direct = declared in a first-party package.json (this SBOM).",
+    "Full transitive resolution for the app lives in bun.lock (referenced, not flattened here).",
+    "Mini-services are intentionally zero-dependency: node:http + bun:sqlite only — verifiable in their package.json files.",
+    "TrailBase is a prebuilt Rust binary, not an npm dependency."
+  ]
+}
