@@ -21,6 +21,7 @@ primary_region = "jnb"          # Johannesburg — closest to Zimbabwe
   DATABASE_URL = "file:/data/db/custom.db"
   APP_URL = "https://tengasell-zw.fly.dev"
   NODE_ENV = "production"
+  GATEWAY_LOG = "1"
   # Seeded staff account (change before sharing the URL)
   ADMIN_USERNAME = "admin"
   ADMIN_PASSWORD = "Tengasell#2025"

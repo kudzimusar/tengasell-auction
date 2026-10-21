@@ -44,6 +44,9 @@ function resolveTarget(rawUrl) {
 
 const server = http.createServer((req, res) => {
   const { port, path } = resolveTarget(req.url || "/");
+  if (process.env.GATEWAY_LOG === "1") {
+    console.log(`[gateway] ${req.method} :${port} ${path}`);
+  }
 
   const proxied = http.request(
     {
@@ -54,6 +57,9 @@ const server = http.createServer((req, res) => {
       headers: { ...req.headers, host: `127.0.0.1:${port}` },
     },
     (upstream) => {
+      if (process.env.GATEWAY_LOG === "1") {
+        console.log(`[gateway] ${req.method} :${port} ${path} -> ${upstream.statusCode}`);
+      }
       res.writeHead(upstream.statusCode || 502, upstream.headers);
       upstream.pipe(res);
     },

@@ -87,18 +87,27 @@ let initialized = false;
 const modeListeners = new Set<(m: ApiMode) => void>();
 
 async function probeRemote(): Promise<boolean> {
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 2500);
-    const res = await fetch(
-      `/api/records/v1/categories?limit=1&XTransformPort=3001`,
-      { signal: controller.signal },
-    );
-    clearTimeout(timer);
-    return res.ok;
-  } catch {
-    return false;
+  // A single 2.5s attempt loses the race whenever the whole node (app +
+  // Trailbase + gateway) is starting or resuming: the request arrives before
+  // the records API is listening and the session silently degrades to demo.
+  // Retry a few times with a longer budget before giving up.
+  const delays = [0, 800, 2000];
+  for (const delay of delays) {
+    if (delay) await new Promise((r) => setTimeout(r, delay));
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(
+        `/api/records/v1/categories?limit=1&XTransformPort=3001`,
+        { signal: controller.signal, cache: "no-store" },
+      );
+      clearTimeout(timer);
+      if (res.ok) return true;
+    } catch {
+      /* try again */
+    }
   }
+  return false;
 }
 
 /** Boot the API layer — call once from the app shell. */
