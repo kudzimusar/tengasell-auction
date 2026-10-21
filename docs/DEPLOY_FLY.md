@@ -70,7 +70,7 @@ curl -s "$APP/api/records/v1/categories?limit=1&XTransformPort=3001" | head -c 1
 curl -s -o /dev/null -w '%{http_code}\n' -X POST \
   "$APP/api/auth/v1/login?XTransformPort=3001" \
   -H 'content-type: application/json' \
-  -d '{"username":"admin","password":"Tengasell#2025"}'                 # 200
+  -d '{"username":"admin","password":"<from the vault>"}'                 # 200
 ```
 
 The app picks **live mode** automatically once that records probe succeeds — the same probe
