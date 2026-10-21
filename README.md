@@ -193,6 +193,10 @@ down — it is **not** a green light. Reducing these numbers is the first mainte
 routes, the Prisma/SQLite store, WebSockets or the microservices. Instead the build uses the app's
 own offline adapter, so the marketplace is fully clickable but seeded and browser-local.
 
+**Running the real node** (Next + gateway + Trailbase + services) is documented step by step in
+[`docs/REAL_STACK.md`](docs/REAL_STACK.md) — including the verified port map, the gateway that
+mirrors `Caddyfile`, and the migration-ordering trap that silently skips Gap-8 tables.
+
 For the real product:
 
 - **Application runtime** → a Node host such as Vercel, Render or Fly.io. `npm run build` emits
