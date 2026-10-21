@@ -168,6 +168,19 @@ bun ops/gap8-check.ts     # feature-gap verification
 
 CI uses a throwaway SQLite database (`ci.db`) and never touches real data or secrets.
 
+### Known baseline debt
+
+The imported codebase does not currently pass its own static checks:
+
+| Check | Baseline | Status |
+| --- | --- | --- |
+| ESLint | 18 errors, 1080 warnings (mostly `react-hooks/set-state-in-effect`) | Non-blocking CI job, reported each run |
+| `tsc --noEmit` | ~312 diagnostics | Non-blocking CI job, reported each run |
+
+The app has always built with `typescript.ignoreBuildErrors: true`, so `next build` succeeds despite
+the diagnostics. The `quality` job exists to make the debt visible and measurable while it is paid
+down — it is **not** a green light. Reducing these numbers is the first maintenance milestone.
+
 ---
 
 ## Hosting
