@@ -18,12 +18,16 @@ built and verified.
 
 | Surface | URL |
 | --- | --- |
-| Project preview site (GitHub Pages) | https://kudzimusar.github.io/tengasell-auction/ |
+| **App demo (real UI, offline store)** | https://kudzimusar.github.io/tengasell-auction/ |
+| Written overview | https://kudzimusar.github.io/tengasell-auction/project/ |
 | Repository | https://github.com/kudzimusar/tengasell-auction |
 | CI runs | https://github.com/kudzimusar/tengasell-auction/actions |
 
-> GitHub Pages serves static files only. The preview site documents and showcases the product;
-> the interactive application requires a Node.js runtime (see [`Hosting`](#hosting)).
+> The Pages deployment runs the **actual marketplace interface**. Because Pages is static, it uses
+the app's built-in offline adapter (`src/lib/tengasell/api/local.ts`) instead of TrailBase: full
+browsing, auction rooms, sign-in, bidding and checkout work, but data is seeded and stored per
+browser. The complete product (real records, payments, services) needs a Node runtime + TrailBase —
+see [`Hosting`](#hosting).
 
 ---
 
@@ -164,7 +168,7 @@ bun ops/gap8-check.ts     # feature-gap verification
 | Workflow | Trigger | What it does |
 | --- | --- | --- |
 | `.github/workflows/ci.yml` | push / PR to `main` | install → Prisma generate → lint → typecheck → build → boot & probe API |
-| `.github/workflows/pages.yml` | push to `main` | publishes `docs/preview/` to GitHub Pages |
+| `.github/workflows/deploy-app-demo.yml` | push to `main` | builds the static demo (`scripts/build-static-demo.mjs`) and publishes it to `gh-pages` |
 
 CI uses a throwaway SQLite database (`ci.db`) and never touches real data or secrets.
 
@@ -185,16 +189,24 @@ down — it is **not** a green light. Reducing these numbers is the first mainte
 
 ## Hosting
 
-**GitHub Pages cannot run this application.** Pages is static hosting; TengaSell needs a Node.js
-server for its 252 API routes, Prisma/SQLite access, WebSockets and the microservices.
+**GitHub Pages runs the interface in demo mode.** Pages is static hosting: it cannot run the 252 API
+routes, the Prisma/SQLite store, WebSockets or the microservices. Instead the build uses the app's
+own offline adapter, so the marketplace is fully clickable but seeded and browser-local.
 
-- **Preview/documentation** → GitHub Pages (this repo's `docs/preview/`, automatic).
-- **Application runtime** → a Node host such as Vercel, Render or Fly.io. The build emits
+For the real product:
+
+- **Application runtime** → a Node host such as Vercel, Render or Fly.io. `npm run build` emits
   `.next/standalone`, which runs with `node .next/standalone/server.js`.
-- **Database** → SQLite is viable for a single-instance deployment; a managed database is
-  recommended before multi-instance production.
-- **Microservices** → deploy `mini-services/*` alongside the app (each has its own runtime
-  requirements; see `.zscripts/mini-services-*.sh`).
+- **Record store** → TrailBase (Rust) on `:3001`, configured by
+  `mini-services/trailbase-db/traildepot/` (6 migrations, 17 tables). The binary is a build
+  artifact and is not committed; use the matching TrailBase release for your platform.
+- **Database** → SQLite is viable for a single instance; a managed database is recommended before
+  multi-instance production.
+- **Microservices** → deploy `mini-services/*` alongside the app (see `.zscripts/mini-services-*.sh`).
+
+`scripts/build-static-demo.mjs` is what produces the Pages demo: it stashes `src/app/api` (an export
+cannot contain route handlers), builds with `output: export` + a base path, restores the API, and
+rewrites `/brand`, `/items` and `/maplibre` asset references for the sub-path.
 
 ---
 
