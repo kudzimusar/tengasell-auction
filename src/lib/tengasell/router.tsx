@@ -29,6 +29,8 @@ import {
 
 export interface RouteInfo {
   hash: string;
+  /** In-page anchor after a second "#" (e.g. "/help#fees" → "fees"). */
+  fragment?: string;
   path: string; // e.g. /item/12
   segments: string[]; // ["item", "12"]
   query: URLSearchParams;
@@ -36,7 +38,11 @@ export interface RouteInfo {
 }
 
 function parseHash(raw: string): RouteInfo {
-  const full = (raw || "").replace(/^#/, "") || "/";
+  const withoutLead = (raw || "").replace(/^#/, "") || "/";
+  // A second "#" is an in-page anchor (e.g. "/help#fees"). It must not become
+  // part of the route path, otherwise every footer link resolves to 404.
+  const [beforeAnchor, fragment = ""] = withoutLead.split("#");
+  const full = beforeAnchor || "/";
   const [pathPart, queryPart] = full.split("?");
   const path = pathPart.startsWith("/") ? pathPart : `/${pathPart}`;
   const segments = path.split("/").filter(Boolean);
@@ -46,6 +52,7 @@ function parseHash(raw: string): RouteInfo {
     segments,
     query: new URLSearchParams(queryPart || ""),
     full,
+    fragment,
   };
 }
 

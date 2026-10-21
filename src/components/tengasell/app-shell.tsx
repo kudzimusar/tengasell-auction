@@ -241,7 +241,7 @@ function AccountMenu() {
         </button>
         <button
           onClick={() => router.navigate("/register")}
-          className="hidden sm:inline-flex min-h-11 px-4 rounded-control text-label font-semibold bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
+          className="hidden min-[380px]:inline-flex shrink-0 items-center justify-center whitespace-nowrap min-h-11 px-3 sm:px-4 leading-none rounded-control text-label font-semibold bg-primary text-primary-foreground shadow-sm hover:opacity-95 hover:shadow active:scale-[.98] transition-all"
         >
           {t("nav.register")}
         </button>
@@ -532,35 +532,48 @@ function Footer() {
       // footer line is never obscured at scroll end; md has no tab bar.
       className="mt-auto bg-teal-deep text-white/90 pb-[calc(72px+env(safe-area-inset-bottom,0px))] md:pb-0"
     >
-      <div className="mx-auto max-w-7xl px-4 py-10 grid gap-8 md:grid-cols-3 lg:grid-cols-6">
-        <div className="md:col-span-1">
+      <div className="mx-auto max-w-7xl px-4 py-12 grid gap-10 md:grid-cols-2 lg:grid-cols-6">
+        <div className="md:col-span-2 lg:col-span-1">
           <TengaLogo size={38} tagline />
-          <p className="text-caption text-white/70 mt-3">
+          <p className="text-caption text-white/70 mt-3 max-w-xs leading-relaxed">
             Zimbabwe&apos;s auction marketplace. Bid, win, smile — a snap to your
             happy deal.
           </p>
-          <div className="flex gap-2 mt-4 text-caption text-white/70">
-            <a href="https://x.com/tengasell" target="_blank" rel="noreferrer noopener" className="hover:text-gold transition-colors">X</a>
-            <a href="https://instagram.com/tengasell" target="_blank" rel="noreferrer noopener" className="hover:text-gold transition-colors">Instagram</a>
-            <a href="https://facebook.com/tengasell" target="_blank" rel="noreferrer noopener" className="hover:text-gold transition-colors">Facebook</a>
+          <div className="flex flex-wrap gap-2 mt-5">
+            {[
+              { label: "X", href: "https://x.com/tengasell" },
+              { label: "Instagram", href: "https://instagram.com/tengasell" },
+              { label: "Facebook", href: "https://facebook.com/tengasell" },
+            ].map((s) => (
+              <a
+                key={s.label}
+                href={s.href}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="inline-flex items-center rounded-full border border-white/20 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-white/75 hover:border-gold/70 hover:text-gold transition-colors"
+              >
+                {s.label}
+              </a>
+            ))}
           </div>
         </div>
         {cols.map((col) => (
-          <div key={col.title}>
-            <h3 className="text-label font-bold text-gold mb-2">{col.title}</h3>
-            <ul className="space-y-1.5">
+          <nav key={col.title} aria-label={col.title}>
+            <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-gold/90 mb-3">{col.title}</h3>
+            <ul className="space-y-2">
               {col.links.map((l) => (
                 <li key={l.label}>
                   <a
                     href={`#${l.to}`}
-                    className="text-caption text-white/80 hover:text-white hover:underline transition-colors"
+                    className="group inline-flex items-center gap-1.5 text-caption text-white/75 hover:text-white transition-colors"
                   >
+                    <span className="h-px w-0 bg-gold transition-all duration-200 group-hover:w-3" aria-hidden />
                     {l.label}
                   </a>
                 </li>
               ))}
             </ul>
-          </div>
+          </nav>
         ))}
       </div>
       <div className="border-t border-white/15">

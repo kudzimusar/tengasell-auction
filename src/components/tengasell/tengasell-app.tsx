@@ -82,6 +82,16 @@ function RouteView() {
   const seg = route.segments;
   const key = `${route.full}:${mode}`;
 
+  // Deep links such as /help#fees: scroll the section into view once rendered.
+  useEffect(() => {
+    if (!route.fragment) return;
+    const id = route.fragment;
+    const raf = requestAnimationFrame(() => {
+      document.getElementById(id)?.scrollIntoView({ block: "start", behavior: "smooth" });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [route.fragment, key]);
+
   // demo-mode sweep keeps local auction endings honest
   useInterval(demoSweep, 30_000);
 
