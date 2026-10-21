@@ -82,3 +82,6 @@ server.log
 .env
 .env.local
 .env.*.local
+# local tool binaries (Trailbase is downloaded, never committed)
+/.tools/
+*.zip
