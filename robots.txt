@@ -1,0 +1,6 @@
+User-Agent: *
+Allow: /
+Disallow: /api/
+
+Host: http://localhost:81
+Sitemap: http://localhost:81/sitemap.xml

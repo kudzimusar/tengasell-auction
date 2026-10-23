@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 480" width="960" height="480" role="img" aria-labelledby="gis-title gis-desc">
+  <title id="gis-title">Tengasell GIS architecture — data flow</title>
+  <desc id="gis-desc">Browser to Next.js BFF to GIS stack (geocoding, routing, tiles) with caches and a production docker path.</desc>
+  <style>
+    .box { stroke-width: 1.5; rx: 10; }
+    .lbl { font: 600 13px ui-sans-serif, system-ui, sans-serif; fill: #17333a; }
+    .sub { font: 400 11px ui-sans-serif, system-ui, sans-serif; fill: #4d6a70; }
+    .ep  { font: 500 10.5px ui-monospace, SFMono-Regular, Menlo, monospace; fill: #19717B; }
+    .arrow { stroke: #7d9aa0; stroke-width: 1.6; fill: none; marker-end: url(#ah); }
+    .dash  { stroke: #AF7A14; stroke-width: 1.6; fill: none; stroke-dasharray: 5 4; marker-end: url(#ah2); }
+    .cap   { font: 600 10.5px ui-sans-serif, system-ui, sans-serif; fill: #6b7f84; }
+  </style>
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#7d9aa0"/>
+    </marker>
+    <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#AF7A14"/>
+    </marker>
+  </defs>
+
+  <rect width="960" height="480" fill="#fbf8f1"/>
+
+  <!-- Browser -->
+  <rect class="box" x="30" y="170" width="190" height="120" rx="12" fill="#ffffff" stroke="#19717B"/>
+  <text class="lbl" x="125" y="195" text-anchor="middle">Browser (SPA at /)</text>
+  <text class="sub" x="125" y="212" text-anchor="middle">MapLibre GL JS map</text>
+  <text class="sub" x="125" y="228" text-anchor="middle">address autocomplete</text>
+  <text class="sub" x="125" y="244" text-anchor="middle">checkout delivery quote</text>
+  <text class="sub" x="125" y="260" text-anchor="middle">courier route tracking</text>
+
+  <!-- BFF -->
+  <rect class="box" x="300" y="150" width="230" height="160" rx="12" fill="#ffffff" stroke="#19717B"/>
+  <text class="lbl" x="415" y="176" text-anchor="middle">Next.js server :3000</text>
+  <text class="sub" x="415" y="192" text-anchor="middle">BFF — /api/geo/*</text>
+  <text class="ep" x="415" y="212" text-anchor="middle">/geo/search /geo/reverse</text>
+  <text class="ep" x="415" y="226" text-anchor="middle">/geo/autocomplete /geo/route</text>
+  <text class="ep" x="415" y="240" text-anchor="middle">/geo/quote</text>
+  <text class="sub" x="415" y="262" text-anchor="middle">TTL caches · geocode 60s · route 300s</text>
+  <text class="sub" x="415" y="278" text-anchor="middle">2.5s timeouts · haversine fallback</text>
+  <text class="sub" x="415" y="294" text-anchor="middle">quote: base + $0.02/km − 25km free</text>
+
+  <!-- GIS stack (sandbox) -->
+  <rect class="box" x="620" y="40" width="310" height="190" rx="12" fill="#eef5f4" stroke="#19717B"/>
+  <text class="lbl" x="775" y="66" text-anchor="middle">GIS stack — sandbox :3004 (bun)</text>
+  <rect x="640" y="82" width="130" height="34" rx="8" fill="#ffffff" stroke="#6CBEC2"/>
+  <text class="ep" x="705" y="96" text-anchor="middle">/search /reverse</text>
+  <text class="cap" x="705" y="110" text-anchor="middle">gazetteer · 80 places</text>
+  <rect x="786" y="82" width="124" height="34" rx="8" fill="#ffffff" stroke="#6CBEC2"/>
+  <text class="ep" x="848" y="96" text-anchor="middle">/api?q=</text>
+  <text class="cap" x="848" y="110" text-anchor="middle">autocomplete</text>
+  <rect x="640" y="126" width="130" height="34" rx="8" fill="#ffffff" stroke="#DFAE2E"/>
+  <text class="ep" x="705" y="140" text-anchor="middle">/route /table</text>
+  <text class="cap" x="705" y="154" text-anchor="middle">Dijkstra road graph</text>
+  <rect x="786" y="126" width="124" height="34" rx="8" fill="#ffffff" stroke="#DFAE2E"/>
+  <text class="ep" x="848" y="140" text-anchor="middle">/{z}/{x}/{y}.pbf</text>
+  <text class="cap" x="848" y="154" text-anchor="middle">MVT encoder z0–14</text>
+  <text class="sub" x="775" y="180" text-anchor="middle">/styles/tengasell.json — MapLibre style</text>
+  <text class="sub" x="775" y="200" text-anchor="middle">caches: geocode 24h · route 1h · tiles 5000 LRU</text>
+
+  <!-- Production stack -->
+  <rect class="box" x="620" y="270" width="310" height="180" rx="12" fill="#fdf6e7" stroke="#AF7A14"/>
+  <text class="lbl" x="775" y="296" text-anchor="middle">Production — docker-compose (infra/gis)</text>
+  <rect x="640" y="312" width="138" height="34" rx="8" fill="#ffffff" stroke="#AF7A14"/>
+  <text class="ep" x="709" y="326" text-anchor="middle">Nominatim :8088</text>
+  <text class="cap" x="709" y="340" text-anchor="middle">geocode · Zim .osm.pbf</text>
+  <rect x="794" y="312" width="116" height="34" rx="8" fill="#ffffff" stroke="#AF7A14"/>
+  <text class="ep" x="852" y="326" text-anchor="middle">Photon :2322</text>
+  <text class="cap" x="852" y="340" text-anchor="middle">autocomplete</text>
+  <rect x="640" y="356" width="138" height="34" rx="8" fill="#ffffff" stroke="#AF7A14"/>
+  <text class="ep" x="709" y="370" text-anchor="middle">OSRM :5000</text>
+  <text class="cap" x="709" y="384" text-anchor="middle">route · table · car profile</text>
+  <rect x="794" y="356" width="116" height="34" rx="8" fill="#ffffff" stroke="#AF7A14"/>
+  <text class="ep" x="852" y="370" text-anchor="middle">TileServer GL</text>
+  <text class="cap" x="852" y="384" text-anchor="middle">zimbabwe.mbtiles</text>
+  <text class="sub" x="775" y="412" text-anchor="middle">same API contracts → BFF switches by</text>
+  <text class="sub" x="775" y="428" text-anchor="middle">GIS_BASE_URL, no code changes</text>
+
+  <!-- Arrows -->
+  <path class="arrow" d="M225 225 H295"/>
+  <text class="cap" x="260" y="216" text-anchor="middle">fetch /api/geo</text>
+  <path class="arrow" d="M535 200 C580 200 580 160 615 150"/>
+  <text class="cap" x="575" y="158" text-anchor="middle">JSON</text>
+  <path class="dash" d="M535 260 C580 260 580 350 615 350"/>
+  <text class="cap" x="578" y="360" text-anchor="middle">swap base URL</text>
+
+  <!-- Browser ↔ tiles note -->
+  <path class="arrow" d="M225 275 C360 400 420 420 300 430 M300 430 H610" transform="translate(0,-280)" opacity="0"/>
+  <text class="cap" x="415" y="340" text-anchor="middle" fill="#19717B">tiles reach the browser through</text>
+  <text class="cap" x="415" y="354" text-anchor="middle" fill="#19717B">the gateway: /data/zimbabwe/&#123;z&#125;/&#123;x&#125;/&#123;y&#125;.pbf?XTransformPort=3004</text>
+
+  <!-- Legend -->
+  <text class="cap" x="35" y="60">Tengasell GIS — open-source mapping stack (no proprietary APIs)</text>
+  <line x1="35" y1="80" x2="75" y2="80" stroke="#19717B" stroke-width="2"/>
+  <text class="cap" x="83" y="84">runtime data flow</text>
+  <line x1="35" y1="98" x2="75" y2="98" stroke="#AF7A14" stroke-width="2" stroke-dasharray="5 4"/>
+  <text class="cap" x="83" y="102">production switch (infra/gis)</text>
+</svg>

@@ -1,0 +1,7 @@
+:HL["/tengasell-auction/_next/static/chunks/1_ags_122z2wu.css","style"]
+:HL["/tengasell-auction/_next/static/chunks/3ge5h05lxfibh.css","style"]
+:HL["/tengasell-auction/_next/static/chunks/14egnxdaa3f8g.css","style"]
+:HL["/tengasell-auction/_next/static/media/83afe278b6a6bb3c-s.p.2bn3s6zvc0dyp.woff2","font",{"crossOrigin":"","type":"font/woff2"}]
+:HL["/tengasell-auction/_next/static/media/ad9c66e761fed85a-s.p.0fhiaplbf_4wa.woff2","font",{"crossOrigin":"","type":"font/woff2"}]
+1:[["children",{"s":"__PAGE__","h":160}]]
+0:{"b":"ZXfFVt7HyqA1vhjCsorHC","t":{"t":{"s":"","h":80,"c":"$Q1"}}}
