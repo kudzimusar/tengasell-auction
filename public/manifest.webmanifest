@@ -1,0 +1,26 @@
+{
+  "name": "TengaSell — Zimbabwe's Online Auction Marketplace",
+  "short_name": "TengaSell",
+  "description": "Bid, buy and sell in Zimbabwe's online auction marketplace. Live auctions, escrow-style buyer protection and Paynow checkout.",
+  "id": "/",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait-primary",
+  "background_color": "#19717B",
+  "theme_color": "#19717B",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["shopping", "business"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Browse auctions", "url": "/#/search" },
+    { "name": "Sell an item", "url": "/#/sell" },
+    { "name": "My orders", "url": "/#/orders" }
+  ]
+}
