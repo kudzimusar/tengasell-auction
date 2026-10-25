@@ -325,4 +325,136 @@ export async function submitFinalizationCommand(
       (input.buyer && String(existing.buyer_user) !== String(input.buyer.id)) ||
       !sameNumber(existing.final_price, input.price ?? null);
     if (mismatched) {
-     
+      return {
+        ok: false,
+        code: "IDEMPOTENCY_KEY_REUSE",
+        error: rejectionMessage("IDEMPOTENCY_KEY_REUSE"),
+        commandKey,
+        replayed: true,
+      };
+    }
+  } else {
+    const id = await store.create("auction_finalization_commands", {
+      command_key: commandKey,
+      auction_id: input.auctionId,
+      source: input.source,
+      requested_outcome: input.requestedOutcome,
+      buyer_user: input.buyer?.id ?? null,
+      buyer_username: input.buyer?.username ?? null,
+      final_price: input.price == null ? null : Math.round(Number(input.price) * 100) / 100,
+      address: input.address?.trim() ? input.address.trim().slice(0, 200) : null,
+      expected_version: input.expectedVersion ?? null,
+    });
+    existing = id != null
+      ? await store.get("auction_finalization_commands", id)
+      : await findByCommandKey(store, "auction_finalization_commands", commandKey);
+    replayed = id == null && existing != null;
+  }
+
+  if (!existing) {
+    return {
+      ok: false,
+      code: "COMMAND_PERSIST_FAILED",
+      error: "The finalization command could not be persisted.",
+      commandKey,
+      replayed,
+    };
+  }
+
+  if (existing.status !== "accepted" && existing.status !== "idempotent_existing") {
+    const code = String(existing.error_code ?? "COMMAND_REJECTED");
+    return {
+      ok: false,
+      code,
+      error: rejectionMessage(code),
+      commandKey,
+      replayed,
+      command: existing,
+    };
+  }
+
+  const auction = await store.get("auctions", input.auctionId);
+  const orderId = existing.result_order_id == null ? null : Number(existing.result_order_id);
+  const order = orderId != null ? await store.get("orders", orderId) : null;
+  return {
+    ok: true,
+    commandKey,
+    replayed: replayed || existing.status === "idempotent_existing",
+    outcome: existing.result_outcome as "sold" | "unsold" | undefined,
+    orderId,
+    price: existing.result_price == null ? null : Number(existing.result_price),
+    auction,
+    order,
+    command: existing,
+  };
+}
+
+/** Query timestamps are only an optimization. The SQLite trigger re-checks
+ * database server time before it accepts either finalization command. */
+export async function sweepTimedAuctionCommands(store: AuctionCoreStore): Promise<number> {
+  const due = await store.list(
+    "auctions",
+    `filter[status][$eq]=live&filter[ends_at][$lte]=${encodeURIComponent(isoNow())}&limit=100`,
+  );
+  let accepted = 0;
+  for (const auction of due) {
+    const result = await submitFinalizationCommand(store, {
+      commandKey: `timer:${auction.id}:v${Number(auction.version ?? 0)}`,
+      auctionId: Number(auction.id),
+      source: "TIMED_SWEEP",
+      requestedOutcome: "AUTO",
+      expectedVersion: Number(auction.version ?? 0),
+    });
+    if (result.ok) accepted += 1;
+  }
+  return accepted;
+}
+
+export async function sweepLiveHammerCommands(store: AuctionCoreStore): Promise<number> {
+  const rooms = await store.list(
+    "live_sessions",
+    `filter[status][$eq]=live&filter[close_at][$lte]=${encodeURIComponent(isoNow())}&limit=50`,
+  );
+  let accepted = 0;
+  for (const session of rooms) {
+    const auctionId = Number(session.current_lot_id ?? 0);
+    if (!auctionId) continue;
+    const auction = await store.get("auctions", auctionId);
+    if (!auction || auction.status !== "live") continue;
+    const result = await submitFinalizationCommand(store, {
+      commandKey: `hammer:${session.id}:${auctionId}:v${Number(auction.version ?? 0)}`,
+      auctionId,
+      source: "LIVE_HAMMER",
+      requestedOutcome: "AUTO",
+      expectedVersion: Number(auction.version ?? 0),
+    });
+    if (result.ok) accepted += 1;
+  }
+  return accepted;
+}
+
+export async function flushAuctionOutbox(
+  store: AuctionCoreStore,
+  publish: (event: AuctionOutboxEnvelope) => Promise<void>,
+  limit = 100,
+): Promise<{ published: number; failed: number }> {
+  const pending = await store.list(
+    "auction_outbox",
+    `filter[published_at][$is]=NULL&order=id&limit=${Math.max(1, Math.min(500, limit))}`,
+  );
+  let published = 0;
+  let failed = 0;
+  for (const raw of pending) {
+    const event = raw as AuctionOutboxEnvelope;
+    try {
+      await publish(event);
+      const ok = await store.update("auction_outbox", event.id, { published_at: isoNow() });
+      if (!ok) throw new Error(`outbox ack failed for ${event.event_key}`);
+      published += 1;
+    } catch (err) {
+      failed += 1;
+      console.error("[auction-outbox]", event.event_key, err);
+    }
+  }
+  return { published, failed };
+}
