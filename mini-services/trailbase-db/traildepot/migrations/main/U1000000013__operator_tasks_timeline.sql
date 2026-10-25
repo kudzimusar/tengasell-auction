@@ -93,6 +93,18 @@ CREATE INDEX IF NOT EXISTS idx_timeline_entity ON auction_timeline_events(entity
 CREATE INDEX IF NOT EXISTS idx_timeline_settlement ON auction_timeline_events(settlement_id,id);
 CREATE INDEX IF NOT EXISTS idx_timeline_event ON auction_timeline_events(event_id,id);
 
+CREATE TRIGGER IF NOT EXISTS trg_timeline_immutable_update
+BEFORE UPDATE ON auction_timeline_events
+BEGIN
+  SELECT RAISE(ABORT,'TIMELINE_IMMUTABLE');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_timeline_immutable_delete
+BEFORE DELETE ON auction_timeline_events
+BEGIN
+  SELECT RAISE(ABORT,'TIMELINE_IMMUTABLE');
+END;
+
 CREATE TABLE IF NOT EXISTS auction_operator_alerts (
   id                 INTEGER PRIMARY KEY AUTOINCREMENT,
   alert_key          TEXT NOT NULL UNIQUE,
