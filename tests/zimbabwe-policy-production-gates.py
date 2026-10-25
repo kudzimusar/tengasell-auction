@@ -86,10 +86,15 @@ def main() -> None:
     current_price = 1000.0
     db.execute(
         """INSERT INTO auctions(
-          id,user,seller_username,title,start_price,current_price,ends_at,started_at,
-          status,created_at,updated_at,asset_kind
-        ) VALUES(?,?,?,'Zimbabwe policy synthetic lot',?,?,datetime('now','+4 hours'),
-                 datetime('now','-1 hour'),'live',datetime('now'),datetime('now'),'general')""",
+          id,user,seller_username,title,slug,description,category,condition,
+          start_price,current_price,bid_count,watch_count,views,shipping_fee,shipping,city,
+          ends_at,started_at,status,extension_count,featured,images,created_at,updated_at,
+          allow_offers,asset_kind
+        ) VALUES(?,?,?,'Zimbabwe policy synthetic lot','zw-policy-synthetic',
+                 'Disposable IMP-09 policy fixture','vehicles','used',
+                 ?,?,0,0,0,0,'pickup','Harare',
+                 datetime('now','+4 hours'),datetime('now','-1 hour'),'live',0,0,'[]',
+                 datetime('now'),datetime('now'),0,'general')""",
         (auction_id,seller[0],seller[1],current_price,current_price),
     )
     seller_user = seller[0]
