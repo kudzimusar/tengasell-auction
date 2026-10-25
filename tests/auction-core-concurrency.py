@@ -308,4 +308,19 @@ def main() -> None:
         replay = finalize(db, "final-after-restart", 9500)
         assert_eq(replay["status"], "idempotent_existing", "restart finalization replay")
         pending = db.execute(
-            "SELECT COUNT(*) FR
+            "SELECT COUNT(*) FROM auction_outbox WHERE auction_id=9500 AND published_at IS NULL"
+        ).fetchone()[0]
+        if pending < 1:
+            raise AssertionError("durable outbox missing after restart")
+        order_id = db.execute("SELECT final_order_id FROM auctions WHERE id=9500").fetchone()[0]
+        if order_id is None:
+            raise AssertionError("final order id not durable after restart")
+
+        print("IMP-02 transactional auction core: PASS")
+        print(f"concurrency accepted={accepted} rejected={len(results)-accepted} finalizers={len(finals)}")
+        print("idempotency=PASS cas=PASS proxy=PASS equal-max=PASS own-max=PASS retraction=PASS")
+        print("anti-snipe=PASS live-hammer=PASS restart=PASS CREATE_ORDER_ONCE=PASS outbox=PASS")
+        db.close()
+
+if __name__ == "__main__":
+    main()
