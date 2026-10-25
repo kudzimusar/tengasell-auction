@@ -73,7 +73,7 @@ import {
 } from "@/lib/tengasell/format";
 import { useCategories } from "@/lib/tengasell/hooks";
 import { useLinkProps } from "@/lib/tengasell/router";
-import type { Auction } from "@/lib/tengasell/types";
+import type { Auction, VehicleIntakeInput } from "@/lib/tengasell/types";
 import {
   Avatar,
   Countdown,
@@ -136,6 +136,29 @@ const SHIPPING_OPTIONS = [
   },
 ] as const;
 type ShippingType = (typeof SHIPPING_OPTIONS)[number]["value"];
+
+type VehicleAssetKind = "vehicle" | "part";
+type VehicleFormState = {
+  vin: string; chassisNumber: string; registrationNumber: string;
+  make: string; model: string; variant: string; modelYear: string;
+  engineNumber: string; engineDisplacementCc: string;
+  fuelType: VehicleIntakeInput["fuelType"];
+  transmission: VehicleIntakeInput["transmission"];
+  drivetrain: VehicleIntakeInput["drivetrain"];
+  odometerKm: string;
+  ownershipStatus: VehicleIntakeInput["ownershipStatus"];
+  customsStatus: VehicleIntakeInput["customsStatus"];
+  ownershipDocRef: string; registrationDocRef: string; customsDocRef: string;
+};
+
+const EMPTY_VEHICLE: VehicleFormState = {
+  vin: "", chassisNumber: "", registrationNumber: "",
+  make: "", model: "", variant: "", modelYear: "",
+  engineNumber: "", engineDisplacementCc: "",
+  fuelType: "PETROL", transmission: "AUTOMATIC", drivetrain: "RWD",
+  odometerKm: "", ownershipStatus: "DECLARED_OWNER", customsStatus: "LOCAL",
+  ownershipDocRef: "", registrationDocRef: "", customsDocRef: "",
+};
 
 const STEP_DEFS = [
   { id: 1, short: "Photos", label: "Photos & basics" },
@@ -290,6 +313,8 @@ export default function SellNewPage() {
   const [condition, setCondition] = useState("");
   const [description, setDescription] = useState("");
   const [city, setCity] = useState("");
+  const [vehicleAssetKind, setVehicleAssetKind] = useState<VehicleAssetKind>("vehicle");
+  const [vehicleForm, setVehicleForm] = useState<VehicleFormState>(EMPTY_VEHICLE);
 
   const [startPrice, setStartPrice] = useState("");
   const [buyNowPrice, setBuyNowPrice] = useState("");
@@ -360,6 +385,32 @@ export default function SellNewPage() {
   const offerMinNum = offerMin.trim() === "" ? null : parseMoney(offerMin);
   const buyNowThreshold =
     startNum > 0 ? round2(startNum + 2 * bidIncrement(startNum)) : null;
+  const isWholeVehicle = category === "vehicles" && vehicleAssetKind === "vehicle";
+  const vehicleVin = vehicleForm.vin.trim().toUpperCase();
+  const vehicleChassis = vehicleForm.chassisNumber.trim().toUpperCase();
+  const vehicleYear = Number(vehicleForm.modelYear);
+  const vehicleOdometer = Number(vehicleForm.odometerKm);
+  const vehicleError = !isWholeVehicle
+    ? null
+    : !vehicleVin && !vehicleChassis
+      ? "Whole vehicles require a VIN or chassis number."
+      : vehicleVin && !/^[A-HJ-NPR-Z0-9]{17}$/.test(vehicleVin)
+        ? "VIN must be 17 valid VIN characters (I, O and Q are excluded)."
+        : vehicleChassis && vehicleChassis.length < 4
+          ? "Chassis number must be at least 4 characters."
+          : !vehicleForm.make.trim() || !vehicleForm.model.trim()
+            ? "Vehicle make and model are required."
+            : !Number.isInteger(vehicleYear) || vehicleYear < 1900 || vehicleYear > new Date().getUTCFullYear() + 1
+              ? "Enter a valid vehicle model year."
+              : !Number.isInteger(vehicleOdometer) || vehicleOdometer < 0
+                ? "Enter the odometer in whole kilometres."
+                : !vehicleForm.ownershipDocRef.trim()
+                  ? "Add the ownership document reference for inspection."
+                  : vehicleForm.registrationNumber.trim() && !vehicleForm.registrationDocRef.trim()
+                    ? "Add the registration document reference."
+                    : vehicleForm.customsStatus === "CLEARED" && !vehicleForm.customsDocRef.trim()
+                      ? "Cleared imported vehicles require a customs document reference."
+                      : null;
 
   const endIso = useMemo(
     () => new Date(Date.now() + durationHours * 3_600_000).toISOString(),
@@ -378,6 +429,7 @@ export default function SellNewPage() {
         ? `Describe your item — at least ${DESC_MIN} characters (${description.trim().length} so far).`
         : null,
     city: city ? null : "Choose where the item is located.",
+    vehicle: vehicleError,
     startPrice: startNum > 0 ? null : "Enter a start price above US$0.",
     buyNow:
       buyNowNum == null
@@ -418,7 +470,8 @@ export default function SellNewPage() {
     !errors.category &&
     !errors.condition &&
     !errors.description &&
-    !errors.city;
+    !errors.city &&
+    !errors.vehicle;
   const step2Valid =
     !errors.startPrice &&
     !errors.buyNow &&
@@ -527,11 +580,58 @@ export default function SellNewPage() {
           allowOffers && offerMinNum != null && offerMinNum >= 1
             ? round2(offerMinNum)
             : null,
+        assetKind:
+          category === "vehicles"
+            ? vehicleAssetKind
+            : "general",
       });
+
+      if (isWholeVehicle) {
+        const bundle = await api.saveVehicleIntake(auction.id, {
+          vin: vehicleVin || null,
+          chassisNumber: vehicleChassis || null,
+          registrationNumber: vehicleForm.registrationNumber.trim().toUpperCase() || null,
+          make: vehicleForm.make.trim(),
+          model: vehicleForm.model.trim(),
+          variant: vehicleForm.variant.trim() || null,
+          modelYear: vehicleYear,
+          engineNumber: vehicleForm.engineNumber.trim().toUpperCase() || null,
+          engineDisplacementCc: vehicleForm.engineDisplacementCc.trim()
+            ? Number(vehicleForm.engineDisplacementCc)
+            : null,
+          fuelType: vehicleForm.fuelType,
+          transmission: vehicleForm.transmission,
+          drivetrain: vehicleForm.drivetrain,
+          odometerKm: vehicleOdometer,
+          locationCity: city,
+          locationCountry: "Zimbabwe",
+          ownershipStatus: vehicleForm.ownershipStatus,
+          customsStatus: vehicleForm.customsStatus,
+          requestedDurationHours: durationHours,
+        });
+        if (!bundle.vehicle) throw new Error("Vehicle intake was not persisted.");
+
+        await api.addVehicleDocument(bundle.vehicle.id, {
+          documentType: "OWNERSHIP",
+          documentRef: vehicleForm.ownershipDocRef.trim(),
+        });
+        if (vehicleForm.registrationDocRef.trim()) {
+          await api.addVehicleDocument(bundle.vehicle.id, {
+            documentType: "REGISTRATION",
+            documentRef: vehicleForm.registrationDocRef.trim(),
+          });
+        }
+        if (vehicleForm.customsDocRef.trim()) {
+          await api.addVehicleDocument(bundle.vehicle.id, {
+            documentType: "CUSTOMS_CLEARANCE",
+            documentRef: vehicleForm.customsDocRef.trim(),
+          });
+        }
+      }
       // Gap-8 F1: featured fee is charged AFTER the listing exists, so a fee
       // failure never loses the listing — the success screen offers a retry.
       let featureOk = false;
-      if (featured) {
+      if (featured && !isWholeVehicle) {
         try {
           await api.featureListing(auction.id);
           featureOk = true;
@@ -539,11 +639,13 @@ export default function SellNewPage() {
           featureOk = false;
         }
       }
-      setFeatureState(featured ? (featureOk ? "done" : "failed") : "idle");
+      setFeatureState(featured && !isWholeVehicle ? (featureOk ? "done" : "failed") : "idle");
       setCreated(auction);
       toast({
-        title: "Your auction is live!",
-        description: `${auction.title} — ends ${formatDateTime(auction.ends_at)}`,
+        title: isWholeVehicle ? "Vehicle submitted for Tengasell Inspection" : "Your auction is live!",
+        description: isWholeVehicle
+          ? `${auction.title} remains draft until inspection and eligibility review complete.`
+          : `${auction.title} — ends ${formatDateTime(auction.ends_at)}`,
       });
       if (featured && !featureOk) {
         toast({
@@ -578,6 +680,8 @@ export default function SellNewPage() {
     setCategory("");
     setCondition("");
     setDescription("");
+    setVehicleAssetKind("vehicle");
+    setVehicleForm(EMPTY_VEHICLE);
     setStartPrice("");
     setBuyNowPrice("");
     setReservePrice("");
@@ -671,11 +775,13 @@ export default function SellNewPage() {
         </div>
 
         <h1 className="mt-6 text-display text-foreground">
-          Your auction is live!
+          {created.asset_kind === "vehicle" ? "Vehicle submitted for inspection" : "Your auction is live!"}
         </h1>
         <p className="mx-auto mt-2 max-w-md text-body text-muted-foreground">
           <span className="font-semibold text-foreground">{created.title}</span>{" "}
-          is open for bids until {formatDateTime(created.ends_at)}.
+          {created.asset_kind === "vehicle"
+            ? "is saved as a draft. Tengasell Inspection and reviewer eligibility are required before bidding can open."
+            : <>is open for bids until {formatDateTime(created.ends_at)}.</>}
         </p>
 
         {/* Gap-8 F1: featured-listing fee outcome */}
@@ -850,6 +956,11 @@ export default function SellNewPage() {
             city={city}
             setCity={setCity}
             cityError={showErr("city") ? errors.city : null}
+            vehicleAssetKind={vehicleAssetKind}
+            setVehicleAssetKind={setVehicleAssetKind}
+            vehicleForm={vehicleForm}
+            setVehicleForm={setVehicleForm}
+            vehicleError={errors.vehicle}
           />
         )}
 
@@ -1021,6 +1132,11 @@ function StepPhotos(props: {
   city: string;
   setCity: (v: string) => void;
   cityError: string | null;
+  vehicleAssetKind: VehicleAssetKind;
+  setVehicleAssetKind: (v: VehicleAssetKind) => void;
+  vehicleForm: VehicleFormState;
+  setVehicleForm: (v: VehicleFormState) => void;
+  vehicleError: string | null;
 }) {
   const {
     images,
@@ -1049,6 +1165,11 @@ function StepPhotos(props: {
     city,
     setCity,
     cityError,
+    vehicleAssetKind,
+    setVehicleAssetKind,
+    vehicleForm,
+    setVehicleForm,
+    vehicleError,
   } = props;
 
   return (
@@ -1282,6 +1403,139 @@ function StepPhotos(props: {
           </Select>
         </FieldShell>
       </div>
+
+      {category === "vehicles" && (
+        <section
+          aria-labelledby="vehicle-intake-heading"
+          className="space-y-5 rounded-card border border-teal/30 bg-teal-tint/20 p-4 sm:p-5"
+        >
+          <div>
+            <h3 id="vehicle-intake-heading" className="text-bodyStrong text-foreground">
+              Vehicle authority
+            </h3>
+            <p className="mt-1 text-caption text-muted-foreground">
+              Declare whether this is a whole vehicle or a part/accessory. Whole vehicles remain draft until Tengasell Inspection approves auction eligibility.
+            </p>
+          </div>
+
+          <RadioGroup
+            value={vehicleAssetKind}
+            onValueChange={(v) => setVehicleAssetKind(v as VehicleAssetKind)}
+            className="grid gap-2 sm:grid-cols-2"
+            aria-label="Vehicle listing type"
+          >
+            <Label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-input border border-border bg-card p-3">
+              <RadioGroupItem value="vehicle" />
+              <span><span className="block font-semibold">Whole vehicle</span><span className="text-caption text-muted-foreground">Inspection required</span></span>
+            </Label>
+            <Label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-input border border-border bg-card p-3">
+              <RadioGroupItem value="part" />
+              <span><span className="block font-semibold">Part / accessory</span><span className="text-caption text-muted-foreground">Normal marketplace listing</span></span>
+            </Label>
+          </RadioGroup>
+
+          {vehicleAssetKind === "vehicle" && (
+            <div className="space-y-5">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <FieldShell label="VIN" htmlFor="vehicle-vin" hint="17 characters; use chassis number if no VIN.">
+                  <Input id="vehicle-vin" value={vehicleForm.vin} maxLength={17}
+                    onChange={(e) => setVehicleForm({ ...vehicleForm, vin: e.target.value.toUpperCase() })}
+                    className="h-11 min-h-11 font-mono uppercase" placeholder="JH4KA8260MC000001" />
+                </FieldShell>
+                <FieldShell label="Chassis number" htmlFor="vehicle-chassis">
+                  <Input id="vehicle-chassis" value={vehicleForm.chassisNumber}
+                    onChange={(e) => setVehicleForm({ ...vehicleForm, chassisNumber: e.target.value.toUpperCase() })}
+                    className="h-11 min-h-11 font-mono uppercase" placeholder="Alternative to VIN" />
+                </FieldShell>
+                <FieldShell label="Registration" htmlFor="vehicle-registration">
+                  <Input id="vehicle-registration" value={vehicleForm.registrationNumber}
+                    onChange={(e) => setVehicleForm({ ...vehicleForm, registrationNumber: e.target.value.toUpperCase() })}
+                    className="h-11 min-h-11 uppercase" placeholder="Optional if unregistered" />
+                </FieldShell>
+                <FieldShell label="Model year" htmlFor="vehicle-year">
+                  <Input id="vehicle-year" type="number" inputMode="numeric" min={1900}
+                    value={vehicleForm.modelYear}
+                    onChange={(e) => setVehicleForm({ ...vehicleForm, modelYear: e.target.value })}
+                    className="h-11 min-h-11" placeholder="2020" />
+                </FieldShell>
+                <FieldShell label="Make" htmlFor="vehicle-make">
+                  <Input id="vehicle-make" value={vehicleForm.make}
+                    onChange={(e) => setVehicleForm({ ...vehicleForm, make: e.target.value })}
+                    className="h-11 min-h-11" placeholder="Toyota" />
+                </FieldShell>
+                <FieldShell label="Model" htmlFor="vehicle-model">
+                  <Input id="vehicle-model" value={vehicleForm.model}
+                    onChange={(e) => setVehicleForm({ ...vehicleForm, model: e.target.value })}
+                    className="h-11 min-h-11" placeholder="Hilux" />
+                </FieldShell>
+                <FieldShell label="Variant" htmlFor="vehicle-variant">
+                  <Input id="vehicle-variant" value={vehicleForm.variant}
+                    onChange={(e) => setVehicleForm({ ...vehicleForm, variant: e.target.value })}
+                    className="h-11 min-h-11" placeholder="GD-6" />
+                </FieldShell>
+                <FieldShell label="Odometer (km)" htmlFor="vehicle-odometer">
+                  <Input id="vehicle-odometer" type="number" min={0} inputMode="numeric"
+                    value={vehicleForm.odometerKm}
+                    onChange={(e) => setVehicleForm({ ...vehicleForm, odometerKm: e.target.value })}
+                    className="h-11 min-h-11" placeholder="82000" />
+                </FieldShell>
+                <FieldShell label="Engine number" htmlFor="vehicle-engine">
+                  <Input id="vehicle-engine" value={vehicleForm.engineNumber}
+                    onChange={(e) => setVehicleForm({ ...vehicleForm, engineNumber: e.target.value.toUpperCase() })}
+                    className="h-11 min-h-11 uppercase" placeholder="Optional" />
+                </FieldShell>
+                <FieldShell label="Engine cc" htmlFor="vehicle-engine-cc">
+                  <Input id="vehicle-engine-cc" type="number" min={1} inputMode="numeric"
+                    value={vehicleForm.engineDisplacementCc}
+                    onChange={(e) => setVehicleForm({ ...vehicleForm, engineDisplacementCc: e.target.value })}
+                    className="h-11 min-h-11" placeholder="2755" />
+                </FieldShell>
+                {([
+                  ["Fuel", "fuelType", ["PETROL","DIESEL","HYBRID","ELECTRIC","LPG","OTHER"]],
+                  ["Transmission", "transmission", ["MANUAL","AUTOMATIC","CVT","DCT","OTHER"]],
+                  ["Drivetrain", "drivetrain", ["FWD","RWD","AWD","4WD","OTHER"]],
+                  ["Ownership", "ownershipStatus", ["DECLARED_OWNER","FINANCED","THIRD_PARTY","UNKNOWN"]],
+                  ["Customs", "customsStatus", ["LOCAL","CLEARED","PENDING","NOT_APPLICABLE","UNKNOWN"]],
+                ] as const).map(([label,key,options]) => (
+                  <FieldShell key={key} label={label}>
+                    <Select value={vehicleForm[key]} onValueChange={(v) => setVehicleForm({ ...vehicleForm, [key]: v })}>
+                      <SelectTrigger className="h-11 min-h-11"><SelectValue /></SelectTrigger>
+                      <SelectContent>{options.map((o) => <SelectItem key={o} value={o}>{o.replaceAll("_"," ")}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </FieldShell>
+                ))}
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-3">
+                <FieldShell label="Ownership document ref" htmlFor="vehicle-owner-doc">
+                  <Input id="vehicle-owner-doc" value={vehicleForm.ownershipDocRef}
+                    onChange={(e) => setVehicleForm({ ...vehicleForm, ownershipDocRef: e.target.value })}
+                    className="h-11 min-h-11" placeholder="Required" />
+                </FieldShell>
+                <FieldShell label="Registration document ref" htmlFor="vehicle-reg-doc">
+                  <Input id="vehicle-reg-doc" value={vehicleForm.registrationDocRef}
+                    onChange={(e) => setVehicleForm({ ...vehicleForm, registrationDocRef: e.target.value })}
+                    className="h-11 min-h-11" placeholder="If registered" />
+                </FieldShell>
+                <FieldShell label="Customs document ref" htmlFor="vehicle-customs-doc">
+                  <Input id="vehicle-customs-doc" value={vehicleForm.customsDocRef}
+                    onChange={(e) => setVehicleForm({ ...vehicleForm, customsDocRef: e.target.value })}
+                    className="h-11 min-h-11" placeholder="If customs cleared" />
+                </FieldShell>
+              </div>
+
+              {vehicleError && (
+                <p role="alert" className="flex items-center gap-1.5 text-caption text-danger">
+                  <AlertTriangle className="size-4" aria-hidden="true" />{vehicleError}
+                </p>
+              )}
+              <p className="text-caption text-muted-foreground">
+                Vehicle facts are stored as seller declarations first. Tengasell inspection/document review adds independent verified evidence and grading; declarations are never silently converted into verified facts.
+              </p>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* description */}
       <FieldShell
