@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATIONS = ROOT / "mini-services/trailbase-db/traildepot/migrations/main"
-EXPECTED = [f"U{1_000_000_000 + i}__" for i in range(1, 11)]
+EXPECTED = [f"U{1_000_000_000 + i}__" for i in range(1, 12)]
 
 def connection() -> sqlite3.Connection:
     db = sqlite3.connect(":memory:")
@@ -29,7 +29,7 @@ def connection() -> sqlite3.Connection:
 def migration_files() -> list[Path]:
     files = sorted(MIGRATIONS.glob("U*.sql"))
     names = [p.name for p in files]
-    if len(files) != 10:
+    if len(files) != 11:
         raise AssertionError(f"expected 10 main migrations, found {names}")
     for prefix, name in zip(EXPECTED, names):
         if not name.startswith(prefix):
@@ -52,6 +52,8 @@ def assert_tip(db: sqlite3.Connection) -> None:
         "auction_outbox","auction_outcomes","legacy_auction_mappings",
         "vehicles","vehicle_documents","vehicle_inspections","vehicle_eligibility",
         "auction_events","auction_venues","auction_event_operators","auction_lots","run_list_commands",
+        "auction_bidder_qualifications","auction_qualification_commands",
+        "auction_capacity_reservations","auction_bid_capacity_commands",
     }
     missing = required - tables(db)
     if missing:
@@ -138,11 +140,11 @@ def main() -> None:
     upgraded.close()
 
     print("TrailBase migration chain proof: PASS")
-    print("  blank fresh install U1 -> U10: PASS")
-    print("  U1-U6 parent -> U10 tip: PASS")
+    print("  blank fresh install U1 -> U11: PASS")
+    print("  U1-U6 parent -> U11 tip: PASS")
     print("  legacy duplicate orders preserved: PASS")
     print("  canonical outcome-key uniqueness: PASS")
-    print("  IMP-02/03/04/05 tables present: PASS")
+    print("  IMP-02/03/04/05/06 tables present: PASS")
     print("  AuctionEvent -> LiveSession trigger: PASS")
 
 if __name__ == "__main__":
