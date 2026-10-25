@@ -453,6 +453,18 @@ BEGIN
          strftime('%Y-%m-%dT%H:%M:%SZ','now')
    WHERE (SELECT status FROM vehicle_review_commands WHERE id=NEW.id)='pending';
 
+  -- A later failed inspection immediately removes commercial authority.
+  -- With no bids the listing returns to draft for remediation; once bids exist
+  -- the unsafe listing is cancelled and must be relisted after a fresh review.
+  UPDATE auctions
+     SET status=CASE WHEN bid_count=0 THEN 'draft' ELSE 'cancelled' END,
+         version=version+1,
+         updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE id=(SELECT auction_id FROM vehicles WHERE id=NEW.vehicle_id)
+     AND status='live'
+     AND (SELECT eligibility_status FROM vehicle_review_commands WHERE id=NEW.id)='INELIGIBLE'
+     AND (SELECT status FROM vehicle_review_commands WHERE id=NEW.id)='pending';
+
   -- Vehicle auctions are activated only by the canonical review transaction.
   UPDATE auctions
      SET status='live',
