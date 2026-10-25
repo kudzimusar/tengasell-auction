@@ -33,8 +33,10 @@ jobs:
       CI: "true"
 
     steps:
-      - name: Checkout
+      - name: Checkout exact source head
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -157,8 +159,10 @@ jobs:
       NEXT_TELEMETRY_DISABLED: "1"
 
     steps:
-      - name: Checkout
+      - name: Checkout exact source head
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
