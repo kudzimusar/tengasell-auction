@@ -136,25 +136,8 @@ def main() -> None:
         (vehicle_id,admin[0]),
     )
 
-    # Canonical command creates an active bid. Make it >60 minutes old to prove
-    # the historical LR01 time-window rule is NOT applied to the vehicle policy.
-    db.execute(
-        """INSERT INTO auction_commands(
-          command_key,auction_id,actor_user,actor_username,actor_admin,command_type,max_amount
-        ) VALUES('zw-policy-bid-1',?,?,?,?, 'PLACE_BID',?)""",
-        (auction_id,bidder[0],bidder[1],0,float(current_price)+100),
-    )
-    command = db.execute(
-        "SELECT status,error_code,result_price FROM auction_commands WHERE command_key='zw-policy-bid-1'"
-    ).fetchone()
-    assert command and command[0] == "accepted", command
-    bid = db.execute(
-        "SELECT id FROM bids WHERE auction_id=? AND user=? AND status='active' ORDER BY id DESC LIMIT 1",
-        (auction_id,bidder[0]),
-    ).fetchone()
-    assert bid
-    bid_id = bid[0]
-    db.execute("UPDATE bids SET created_at=datetime('now','-2 hours') WHERE id=?",(bid_id,))
+    # Convert the fixture to the real vehicle authority path before bidding.
+    # U15 requires reserve disclosure to match the private canonical reserve.
     db.execute(
         """UPDATE auctions
               SET asset_kind='vehicle',
@@ -163,6 +146,40 @@ def main() -> None:
             WHERE id=?""",
         (auction_id,),
     )
+
+    # Production vehicle bidding is event-scoped and qualification/capacity
+    # governed. Use that path instead of a raw legacy auction command.
+    db.execute(
+        """INSERT INTO auction_qualification_commands(
+          command_key,event_id,target_user,target_username,actor_user,actor_username,
+          actor_admin,command_type,qualification_basis,approved_limit,lot_limit,
+          account_state,risk_state,deposit_state,deposit_amount,credit_state,credit_limit,reason_code
+        ) VALUES('zw-policy-qualify',?,?,?,?,?,1,'APPROVE','MANUAL_REVIEW',5000,5000,
+                 'ELIGIBLE','CLEAR','NOT_REQUIRED',0,'NONE',0,'POLICY_TEST')""",
+        (event_id,bidder[0],bidder[1],admin[0],admin[1]),
+    )
+    assert db.execute(
+        "SELECT status,error_code FROM auction_qualification_commands WHERE command_key='zw-policy-qualify'"
+    ).fetchone() == ("accepted",None)
+
+    db.execute(
+        """INSERT INTO auction_bid_capacity_commands(
+          command_key,auction_command_key,event_id,auction_id,actor_user,actor_username,max_amount
+        ) VALUES('zw-policy-capacity-1','zw-policy-bid-1',?,?,?,?,?)""",
+        (event_id,auction_id,bidder[0],bidder[1],float(current_price)+100),
+    )
+    capacity = db.execute(
+        "SELECT status,error_code FROM auction_bid_capacity_commands WHERE command_key='zw-policy-capacity-1'"
+    ).fetchone()
+    assert capacity == ("accepted",None), capacity
+
+    bid = db.execute(
+        "SELECT id FROM bids WHERE auction_id=? AND user=? AND status='active' ORDER BY id DESC LIMIT 1",
+        (auction_id,bidder[0]),
+    ).fetchone()
+    assert bid
+    bid_id = bid[0]
+    db.execute("UPDATE bids SET created_at=datetime('now','-2 hours') WHERE id=?",(bid_id,))
     current_version = db.execute("SELECT version FROM auctions WHERE id=?",(auction_id,)).fetchone()[0]
 
     db.execute(
@@ -181,11 +198,15 @@ def main() -> None:
 
     # A new active bid cannot be policy-retracted after auction completion.
     db.execute(
-        """INSERT INTO auction_commands(
-          command_key,auction_id,actor_user,actor_username,actor_admin,command_type,max_amount
-        ) VALUES('zw-policy-bid-2',?,?,?,?, 'PLACE_BID',?)""",
-        (auction_id,bidder[0],bidder[1],0,float(current_price)+150),
+        """INSERT INTO auction_bid_capacity_commands(
+          command_key,auction_command_key,event_id,auction_id,actor_user,actor_username,max_amount
+        ) VALUES('zw-policy-capacity-2','zw-policy-bid-2',?,?,?,?,?)""",
+        (event_id,auction_id,bidder[0],bidder[1],float(current_price)+150),
     )
+    second_capacity = db.execute(
+        "SELECT status,error_code FROM auction_bid_capacity_commands WHERE command_key='zw-policy-capacity-2'"
+    ).fetchone()
+    assert second_capacity == ("accepted",None), second_capacity
     active2 = db.execute(
         "SELECT id FROM bids WHERE auction_id=? AND user=? AND status='active' ORDER BY id DESC LIMIT 1",
         (auction_id,bidder[0]),
