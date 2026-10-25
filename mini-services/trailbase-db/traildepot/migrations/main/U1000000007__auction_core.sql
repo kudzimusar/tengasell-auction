@@ -502,4 +502,122 @@ BEGIN
      AND s.first_sequence=(
        SELECT first_sequence FROM auction_standing_bids
         WHERE auction_id=NEW.auction_id
-        ORDE
+        ORDER BY max_amount DESC, first_sequence ASC LIMIT 1
+     );
+
+  UPDATE auction_commands
+     SET status='accepted',
+         result_price=(SELECT current_price FROM auctions WHERE id=NEW.auction_id),
+         result_winner_user=(
+           SELECT user FROM auction_standing_bids WHERE auction_id=NEW.auction_id
+            ORDER BY max_amount DESC, first_sequence ASC LIMIT 1
+         ),
+         result_winner_username=(
+           SELECT bidder_username FROM auction_standing_bids WHERE auction_id=NEW.auction_id
+            ORDER BY max_amount DESC, first_sequence ASC LIMIT 1
+         ),
+         version_after=(SELECT version FROM auctions WHERE id=NEW.auction_id),
+         completed_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE id=NEW.id AND status='pending';
+
+  INSERT OR IGNORE INTO auction_outbox
+    (event_key,auction_id,command_id,event_type,payload,occurred_at)
+  SELECT 'retract:'||NEW.command_key,NEW.auction_id,NEW.id,'AUCTION_BID_RETRACTED',
+         printf('{"auctionId":%d,"price":%.2f,"version":%d}',
+           NEW.auction_id,
+           (SELECT result_price FROM auction_commands WHERE id=NEW.id),
+           (SELECT version_after FROM auction_commands WHERE id=NEW.id)),
+         strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE (SELECT status FROM auction_commands WHERE id=NEW.id)='accepted';
+
+  UPDATE auction_commands
+     SET completed_at=COALESCE(completed_at,strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+         version_after=COALESCE(version_after,version_before)
+   WHERE id=NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_auction_finalize_process
+AFTER INSERT ON auction_finalization_commands
+BEGIN
+  UPDATE auction_finalization_commands
+     SET received_at=strftime('%Y-%m-%dT%H:%M:%SZ','now'),
+         version_before=(SELECT version FROM auctions WHERE id=NEW.auction_id)
+   WHERE id=NEW.id;
+
+  UPDATE auction_finalization_commands SET status='rejected', error_code='AUCTION_NOT_FOUND'
+   WHERE id=NEW.id AND status='pending'
+     AND NOT EXISTS (SELECT 1 FROM auctions WHERE id=NEW.auction_id);
+
+  UPDATE auction_finalization_commands SET status='idempotent_existing'
+   WHERE id=NEW.id AND status='pending'
+     AND EXISTS (SELECT 1 FROM auction_outcomes WHERE auction_id=NEW.auction_id);
+
+  UPDATE auction_finalization_commands SET status='rejected', error_code='AUCTION_NOT_LIVE'
+   WHERE id=NEW.id AND status='pending'
+     AND EXISTS (SELECT 1 FROM auctions WHERE id=NEW.auction_id AND status<>'live');
+
+  UPDATE auction_finalization_commands SET status='rejected', error_code='STALE_AUCTION_VERSION'
+   WHERE id=NEW.id AND status='pending'
+     AND NEW.expected_version IS NOT NULL
+     AND EXISTS (SELECT 1 FROM auctions WHERE id=NEW.auction_id AND version<>NEW.expected_version);
+
+  UPDATE auction_finalization_commands SET status='rejected', error_code='TIMED_FINALIZATION_NOT_DUE'
+   WHERE id=NEW.id AND status='pending'
+     AND NEW.source='TIMED_SWEEP'
+     AND EXISTS (
+       SELECT 1 FROM auctions
+        WHERE id=NEW.auction_id AND unixepoch(ends_at) > unixepoch('now')
+     );
+
+  UPDATE auction_finalization_commands SET status='rejected', error_code='LIVE_HAMMER_NOT_DUE'
+   WHERE id=NEW.id AND status='pending'
+     AND NEW.source='LIVE_HAMMER'
+     AND NOT EXISTS (
+       SELECT 1
+         FROM auctions a
+         JOIN live_sessions s ON s.id=a.live_session_id
+        WHERE a.id=NEW.auction_id
+          AND s.status='live'
+          AND s.current_lot_id=a.id
+          AND s.close_at IS NOT NULL
+          AND unixepoch(s.close_at) <= unixepoch('now')
+     );
+
+  UPDATE auction_finalization_commands SET status='rejected', error_code='INVALID_FINALIZATION_OUTCOME'
+   WHERE id=NEW.id AND status='pending'
+     AND NEW.requested_outcome NOT IN ('AUTO','SOLD','UNSOLD');
+
+  UPDATE auction_finalization_commands SET status='rejected', error_code='SOLD_REQUIRES_BUYER'
+   WHERE id=NEW.id AND status='pending'
+     AND NEW.requested_outcome='SOLD'
+     AND (NEW.buyer_user IS NULL OR NEW.final_price IS NULL OR NEW.final_price<=0);
+
+  UPDATE auction_finalization_commands SET status='rejected', error_code='BUYER_IS_SELLER'
+   WHERE id=NEW.id AND status='pending'
+     AND NEW.requested_outcome='SOLD'
+     AND EXISTS (
+       SELECT 1 FROM auctions
+        WHERE id=NEW.auction_id AND user=NEW.buyer_user
+     );
+
+  UPDATE auction_finalization_commands SET status='rejected', error_code='BUY_NOW_NOT_AVAILABLE'
+   WHERE id=NEW.id AND status='pending'
+     AND NEW.source='BUY_NOW'
+     AND EXISTS (
+       SELECT 1 FROM auctions
+        WHERE id=NEW.auction_id
+          AND (
+            buy_now_price IS NULL
+            OR bid_count<>0
+            OR ABS(buy_now_price-NEW.final_price)>0.00001
+          )
+     );
+
+  INSERT OR IGNORE INTO auction_outcomes
+    (auction_id,source,outcome,winner_user,winner_username,final_price,command_id,decided_at)
+  SELECT a.id,
+         NEW.source,
+         CASE
+           WHEN NEW.requested_outcome='UNSOLD' THEN 'unsold'
+           WHEN NEW.requested_outcome='SOLD' THEN 'sold'
+           WHEN leader.user
