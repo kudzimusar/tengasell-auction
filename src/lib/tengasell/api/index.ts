@@ -83,7 +83,7 @@ export interface TengasellApi {
   withdrawOffer(offerId: number): Promise<Offer>;
   respondOffer(offerId: number, action: "accept" | "decline" | "counter", amount?: number, message?: string): Promise<Offer>;
   acceptCounter(offerId: number, accept: boolean): Promise<Offer>;
-  /** Bid retraction (60-minute window, lead bid only). */
+  /** Bid retraction: vehicle IMP-09 pre-completion policy; general marketplace legacy rule. */
   retractBid(bidId: number, reason: string): Promise<{ auction: Auction | null }>;
   /** Featured listing fee (US$2 + VAT, charged via finance). */
   featureListing(auctionId: number): Promise<Auction>;

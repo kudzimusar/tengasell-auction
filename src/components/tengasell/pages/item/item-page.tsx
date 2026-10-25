@@ -314,7 +314,9 @@ export default function ItemPage({ id }: { id: number }) {
   let endedSub = "This listing is closed.";
   if (auction.status === "sold") {
     endedTitle = "Sold — winner notified";
-    endedSub = "The winner has been notified; payment is due within 48h (SLA).";
+    endedSub = auction.asset_kind === "vehicle"
+      ? "Open the won-lot settlement for the authoritative payment deadline, transfer requirements and release steps."
+      : "The winner has been notified; open the order for the payment deadline.";
   } else if (auction.status === "ended") {
     endedSub = "No winning bid — the item was not sold.";
   } else if (auction.status === "cancelled") {
@@ -368,7 +370,11 @@ export default function ItemPage({ id }: { id: number }) {
             </span>
             <div className="min-w-0">
               <p className="text-title text-foreground">
-                {wonOrder ? "You won — pay within 48h" : endedTitle}
+                {wonOrder
+                  ? auction.asset_kind === "vehicle"
+                    ? "You won — settlement action required"
+                    : "You won — payment action required"
+                  : endedTitle}
               </p>
               <p className="text-caption text-muted-foreground">
                 {wonOrder
@@ -464,8 +470,8 @@ export default function ItemPage({ id }: { id: number }) {
             </TabsContent>
 
             <TabsContent value="bids">
-              {/* Gap-8 F2: retract-aware history (own active lead bid can be
-                  retracted; retracted rows render dimmed with a reason tooltip) */}
+              {/* IMP-09 policy-aware history: vehicle bid retraction follows
+                  the pre-completion policy path; general listings retain legacy rules. */}
               <BidHistoryPanel
                 auction={auction}
                 bids={bidsRes.data}
@@ -551,17 +557,30 @@ export default function ItemPage({ id }: { id: number }) {
               )}
             </div>
 
-            {/* reserve indicator */}
-            {auction.reserve_price != null && view.reserveMet === false && (
-              <p className="flex items-center gap-1.5 text-caption font-semibold text-warn">
-                <AlertTriangle className="size-4" aria-hidden="true" />
-                Reserve price not met
+            {/* IMP-09 public reserve notice: reserve applicability is disclosed, not the private amount. */}
+            {auction.reserve_disclosure === "RESERVE_APPLIES" && (
+              <p className="flex items-start gap-1.5 text-caption font-semibold text-warn">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                Reserve auction — a reserve applies; the private reserve amount is not displayed.
               </p>
             )}
-            {auction.reserve_price != null && view.reserveMet === true && auction.bid_count > 0 && (
-              <p className="flex items-center gap-1.5 text-caption font-semibold text-ok">
+            {auction.reserve_disclosure === "UPSET_APPLIES" && (
+              <p className="flex items-start gap-1.5 text-caption font-semibold text-warn">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                Upset-price auction — an upset condition applies.
+              </p>
+            )}
+            {auction.asset_kind === "vehicle" && auction.reserve_disclosure === "NO_RESERVE" && (
+              <p className="flex items-center gap-1.5 text-caption font-semibold text-muted-foreground">
                 <CheckCircle2 className="size-4" aria-hidden="true" />
-                Reserve met
+                No reserve declared for this vehicle auction.
+              </p>
+            )}
+            {auction.asset_kind === "vehicle" && (
+              <p className="text-caption text-muted-foreground">
+                Owner/auctioneer bidding: {auction.owner_bid_right_disclosure === "DISCLOSED"
+                  ? "a right to bid has been disclosed for this auction."
+                  : "not permitted under the current Tengasell vehicle-auction policy."}
               </p>
             )}
 
@@ -1405,9 +1424,9 @@ function CounterOfferDialog({
   );
 }
 
-/** Bid history with Gap-8 retraction: own active lead bid on a live auction
- *  gets a Retract action; retracted rows dim with a "Retracted" pill (reason
- *  tooltip only on the viewer's own row or for admins). */
+/** Bid history with policy-aware retraction. Vehicle auctions use the
+ * IMP-09 pre-completion policy path; general marketplace auctions retain
+ * the frozen historical LR01 behavior. */
 function BidHistoryPanel({
   auction,
   bids,
@@ -1572,8 +1591,9 @@ function BidHistoryPanel({
   );
 }
 
-/** Retract-bid dialog — 60-minute lead window, reason ≥10 chars shown to the
- *  seller. Engine refusals (window elapsed, outbid, ended…) show inline. */
+/** Retraction request dialog. Vehicle auctions are evaluated against the
+ * Zimbabwe pre-completion policy; general marketplace engine refusals remain
+ * authoritative. */
 function RetractBidDialog({
   bid,
   onOpenChange,

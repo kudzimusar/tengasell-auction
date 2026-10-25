@@ -61,6 +61,7 @@ import {
 } from "./order-dialogs";
 import { TrackingMap } from "@/components/tengasell/map/interactive-map";
 import { cityInfo } from "@/components/tengasell/map/cities";
+import { VehicleAuctionSettlementCard, VehicleSettlementActionNotice } from "./vehicle-auction-settlement";
 
 export default function OrdersPage({ orderId }: { orderId?: number }) {
   if (orderId != null && Number.isFinite(orderId) && orderId > 0) {
@@ -522,6 +523,8 @@ function OrderDetailBody({
   const isBuyer = role === "buyer";
   const counterparty = isBuyer ? order.seller_username : order.buyer_username;
   const profileLink = useLinkProps(`/u/${counterparty}`);
+  const { auction } = useCachedAuction(order.auction_id);
+  const vehicleAuction = auction?.asset_kind === "vehicle";
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 sm:py-8">
@@ -558,20 +561,30 @@ function OrderDetailBody({
       <div className="mt-6 grid items-start gap-4 sm:gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         {/* action panel first on mobile, right column on desktop */}
         <div className="lg:order-last lg:sticky lg:top-28">
-          <ActionPanel
-            order={order}
-            role={role}
-            rated={rated}
-            onRated={onRated}
-            onRefresh={onRefresh}
-          />
+          {vehicleAuction ? (
+            <VehicleSettlementActionNotice order={order} role={role} />
+          ) : (
+            <ActionPanel
+              order={order}
+              role={role}
+              rated={rated}
+              onRated={onRated}
+              onRefresh={onRefresh}
+            />
+          )}
         </div>
 
         <div className="min-w-0 space-y-4 sm:space-y-6 lg:order-first">
-          <OrderTimeline order={order} payments={payments} />
-          <OrderTrackingSection order={order} />
+          {vehicleAuction ? (
+            <VehicleAuctionSettlementCard order={order} role={role} />
+          ) : (
+            <>
+              <OrderTimeline order={order} payments={payments} />
+              <OrderTrackingSection order={order} />
+            </>
+          )}
           <ItemSummaryCard order={order} />
-          {isBuyer && <DisputeButton order={order} />}
+          {isBuyer && !vehicleAuction && <DisputeButton order={order} />}
           <ReceiptsCard order={order} payments={payments} />
           <PaymentsCard
             payments={payments}

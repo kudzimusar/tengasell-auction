@@ -36,6 +36,7 @@ const HelpPage = lazy(() => import("./pages/help/help-page"));
 const PoliciesPage = lazy(() => import("./pages/policies/policies-page"));
 const LiveRoomPage = lazy(() => import("./pages/live/live-room"));
 const AuctionEventsPage = lazy(() => import("./pages/events/auction-events"));
+const AuctionOperationsPage = lazy(() => import("./pages/events/auction-operations"));
 const NotFoundPage = lazy(() => import("./pages/not-found"));
 
 function PageFallback() {
@@ -200,7 +201,9 @@ function RouteView() {
         content = <LiveRoomPage sessionId={seg[1] ? Number(seg[1]) : undefined} />;
         break;
       case "events":
-        content = <AuctionEventsPage eventId={seg[1] ? Number(seg[1]) : undefined} />;
+        content = seg[1] === "operations"
+          ? <AuctionOperationsPage />
+          : <AuctionEventsPage eventId={seg[1] ? Number(seg[1]) : undefined} />;
         break;
       case "assistant":
         content = <AssistantPage />;

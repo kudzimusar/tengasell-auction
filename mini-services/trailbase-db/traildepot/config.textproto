@@ -45,13 +45,21 @@ record_apis: [
     delete_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
   },
   {
+    # Canonical auction table contains private reserve authority. Public reads
+    # use the redacted auction_public view below.
     name: "auctions"
     table_name: "auctions"
-    acl_world: [READ]
     acl_authenticated: [CREATE, READ, UPDATE, DELETE]
     create_access_rule: "(_REQ_.user = _USER_.id) OR (EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE))"
+    read_access_rule: "(_ROW_.user = _USER_.id) OR (EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE))"
     update_access_rule: "((_ROW_.user = _USER_.id) AND (_ROW_.status = 'draft')) OR (EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE))"
     delete_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_public"
+    table_name: "auction_public"
+    acl_world: [READ]
+    acl_authenticated: [READ]
   },
   {
     # Bids are written exclusively by the trade engine (proxy-bid integrity).
@@ -363,6 +371,212 @@ record_apis: [
     # operator rejection.
     name: "run_list_commands"
     table_name: "run_list_commands"
+    acl_authenticated: [CREATE, READ]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    # IMP-06 commercial authority is server mediated. The trade engine uses
+    # its admin token and returns only actor-scoped qualification summaries.
+    name: "auction_bidder_qualifications"
+    table_name: "auction_bidder_qualifications"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_qualification_commands"
+    table_name: "auction_qualification_commands"
+    acl_authenticated: [CREATE, READ]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_capacity_reservations"
+    table_name: "auction_capacity_reservations"
+    acl_authenticated: [CREATE, READ, UPDATE, DELETE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    delete_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_bid_capacity_commands"
+    table_name: "auction_bid_capacity_commands"
+    acl_authenticated: [CREATE, READ]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_settlements"
+    table_name: "auction_settlements"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_invoice_lines"
+    table_name: "auction_invoice_lines"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_finance_bridge_outbox"
+    table_name: "auction_finance_bridge_outbox"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_finance_callbacks"
+    table_name: "auction_finance_callbacks"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_transfer_documents"
+    table_name: "auction_transfer_documents"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_transfer_commands"
+    table_name: "auction_transfer_commands"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_release_authorizations"
+    table_name: "auction_release_authorizations"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_release_commands"
+    table_name: "auction_release_commands"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_transport_bookings"
+    table_name: "auction_transport_bookings"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_handover_commands"
+    table_name: "auction_handover_commands"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_handovers"
+    table_name: "auction_handovers"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_settlement_events"
+    table_name: "auction_settlement_events"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_operation_grants"
+    table_name: "auction_operation_grants"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_tasks"
+    table_name: "auction_tasks"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_task_commands"
+    table_name: "auction_task_commands"
+    acl_authenticated: [CREATE, READ]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    # Immutable business-history projection: no UPDATE/DELETE Record API.
+    name: "auction_timeline_events"
+    table_name: "auction_timeline_events"
+    acl_authenticated: [CREATE, READ]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_operator_alerts"
+    table_name: "auction_operator_alerts"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_policy_registry"
+    table_name: "auction_policy_registry"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_policy_commands"
+    table_name: "auction_policy_commands"
+    acl_authenticated: [CREATE, READ]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_service_health"
+    table_name: "auction_service_health"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    # Observability excludes private proxy maxima and is operator/admin only.
+    name: "auction_observability_events"
+    table_name: "auction_observability_events"
+    acl_authenticated: [CREATE, READ]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_policy_retraction_requests"
+    table_name: "auction_policy_retraction_requests"
     acl_authenticated: [CREATE, READ]
     create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
     read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"

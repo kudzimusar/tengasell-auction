@@ -18,6 +18,12 @@
     "auction:inventory": "node scripts/inventory-prisma-auction-consumers.mjs",
     "test:vehicle-intelligence": "python3 tests/vehicle-intelligence.py",
     "test:auction-events": "python3 tests/event-run-list.py",
+    "test:bidder-qualification": "python3 tests/bidder-qualification-capacity.py",
+    "test:auction-settlement": "python3 tests/auction-settlement-lifecycle.py",
+    "test:auction-operations": "python3 tests/operator-operations.py",
+    "test:auction-policy": "python3 tests/zimbabwe-policy-production-gates.py",
+    "test:commercial-ui": "node tests/commercial-ui-contract.mjs",
+    "test:cert01-prep": "python3 tests/cert01-prep-e2e.py",
     "test:trailbase-migrations": "python3 tests/trailbase-migration-chain.py"
   },
   "dependencies": {

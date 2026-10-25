@@ -56,7 +56,12 @@ export interface Auction {
   start_price: number;
   current_price: number;
   buy_now_price: number | null;
-  reserve_price: number | null;
+  /** Private reserve is absent from public auction projection; only server/seller authority may receive it. */
+  reserve_price?: number | null;
+  reserve_disclosure?: "UNSPECIFIED" | "NO_RESERVE" | "RESERVE_APPLIES" | "UPSET_APPLIES";
+  owner_bid_right_disclosure?: "NOT_PERMITTED" | "DISCLOSED";
+  policy_profile_key?: string;
+  commercial_policy_ready?: number;
   bid_count: number;
   watch_count: number;
   views: number;
