@@ -383,4 +383,123 @@ BEGIN
    WHERE id=NEW.id AND status='pending'
      AND (NEW.reason IS NULL OR length(trim(NEW.reason)) < 10);
 
-  UPDATE auction_com
+  UPDATE auction_commands SET status='rejected', error_code='RETRACTION_TARGET_NOT_ACTIVE'
+   WHERE id=NEW.id AND status='pending'
+     AND NOT EXISTS (
+       SELECT 1 FROM bids
+        WHERE id=NEW.target_bid_id
+          AND auction_id=NEW.auction_id
+          AND status='active'
+     );
+
+  UPDATE auction_commands SET status='rejected', error_code='RETRACTION_FORBIDDEN'
+   WHERE id=NEW.id AND status='pending'
+     AND NEW.actor_admin=0
+     AND EXISTS (
+       SELECT 1 FROM bids
+        WHERE id=NEW.target_bid_id AND user<>NEW.actor_user
+     );
+
+  UPDATE auction_commands SET status='rejected', error_code='RETRACTION_WINDOW_ELAPSED'
+   WHERE id=NEW.id AND status='pending'
+     AND NEW.actor_admin=0
+     AND EXISTS (
+       SELECT 1 FROM bids
+        WHERE id=NEW.target_bid_id
+          AND unixepoch(created_at) < unixepoch('now')-3600
+     );
+
+  UPDATE bids
+     SET status='retracted',
+         retracted_at=strftime('%Y-%m-%dT%H:%M:%SZ','now'),
+         retraction_reason=substr(trim(NEW.reason),1,200)
+   WHERE id=NEW.target_bid_id
+     AND (SELECT status FROM auction_commands WHERE id=NEW.id)='pending';
+
+  DELETE FROM auction_standing_bids
+   WHERE auction_id=NEW.auction_id
+     AND user=(SELECT user FROM bids WHERE id=NEW.target_bid_id)
+     AND (SELECT status FROM auction_commands WHERE id=NEW.id)='pending';
+
+  INSERT INTO auction_standing_bids
+    (auction_id,user,bidder_username,max_amount,first_sequence,updated_at)
+  SELECT NEW.auction_id,
+         c.actor_user,
+         c.actor_username,
+         c.max_amount,
+         (
+           SELECT MIN(c0.id) FROM auction_commands c0
+            WHERE c0.auction_id=NEW.auction_id
+              AND c0.actor_user=c.actor_user
+              AND c0.command_type='PLACE_BID'
+              AND c0.status='accepted'
+         ),
+         strftime('%Y-%m-%dT%H:%M:%SZ','now')
+    FROM auction_commands c
+   WHERE c.auction_id=NEW.auction_id
+     AND c.actor_user=(SELECT user FROM bids WHERE id=NEW.target_bid_id)
+     AND c.command_type='PLACE_BID'
+     AND c.status='accepted'
+     AND c.id < NEW.id
+     AND c.id < (
+       SELECT MAX(c1.id) FROM auction_commands c1
+        WHERE c1.auction_id=NEW.auction_id
+          AND c1.actor_user=c.actor_user
+          AND c1.command_type='PLACE_BID'
+          AND c1.status='accepted'
+     )
+   ORDER BY c.id DESC
+   LIMIT 1
+  ON CONFLICT(auction_id,user) DO UPDATE SET
+    max_amount=excluded.max_amount,
+    bidder_username=excluded.bidder_username,
+    first_sequence=excluded.first_sequence,
+    updated_at=excluded.updated_at;
+
+  UPDATE bids SET status='superseded'
+   WHERE auction_id=NEW.auction_id
+     AND status='active'
+     AND (SELECT status FROM auction_commands WHERE id=NEW.id)='pending';
+
+  UPDATE auctions
+     SET current_price=(
+           SELECT CASE
+             WHEN COUNT(*)=0 THEN auctions.start_price
+             WHEN COUNT(*)=1 THEN auctions.start_price
+             ELSE MIN(
+               (SELECT max_amount FROM auction_standing_bids
+                 WHERE auction_id=NEW.auction_id
+                 ORDER BY max_amount DESC, first_sequence ASC LIMIT 1),
+               (SELECT max_amount FROM auction_standing_bids
+                 WHERE auction_id=NEW.auction_id
+                 ORDER BY max_amount DESC, first_sequence ASC LIMIT 1 OFFSET 1)
+               + CASE
+                   WHEN (SELECT max_amount FROM auction_standing_bids WHERE auction_id=NEW.auction_id ORDER BY max_amount DESC, first_sequence ASC LIMIT 1 OFFSET 1) < 50 THEN 1
+                   WHEN (SELECT max_amount FROM auction_standing_bids WHERE auction_id=NEW.auction_id ORDER BY max_amount DESC, first_sequence ASC LIMIT 1 OFFSET 1) < 500 THEN 2
+                   WHEN (SELECT max_amount FROM auction_standing_bids WHERE auction_id=NEW.auction_id ORDER BY max_amount DESC, first_sequence ASC LIMIT 1 OFFSET 1) < 1000 THEN 5
+                   WHEN (SELECT max_amount FROM auction_standing_bids WHERE auction_id=NEW.auction_id ORDER BY max_amount DESC, first_sequence ASC LIMIT 1 OFFSET 1) < 5000 THEN 10
+                   ELSE 25
+                 END
+             )
+           END
+           FROM auction_standing_bids
+          WHERE auction_id=NEW.auction_id
+         ),
+         bid_count=MAX(0,bid_count-1),
+         version=version+1,
+         updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE id=NEW.auction_id
+     AND (SELECT status FROM auction_commands WHERE id=NEW.id)='pending';
+
+  INSERT INTO bids
+    (auction_id,user,bidder_username,amount,max_amount,is_auto,status,created_at,command_key,sequence_no)
+  SELECT NEW.auction_id,s.user,s.bidder_username,a.current_price,s.max_amount,1,'active',
+         strftime('%Y-%m-%dT%H:%M:%SZ','now'),NEW.command_key,NEW.id
+    FROM auctions a
+    JOIN auction_standing_bids s ON s.auction_id=a.id
+   WHERE a.id=NEW.auction_id
+     AND (SELECT status FROM auction_commands WHERE id=NEW.id)='pending'
+     AND s.first_sequence=(
+       SELECT first_sequence FROM auction_standing_bids
+        WHERE auction_id=NEW.auction_id
+        ORDE
