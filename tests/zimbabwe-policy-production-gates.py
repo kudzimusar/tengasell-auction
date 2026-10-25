@@ -81,13 +81,13 @@ def main() -> None:
     # happens while the seed remains general; then the fixture switches to vehicle
     # to exercise the vehicle-specific policy without fabricating inspection data.
     auction = db.execute(
-        """SELECT id,user,version,current_price
+        """SELECT id,user,seller_username,version,current_price
              FROM auctions
             WHERE status='live'
             ORDER BY id LIMIT 1"""
     ).fetchone()
     assert auction, "seed live auction missing"
-    auction_id,seller_user,version,current_price = auction
+    auction_id,seller_user,seller_username,version,current_price = auction
 
     event_id = db.execute(
         """INSERT INTO auction_events(
@@ -107,6 +107,27 @@ def main() -> None:
 
     # Pick a bidder that is not the seller.
     bidder = next(row for row in users if row[0] != seller_user)
+
+    # Keep the disposable fixture genuinely live and prepare the accepted
+    # IMP-04 eligibility evidence before changing whole-vehicle authority.
+    db.execute("UPDATE auctions SET ends_at=datetime('now','+4 hours') WHERE id=?",(auction_id,))
+    vehicle_id = db.execute(
+        """INSERT INTO vehicles(
+          auction_id,seller_user,seller_username,vin,make,model,model_year,fuel_type,
+          transmission,drivetrain,odometer_km,location_city,ownership_status,customs_status,
+          declaration_accepted_at,lifecycle,created_at,updated_at
+        ) VALUES(?,?,?,'JT987654321012345','Toyota','Policy Fixture',2021,'DIESEL',
+                 'AUTOMATIC','4WD',50000,'Harare','DECLARED_OWNER','CLEARED',
+                 '2030-01-01T00:00:00Z','ELIGIBLE',
+                 '2030-01-01T00:00:00Z','2030-01-01T00:00:00Z')""",
+        (auction_id,seller_user,seller_username),
+    ).lastrowid
+    db.execute(
+        """INSERT INTO vehicle_eligibility(
+          vehicle_id,inspection_id,version,status,decided_by,decided_at,created_at
+        ) VALUES(?,9901,1,'ELIGIBLE',?,'2030-01-01T00:00:00Z','2030-01-01T00:00:00Z')""",
+        (vehicle_id,admin[0]),
+    )
 
     # Canonical command creates an active bid. Make it >60 minutes old to prove
     # the historical LR01 time-window rule is NOT applied to the vehicle policy.
