@@ -218,5 +218,14 @@ record_apis: [
     table_name: "auction_standing_bids"
     acl_authenticated: [READ]
     read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    # IMP-03: verified legacy Prisma AUCTION -> canonical TrailBase identity.
+    # No client can create/update these records; reconciliation is dry-run by
+    # default and approved mapping insertion is an administrative migration act.
+    name: "legacy_auction_mappings"
+    table_name: "legacy_auction_mappings"
+    acl_authenticated: [READ]
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
   }
 ]
