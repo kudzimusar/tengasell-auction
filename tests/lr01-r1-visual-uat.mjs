@@ -23,14 +23,6 @@ async function loginToken(request, username) {
   return data.auth_token;
 }
 
-async function adopt(page, username, token) {
-  await page.goto(BASE, { waitUntil: "domcontentloaded" });
-  await page.evaluate(({ username, token }) => {
-    localStorage.setItem("ts_auth", JSON.stringify({ username, token }));
-  }, { username, token });
-  await page.reload({ waitUntil: "domcontentloaded" });
-}
-
 async function readEvents(request) {
   const response = await request.get(`${BASE}/api/records/v1/auction_events?limit=200&XTransformPort=3001`);
   assert(response.ok(), `auction_events read failed: ${response.status()}`);
@@ -39,37 +31,55 @@ async function readEvents(request) {
 }
 
 const browser = await chromium.launch({ headless: true });
-const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
-const page = await context.newPage();
+const apiContext = await browser.newContext();
 const consoleErrors = [];
 const httpFailures = [];
-page.on("console", (m) => { if (m.type() === "error") consoleErrors.push(m.text()); });
-page.on("pageerror", (e) => consoleErrors.push(`pageerror: ${e.message}`));
-page.on("response", (response) => {
-  if (response.status() >= 500) {
-    httpFailures.push({ status: response.status(), url: response.url() });
-  }
-});
 
-const ordinaryToken = await loginToken(context.request, fixture.ordinaryUsername);
-const adminToken = await loginToken(context.request, fixture.adminUsername);
-const sellerToken = await loginToken(context.request, "rufaro");
+function instrument(page, persona) {
+  page.on("console", (m) => {
+    if (m.type() === "error") consoleErrors.push(`[${persona}] ${m.text()}`);
+  });
+  page.on("pageerror", (e) => consoleErrors.push(`[${persona}] pageerror: ${e.message}`));
+  page.on("response", (response) => {
+    if (response.status() >= 500) {
+      httpFailures.push({ persona, status: response.status(), url: response.url() });
+    }
+  });
+}
 
-const beforeUnauthorized = await readEvents(context.request);
+async function authenticatedPage(username, token, viewport = { width: 1440, height: 1000 }) {
+  const browserContext = await browser.newContext({ viewport });
+  await browserContext.addInitScript(({ username, token }) => {
+    localStorage.setItem("ts_auth", JSON.stringify({ username, token }));
+  }, { username, token });
+  const page = await browserContext.newPage();
+  instrument(page, username);
+  return { browserContext, page };
+}
+
+const ordinaryToken = await loginToken(apiContext.request, fixture.ordinaryUsername);
+const adminToken = await loginToken(apiContext.request, fixture.adminUsername);
+const sellerToken = await loginToken(apiContext.request, "rufaro");
+
+const beforeUnauthorized = await readEvents(apiContext.request);
 
 // Ordinary account -> real UI -> api.createAuctionEvent -> Socket.IO event:create.
-await adopt(page, fixture.ordinaryUsername, ordinaryToken);
+const ordinarySession = await authenticatedPage(fixture.ordinaryUsername, ordinaryToken);
+let page = ordinarySession.page;
 await page.goto(`${BASE}/#/events`, { waitUntil: "domcontentloaded" });
 await page.getByRole("heading", { name: "Auction Hub", exact: true }).waitFor();
 await page.getByLabel("Event title").fill("LR01-R1 Unauthorized Bootstrap Attempt");
 await page.getByRole("button", { name: "Request administrator authority" }).click();
 await page.getByRole("alert").filter({ hasText: "Administrator permission is required" }).waitFor();
 await page.screenshot({ path: file("09-unauthorized-event-create-rejection.png"), fullPage: true });
-const afterUnauthorized = await readEvents(context.request);
+const afterUnauthorized = await readEvents(apiContext.request);
 assert(afterUnauthorized.length === beforeUnauthorized.length, "unauthorized event:create mutated auction_events");
 
 // Administrator -> same real UI/socket path -> accepted event + triggered session/HOST.
-await adopt(page, fixture.adminUsername, adminToken);
+// Use a separate browser context so the ordinary user's socket/auth state cannot leak.
+await ordinarySession.browserContext.close();
+const adminSession = await authenticatedPage(fixture.adminUsername, adminToken);
+page = adminSession.page;
 await page.goto(`${BASE}/#/events`, { waitUntil: "domcontentloaded" });
 await page.getByRole("heading", { name: "Auction Hub", exact: true }).waitFor();
 await page.getByLabel("Event title").fill("LR01-R1 Owner UAT — Vehicle Auction");
@@ -89,7 +99,7 @@ const operatorUrl = new URL("/api/records/v1/auction_event_operators", BASE);
 operatorUrl.searchParams.set("XTransformPort", "3001");
 operatorUrl.searchParams.set("filter[event_id][$eq]", String(eventId));
 operatorUrl.searchParams.set("limit", "20");
-const operatorResponse = await context.request.get(operatorUrl.toString(), {
+const operatorResponse = await apiContext.request.get(operatorUrl.toString(), {
   headers: { Authorization: `Bearer ${adminToken}` },
 });
 assert(operatorResponse.ok(), `operator read failed: ${operatorResponse.status()}`);
@@ -137,8 +147,10 @@ await page.getByRole("heading", { name: "Vehicle authority" }).waitFor();
 await page.getByText("ELIGIBLE", { exact: true }).first().waitFor();
 await page.screenshot({ path: file("05-vehicle-inspection-item.png"), fullPage: true });
 
-// Seller vehicle-intake flow. Fill only browser state; do not submit a listing.
-await adopt(page, "rufaro", sellerToken);
+// Seller vehicle-intake flow. Use a separate context and do not submit a listing.
+const adminPage = page;
+const sellerSession = await authenticatedPage("rufaro", sellerToken);
+page = sellerSession.page;
 await page.goto(`${BASE}/#/sell/new`, { waitUntil: "domcontentloaded" });
 await page.getByLabel("Category").click();
 await page.getByRole("option", { name: /Vehicles/i }).click();
@@ -146,9 +158,10 @@ await page.getByRole("heading", { name: "Vehicle authority" }).waitFor();
 await page.locator('section[aria-labelledby="vehicle-intake-heading"]').screenshot({
   path: file("06-seller-vehicle-intake.png"),
 });
+await sellerSession.browserContext.close();
 
 // Hub + discoverability evidence after authorized event exists.
-await adopt(page, fixture.adminUsername, adminToken);
+page = adminPage;
 await page.setViewportSize({ width: 1440, height: 1000 });
 await page.goto(`${BASE}/#/events`, { waitUntil: "domcontentloaded" });
 await page.getByRole("heading", { name: "Auction Hub", exact: true }).waitFor();
@@ -168,7 +181,7 @@ await page.goto(`${BASE}/#/events/${eventId}`, { waitUntil: "domcontentloaded" }
 await page.getByRole("heading", { name: "Production Run List" }).waitFor();
 await page.getByText("LR01-R1 Synthetic 2022 Toyota Hilux GD-6", { exact: true }).waitFor();
 
-const finalEvents = await readEvents(context.request);
+const finalEvents = await readEvents(apiContext.request);
 const created = finalEvents.find((row) => Number(row.id) === eventId);
 assert(created?.host_username === fixture.adminUsername, "created event host identity changed");
 
@@ -214,4 +227,6 @@ console.log("HOST bootstrap=AUTHORIZED CREATOR ONLY");
 console.log(`eventId=${eventId} sessionId=${sessionId} vehicleAuctionId=${fixture.auctionId}`);
 console.log(`screenshots=${manifest.screenshots.length}`);
 
+await adminSession.browserContext.close();
+await apiContext.close();
 await browser.close();
