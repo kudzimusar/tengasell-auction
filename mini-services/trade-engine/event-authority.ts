@@ -141,6 +141,18 @@ export async function eventPermissions(
   };
 }
 
+export const EVENT_CREATE_AUTHORITY = "ADMIN" as const;
+
+export function eventCreateAuthorization(user: EventIdentity | null) {
+  const allowed = Boolean(user?.admin);
+  return {
+    allowed,
+    authority: allowed ? EVENT_CREATE_AUTHORITY : "NONE",
+    code: allowed ? null : "EVENT_CREATE_FORBIDDEN",
+    error: allowed ? null : "Administrator permission is required to create auction events.",
+  } as const;
+}
+
 export async function createAuctionEvent(
   store: EventStore,
   audit: EventAudit,
@@ -161,6 +173,11 @@ export async function createAuctionEvent(
     } | null;
   },
 ) {
+  const authorization = eventCreateAuthorization(me);
+  if (!authorization.allowed) {
+    return { ok: false, code: authorization.code, error: authorization.error };
+  }
+
   const title = clean(input.title, 120);
   if (title.length < 3) return { ok: false, error: "Give the auction event a title." };
 
