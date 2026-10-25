@@ -144,6 +144,10 @@ def main() -> None:
         ) VALUES('zw-policy-bid-1',?,?,?,?, 'PLACE_BID',?)""",
         (auction_id,bidder[0],bidder[1],0,float(current_price)+100),
     )
+    command = db.execute(
+        "SELECT status,error_code,result_price FROM auction_commands WHERE command_key='zw-policy-bid-1'"
+    ).fetchone()
+    assert command and command[0] == "accepted", command
     bid = db.execute(
         "SELECT id FROM bids WHERE auction_id=? AND user=? AND status='active' ORDER BY id DESC LIMIT 1",
         (auction_id,bidder[0]),
