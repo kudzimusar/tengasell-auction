@@ -129,4 +129,96 @@ def command(db: sqlite3.Connection, key: str, auction_id: int, user: bytes, name
     return db.execute("SELECT * FROM auction_commands WHERE command_key=?", (key,)).fetchone()
 
 def retract(db: sqlite3.Connection, key: str, auction_id: int, user: bytes, name: str,
-            bid_id: int, reason: str, expected_version:
+            bid_id: int, reason: str, expected_version: int | None = None,
+            admin: bool = False) -> sqlite3.Row:
+    db.row_factory = sqlite3.Row
+    db.execute("""INSERT INTO auction_commands
+      (command_key,auction_id,actor_user,actor_username,actor_admin,command_type,target_bid_id,reason,expected_version)
+      VALUES (?,?,?,?,?,'RETRACT_BID',?,?,?)""",
+      (key, auction_id, user, name, 1 if admin else 0, bid_id, reason, expected_version))
+    return db.execute("SELECT * FROM auction_commands WHERE command_key=?", (key,)).fetchone()
+
+def finalize(db: sqlite3.Connection, key: str, auction_id: int, source: str = "TIMED_SWEEP",
+             requested: str = "AUTO", buyer: bytes | None = None,
+             buyer_name: str | None = None, price: float | None = None,
+             expected_version: int | None = None) -> sqlite3.Row:
+    db.row_factory = sqlite3.Row
+    db.execute("""INSERT INTO auction_finalization_commands
+      (command_key,auction_id,source,requested_outcome,buyer_user,buyer_username,final_price,expected_version)
+      VALUES (?,?,?,?,?,?,?,?)""",
+      (key, auction_id, source, requested, buyer, buyer_name, price, expected_version))
+    return db.execute("SELECT * FROM auction_finalization_commands WHERE command_key=?", (key,)).fetchone()
+
+def assert_eq(actual, expected, label: str) -> None:
+    if actual != expected:
+        raise AssertionError(f"{label}: expected {expected!r}, got {actual!r}")
+
+def main() -> None:
+    migration = MIGRATION.read_text(encoding="utf-8")
+    with tempfile.TemporaryDirectory(prefix="tengasell-imp02-") as td:
+        path = os.path.join(td, "auction-core.db")
+        db = connect(path)
+        parent_schema(db)
+
+        # Parent -> tip proof with a real legacy proxy-bid history to backfill.
+        insert_auction(db, 9000)
+        db.execute("""INSERT INTO bids
+          (id,auction_id,user,bidder_username,amount,max_amount,status,created_at)
+          VALUES (1,9000,?,'legacyA',100,180,'superseded','2026-01-01T00:00:00Z'),
+                 (2,9000,?,'legacyB',110,150,'active','2026-01-01T00:01:00Z')""",
+          (b"legacyA", b"legacyB"))
+        db.executescript(migration)
+        legacy = db.execute(
+            "SELECT COUNT(*) FROM auction_standing_bids WHERE auction_id=9000"
+        ).fetchone()[0]
+        assert_eq(legacy, 2, "legacy standing-max backfill")
+
+        # Proxy bidding + dynamic increment + winner raising own max.
+        insert_auction(db, 9100)
+        a = command(db, "bid-A-1", 9100, b"A", "A", 200)
+        assert_eq(a["status"], "accepted", "first bid accepted")
+        assert_eq(a["result_price"], 100.0, "first bid opening price")
+        b = command(db, "bid-B-1", 9100, b"B", "B", 150)
+        assert_eq(b["status"], "accepted", "challenger accepted")
+        assert_eq(b["result_winner_username"], "A", "proxy standing bidder")
+        assert_eq(b["result_price"], 152.0, "dynamic increment proxy price")
+        a2 = command(db, "bid-A-raise", 9100, b"A", "A", 300)
+        assert_eq(a2["result_price"], 152.0, "winner max raise must not inflate price")
+        b2 = command(db, "bid-B-equal", 9100, b"B", "B", 300)
+        assert_eq(b2["result_winner_username"], "A", "equal max earlier bidder priority")
+        assert_eq(b2["result_price"], 300.0, "equal max reaches tied maximum")
+
+        # CAS/stale operator semantics at auction command boundary.
+        stale = command(db, "bid-stale", 9100, b"C", "C", 400, expected_version=0)
+        assert_eq(stale["status"], "rejected", "stale version rejected")
+        assert_eq(stale["error_code"], "STALE_AUCTION_VERSION", "stale error code")
+
+        # Persistent command idempotency: same key cannot execute twice.
+        try:
+            command(db, "bid-A-1", 9100, b"A", "A", 999)
+            raise AssertionError("duplicate command key unexpectedly inserted")
+        except sqlite3.IntegrityError:
+            pass
+        assert_eq(db.execute(
+            "SELECT COUNT(*) FROM auction_commands WHERE command_key='bid-A-1'"
+        ).fetchone()[0], 1, "persistent idempotency row")
+
+        # Transactional retraction stays coherent with standing-max state.
+        leader_bid_id = db.execute(
+            "SELECT id FROM bids WHERE auction_id=9100 AND status='active'"
+        ).fetchone()[0]
+        retract_row = retract(
+            db, "retract-A", 9100, b"A", "A", leader_bid_id,
+            "Entered the wrong maximum amount",
+        )
+        assert_eq(retract_row["status"], "accepted", "leader retraction accepted")
+        # A's immediately previous accepted maximum (200) is restored, so B's
+        # standing 300 maximum becomes the leader.
+        assert_eq(retract_row["result_winner_username"], "B", "retraction recomputes leader")
+        assert_eq(db.execute(
+            "SELECT COUNT(*) FROM bids WHERE auction_id=9100 AND status='active'"
+        ).fetchone()[0], 1, "single active bid after retraction")
+
+        # Server-time anti-snipe.
+        insert_auction(db, 9200, seconds=120)
+        old_end = db.execute("SELECT ends_at FRO
