@@ -64,8 +64,15 @@ import {
 } from "./event-authority";
 import {
   qualificationBundle,
+  requestTransport,
+  settlementBundle,
+  settlementForOrder,
+  submitFinanceCallback,
+  submitHandoverCommand,
   submitQualificationCommand,
   submitQualifiedBidCommand,
+  submitReleaseCommand,
+  submitTransferCommand,
 } from "./commercial-authority";
 
 const PORT = 3002;
@@ -1181,6 +1188,113 @@ io.on("connection", (socket: Socket) => {
     } catch (err) {
       console.error("[run-list:command]", err);
       ack?.({ ok: false, error: "Run-list command failed." });
+    }
+  });
+
+  // ── IMP-07: settlement / transfer / physical release / transport ──
+  socket.on("settlement:bundle", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      if (data?.orderId != null) {
+        return ack?.(await settlementForOrder(auctionCoreStore, user, Number(data.orderId)));
+      }
+      ack?.(await settlementBundle(auctionCoreStore, user, Number(data?.settlementId)));
+    } catch (err) {
+      console.error("[settlement:bundle]", err);
+      ack?.({ ok: false, error: "Settlement could not be loaded." });
+    }
+  });
+
+  socket.on("settlement:finance-callback", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      ack?.(await submitFinanceCallback(auctionCoreStore, user, {
+        idempotencyKey: typeof data?.idempotencyKey === "string" ? data.idempotencyKey : null,
+        settlementId: Number(data?.settlementId),
+        orderId: Number(data?.orderId),
+        eventType: data?.eventType,
+        amount: data?.amount == null ? null : Number(data.amount),
+        currency: data?.currency ?? "USD",
+        sourceReference: data?.sourceReference ?? null,
+        payoutState: data?.payoutState ?? null,
+      }));
+    } catch (err) {
+      console.error("[settlement:finance-callback]", err);
+      ack?.({ ok: false, error: "Finance settlement callback failed." });
+    }
+  });
+
+  socket.on("settlement:transfer-command", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      ack?.(await submitTransferCommand(auctionCoreStore, user, {
+        commandId: typeof data?.commandId === "string" ? data.commandId : null,
+        settlementId: Number(data?.settlementId),
+        commandType: data?.commandType,
+        documentType: data?.documentType ?? null,
+        documentRef: data?.documentRef ?? null,
+        externalProcess: Boolean(data?.externalProcess),
+        reason: data?.reason ?? null,
+      }));
+    } catch (err) {
+      console.error("[settlement:transfer-command]", err);
+      ack?.({ ok: false, error: "Transfer command failed." });
+    }
+  });
+
+  socket.on("settlement:release-command", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      ack?.(await submitReleaseCommand(auctionCoreStore, user, {
+        commandId: typeof data?.commandId === "string" ? data.commandId : null,
+        settlementId: Number(data?.settlementId),
+        collectorType: data?.collectorType,
+        collectorUser: data?.collectorUser ?? null,
+        collectorName: String(data?.collectorName ?? ""),
+        collectorReference: data?.collectorReference ?? null,
+        conditions: data?.conditions ?? null,
+      }));
+    } catch (err) {
+      console.error("[settlement:release-command]", err);
+      ack?.({ ok: false, error: "Release authorization failed." });
+    }
+  });
+
+  socket.on("settlement:transport-request", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      ack?.(await requestTransport(auctionCoreStore, user, {
+        requestId: typeof data?.requestId === "string" ? data.requestId : null,
+        settlementId: Number(data?.settlementId),
+        transporter: String(data?.transporter ?? ""),
+        transporterReference: data?.transporterReference ?? null,
+        pickupLocation: String(data?.pickupLocation ?? ""),
+        destination: String(data?.destination ?? ""),
+        scheduledAt: data?.scheduledAt ?? null,
+      }));
+    } catch (err) {
+      console.error("[settlement:transport-request]", err);
+      ack?.({ ok: false, error: "Transport request failed." });
+    }
+  });
+
+  socket.on("settlement:handover-command", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      ack?.(await submitHandoverCommand(auctionCoreStore, user, {
+        commandId: typeof data?.commandId === "string" ? data.commandId : null,
+        settlementId: Number(data?.settlementId),
+        evidenceReference: String(data?.evidenceReference ?? ""),
+      }));
+    } catch (err) {
+      console.error("[settlement:handover-command]", err);
+      ack?.({ ok: false, error: "Physical handover could not be recorded." });
     }
   });
 
