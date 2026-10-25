@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATIONS = ROOT / "mini-services/trailbase-db/traildepot/migrations/main"
-EXPECTED = [f"U{1_000_000_000 + i}__" for i in range(1, 15)]
+EXPECTED = [f"U{1_000_000_000 + i}__" for i in range(1, 16)]
 
 def connection() -> sqlite3.Connection:
     db = sqlite3.connect(":memory:")
@@ -29,7 +29,7 @@ def connection() -> sqlite3.Connection:
 def migration_files() -> list[Path]:
     files = sorted(MIGRATIONS.glob("U*.sql"))
     names = [p.name for p in files]
-    if len(files) != 14:
+    if len(files) != 15:
         raise AssertionError(f"expected 14 main migrations, found {names}")
     for prefix, name in zip(EXPECTED, names):
         if not name.startswith(prefix):
@@ -161,11 +161,11 @@ def main() -> None:
     upgraded.close()
 
     print("TrailBase migration chain proof: PASS")
-    print("  blank fresh install U1 -> U14: PASS")
-    print("  U1-U6 parent -> U14 tip: PASS")
+    print("  blank fresh install U1 -> U15: PASS")
+    print("  U1-U6 parent -> U15 tip: PASS")
     print("  legacy duplicate orders preserved: PASS")
     print("  canonical outcome-key uniqueness: PASS")
-    print("  IMP-02/03/04/05/06/07/08/09 tables present: PASS")
+    print("  IMP-02/03/04/05/06/07/08/09 + CERT integrity present: PASS")
     print("  AuctionEvent -> LiveSession trigger: PASS")
     print("  redacted auction_public reserve privacy: PASS")
     print("  unconfigured Production policy remains fail-closed: PASS")
