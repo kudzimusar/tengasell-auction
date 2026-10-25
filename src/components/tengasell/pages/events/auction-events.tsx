@@ -205,7 +205,7 @@ function AuctionHub() {
             <h2 className="text-lg font-bold text-foreground">Create event</h2>
           </div>
           <p className="mt-1 text-caption text-muted-foreground">
-            Creating an event creates its linked LiveSession automatically.
+            Creating an event creates its linked LiveSession automatically. Event creation is restricted to administrators.
           </p>
           <div className="mt-4 space-y-3">
             <div>
@@ -229,7 +229,7 @@ function AuctionHub() {
             {createError ? <p role="alert" className="text-caption font-semibold text-danger">{createError}</p> : null}
             <Button onClick={createEvent} disabled={creating} className="min-h-11 w-full">
               <Gavel className="size-4" aria-hidden="true" />
-              {creating ? "Creating…" : user ? "Create auction event" : "Sign in to create"}
+              {creating ? "Creating…" : user?.admin ? "Create auction event" : user ? "Request administrator authority" : "Sign in to create"}
             </Button>
           </div>
         </aside>
