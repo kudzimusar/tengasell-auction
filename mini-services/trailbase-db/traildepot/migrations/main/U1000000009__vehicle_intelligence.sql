@@ -82,13 +82,14 @@ CREATE TABLE IF NOT EXISTS vehicle_documents (
 CREATE INDEX IF NOT EXISTS idx_vehicle_documents_vehicle ON vehicle_documents (vehicle_id, document_type, status);
 
 CREATE TABLE IF NOT EXISTS vehicle_staff_roles (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
   user        BLOB NOT NULL,
   username    TEXT NOT NULL,
   role        TEXT NOT NULL CHECK (role IN ('INSPECTOR','REVIEWER')),
   active      INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0,1)),
   granted_by  BLOB,
   granted_at  TEXT NOT NULL,
-  PRIMARY KEY (user, role)
+  UNIQUE (user, role)
 ) STRICT;
 
 CREATE TABLE IF NOT EXISTS vehicle_inspections (
