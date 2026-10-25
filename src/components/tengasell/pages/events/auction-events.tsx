@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowDown,
   ArrowLeft,
@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/tengasell/auth";
 import { api } from "@/lib/tengasell/api";
+import { rpc } from "@/lib/tengasell/socket";
 import { useResource } from "@/lib/tengasell/hooks";
 import { useRouter } from "@/lib/tengasell/router";
 import type {
@@ -283,6 +284,7 @@ function EventGroup({ title, events, empty }: { title: string; events: AuctionEv
 
 function EventDetail({ eventId }: { eventId: number }) {
   const backHref = "#/events";
+  const { user } = useAuth();
   const res = useResource(() => api.auctionEventBundle(eventId), [eventId]);
   const bundle = res.data;
   const [busy, setBusy] = useState<string | null>(null);
@@ -290,6 +292,31 @@ function EventDetail({ eventId }: { eventId: number }) {
   const [auctionId, setAuctionId] = useState("");
   const [operator, setOperator] = useState("");
   const [operatorRole, setOperatorRole] = useState<"AUCTIONEER" | "CLERK">("AUCTIONEER");
+  const [qualification, setQualification] = useState<any | null>(null);
+  const [qualificationLoading, setQualificationLoading] = useState(false);
+  const [qualificationError, setQualificationError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    if (!user) {
+      setQualification(null);
+      setQualificationError(null);
+      return () => { active = false; };
+    }
+    setQualificationLoading(true);
+    setQualificationError(null);
+    rpc<{ ok: boolean; bundle?: any }>("qualification:bundle", { eventId })
+      .then((response) => {
+        if (active) setQualification(response.bundle ?? null);
+      })
+      .catch((cause) => {
+        if (active) setQualificationError(cause instanceof Error ? cause.message : "Qualification status unavailable.");
+      })
+      .finally(() => {
+        if (active) setQualificationLoading(false);
+      });
+    return () => { active = false; };
+  }, [eventId, user?.id]);
 
   const reload = async () => {
     await res.reload();
@@ -412,6 +439,68 @@ function EventDetail({ eventId }: { eventId: number }) {
           ) : null}
         </div>
       </header>
+
+      <section aria-labelledby="bidder-qualification" className="rounded-card border border-border bg-raised p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 id="bidder-qualification" className="text-lg font-bold text-foreground">Bidder qualification</h2>
+            <p className="mt-1 text-caption text-muted-foreground">
+              Authentication alone does not authorize vehicle-auction bidding. Qualification and financial capacity are event-scoped.
+            </p>
+          </div>
+          {!user ? (
+            <Button asChild variant="outline" className="min-h-11"><a href="#/signin">Sign in to check status</a></Button>
+          ) : qualificationLoading ? (
+            <StatusPill tone="muted">Checking…</StatusPill>
+          ) : qualification?.qualification ? (
+            <StatusPill
+              tone={qualification.qualification.status === "QUALIFIED" ? "good" : qualification.qualification.status === "REJECTED" || qualification.qualification.status === "SUSPENDED" ? "danger" : "warn"}
+            >
+              {qualification.qualification.status}
+            </StatusPill>
+          ) : (
+            <StatusPill tone="warn">NOT QUALIFIED</StatusPill>
+          )}
+        </div>
+        {user && qualificationError ? (
+          <p role="alert" className="mt-3 rounded-control border border-danger/30 bg-danger/10 p-3 text-caption font-semibold text-danger">
+            {qualificationError}
+          </p>
+        ) : null}
+        {user && !qualificationLoading && !qualificationError ? (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-control border border-border bg-background p-3">
+              <p className="text-caption text-muted-foreground">Approved capacity</p>
+              <p className="mt-1 text-lg font-bold tabular-nums text-foreground">US${Number(qualification?.capacity?.approved ?? 0).toLocaleString()}</p>
+            </div>
+            <div className="rounded-control border border-border bg-background p-3">
+              <p className="text-caption text-muted-foreground">Currently reserved</p>
+              <p className="mt-1 text-lg font-bold tabular-nums text-foreground">US${Number(qualification?.capacity?.reserved ?? 0).toLocaleString()}</p>
+            </div>
+            <div className="rounded-control border border-border bg-background p-3">
+              <p className="text-caption text-muted-foreground">Available capacity</p>
+              <p className="mt-1 text-lg font-bold tabular-nums text-foreground">US${Number(qualification?.capacity?.available ?? 0).toLocaleString()}</p>
+            </div>
+            <div className="rounded-control border border-border bg-background p-3">
+              <p className="text-caption text-muted-foreground">Deposit / credit</p>
+              <p className="mt-1 font-bold text-foreground">
+                {qualification?.qualification
+                  ? `${qualification.qualification.deposit_state ?? "NOT_REQUIRED"} · ${qualification.qualification.credit_state ?? "NONE"}`
+                  : "Action required"}
+              </p>
+            </div>
+          </div>
+        ) : null}
+        {user && !qualificationLoading ? (
+          <p className="mt-3 text-caption text-muted-foreground">
+            {qualification?.qualification?.status === "QUALIFIED"
+              ? "You can bid subject to the available capacity and any lot-specific limit."
+              : qualification?.qualification?.reason_code
+                ? `Action required: ${qualification.qualification.reason_code}`
+                : "Action required: qualification review must be completed before you can bid in this event."}
+          </p>
+        ) : null}
+      </section>
 
       <section className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-card border border-border bg-raised p-4">
