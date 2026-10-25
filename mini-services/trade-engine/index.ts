@@ -63,6 +63,14 @@ import {
   submitRunListCommand,
 } from "./event-authority";
 import {
+  calendarProjection,
+  grantOperationCapability,
+  operationGrantsFor,
+  operatorWorkbench,
+  submitTaskCommand,
+  timelineProjection,
+} from "./operation-authority";
+import {
   qualificationBundle,
   requestTransport,
   settlementBundle,
@@ -1188,6 +1196,99 @@ io.on("connection", (socket: Socket) => {
     } catch (err) {
       console.error("[run-list:command]", err);
       ack?.({ ok: false, error: "Run-list command failed." });
+    }
+  });
+
+  // ── IMP-08: scoped operator operations / tasks / projections ───────
+  socket.on("operations:grant", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      ack?.(await grantOperationCapability(auctionCoreStore, user, {
+        user: String(data?.user ?? ""),
+        username: String(data?.username ?? ""),
+        capability: data?.capability,
+        eventId: data?.eventId == null ? null : Number(data.eventId),
+        reason: String(data?.reason ?? ""),
+        expiresAt: data?.expiresAt ?? null,
+      }));
+    } catch (err) {
+      console.error("[operations:grant]", err);
+      ack?.({ ok: false, error: "Operation capability could not be granted." });
+    }
+  });
+
+  socket.on("operations:grants", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      ack?.({ ok: true, grants: await operationGrantsFor(
+        auctionCoreStore,
+        user,
+        user.admin && typeof data?.user === "string" ? data.user : null,
+      ) });
+    } catch (err) {
+      console.error("[operations:grants]", err);
+      ack?.({ ok: false, error: "Operation capabilities could not be loaded." });
+    }
+  });
+
+  socket.on("operations:task-command", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      ack?.(await submitTaskCommand(auctionCoreStore, user, {
+        commandId: typeof data?.commandId === "string" ? data.commandId : null,
+        taskId: Number(data?.taskId),
+        commandType: data?.commandType,
+        assigneeUser: data?.assigneeUser ?? null,
+        assigneeUsername: data?.assigneeUsername ?? null,
+        reason: data?.reason ?? null,
+      }));
+    } catch (err) {
+      console.error("[operations:task-command]", err);
+      ack?.({ ok: false, error: "Operational task command failed." });
+    }
+  });
+
+  socket.on("operations:calendar", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      ack?.({ ok: true, items: await calendarProjection(auctionCoreStore, user, {
+        from: data?.from ?? null,
+        to: data?.to ?? null,
+      }) });
+    } catch (err) {
+      console.error("[operations:calendar]", err);
+      ack?.({ ok: false, error: "Auction operations calendar could not be loaded." });
+    }
+  });
+
+  socket.on("operations:timeline", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      ack?.({ ok: true, events: await timelineProjection(auctionCoreStore, user, {
+        entityType: data?.entityType ?? null,
+        entityId: data?.entityId == null ? null : Number(data.entityId),
+        settlementId: data?.settlementId == null ? null : Number(data.settlementId),
+        eventId: data?.eventId == null ? null : Number(data.eventId),
+      }) });
+    } catch (err) {
+      console.error("[operations:timeline]", err);
+      ack?.({ ok: false, error: "Business timeline could not be loaded." });
+    }
+  });
+
+  socket.on("operations:workbench", async (_data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      ack?.(await operatorWorkbench(auctionCoreStore, user));
+    } catch (err) {
+      console.error("[operations:workbench]", err);
+      ack?.({ ok: false, error: "Auction operator workbench could not be loaded." });
     }
   });
 
