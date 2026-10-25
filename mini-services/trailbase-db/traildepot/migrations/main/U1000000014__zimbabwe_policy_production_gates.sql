@@ -9,6 +9,50 @@ ALTER TABLE auctions ADD COLUMN owner_bid_right_disclosure TEXT NOT NULL DEFAULT
 ALTER TABLE auctions ADD COLUMN policy_profile_key TEXT NOT NULL DEFAULT 'ZW_VEHICLE_AUCTION_V1';
 ALTER TABLE auctions ADD COLUMN commercial_policy_ready INTEGER NOT NULL DEFAULT 0 CHECK(commercial_policy_ready IN (0,1));
 
+-- Public auction reads are a redacted view. Private reserve amounts stay in
+-- the canonical auctions table and are available only to server/admin/seller
+-- authority; public clients see only the disclosure classification.
+CREATE VIEW IF NOT EXISTS auction_public AS
+SELECT
+  id,
+  user,
+  seller_username,
+  title,
+  slug,
+  description,
+  category,
+  condition,
+  start_price,
+  current_price,
+  buy_now_price,
+  bid_count,
+  watch_count,
+  views,
+  shipping_fee,
+  shipping,
+  city,
+  ends_at,
+  started_at,
+  status,
+  extension_count,
+  featured,
+  images,
+  created_at,
+  updated_at,
+  allow_offers,
+  offer_min,
+  live_session_id,
+  version,
+  finalized_at,
+  outcome,
+  final_order_id,
+  asset_kind,
+  reserve_disclosure,
+  owner_bid_right_disclosure,
+  policy_profile_key,
+  commercial_policy_ready
+FROM auctions;
+
 CREATE TABLE IF NOT EXISTS auction_policy_registry (
   id                     INTEGER PRIMARY KEY AUTOINCREMENT,
   policy_key             TEXT NOT NULL UNIQUE,
