@@ -151,4 +151,178 @@ export async function submitBidCommand(
 
   let existing = await findByCommandKey(store, "auction_commands", commandKey);
   let replayed = existing != null;
-  if
+  if (existing) {
+    const mismatched =
+      Number(existing.auction_id) !== input.auctionId ||
+      String(existing.actor_user) !== String(me.id) ||
+      !sameNumber(existing.max_amount, maxAmount);
+    if (mismatched) {
+      return {
+        ok: false,
+        code: "IDEMPOTENCY_KEY_REUSE",
+        error: rejectionMessage("IDEMPOTENCY_KEY_REUSE"),
+        commandKey,
+        replayed: true,
+      };
+    }
+  } else {
+    const id = await store.create("auction_commands", {
+      command_key: commandKey,
+      auction_id: input.auctionId,
+      actor_user: me.id,
+      actor_username: me.username,
+      actor_admin: me.admin ? 1 : 0,
+      command_type: "PLACE_BID",
+      max_amount: maxAmount,
+      expected_version: input.expectedVersion ?? null,
+    });
+    existing = id != null
+      ? await store.get("auction_commands", id)
+      : await findByCommandKey(store, "auction_commands", commandKey);
+    replayed = id == null && existing != null;
+  }
+
+  if (!existing) {
+    return {
+      ok: false,
+      code: "COMMAND_PERSIST_FAILED",
+      error: "The auction command could not be persisted.",
+      commandKey,
+      replayed,
+    };
+  }
+
+  if (existing.status !== "accepted") {
+    const code = String(existing.error_code ?? "COMMAND_REJECTED");
+    return {
+      ok: false,
+      code,
+      error: rejectionMessage(code),
+      commandKey,
+      replayed,
+      command: existing,
+    };
+  }
+
+  const auction = await store.get("auctions", input.auctionId);
+  const session =
+    auction?.live_session_id != null
+      ? await store.get("live_sessions", Number(auction.live_session_id))
+      : null;
+  const winning = String(existing.result_winner_user) === String(me.id);
+
+  return {
+    ok: true,
+    commandKey,
+    replayed,
+    amount: Number(existing.result_price),
+    winning,
+    outbid: !winning,
+    auction,
+    session,
+    command: existing,
+  };
+}
+
+
+export async function submitRetractCommand(
+  store: AuctionCoreStore,
+  me: AuctionCoreIdentity,
+  input: {
+    auctionId: number;
+    bidId: number;
+    reason: string;
+    commandKey?: string | null;
+    expectedVersion?: number | null;
+  },
+): Promise<BidCommandResult> {
+  const commandKey = key(input.commandKey, `retract:${input.auctionId}:${input.bidId}`);
+  const reason = String(input.reason ?? "").trim().slice(0, 200);
+  let existing = await findByCommandKey(store, "auction_commands", commandKey);
+  let replayed = existing != null;
+
+  if (existing) {
+    const mismatched =
+      Number(existing.auction_id) !== input.auctionId ||
+      String(existing.actor_user) !== String(me.id) ||
+      Number(existing.target_bid_id) !== input.bidId ||
+      String(existing.reason ?? "") !== reason;
+    if (mismatched) {
+      return {
+        ok: false,
+        code: "IDEMPOTENCY_KEY_REUSE",
+        error: rejectionMessage("IDEMPOTENCY_KEY_REUSE"),
+        commandKey,
+        replayed: true,
+      };
+    }
+  } else {
+    const id = await store.create("auction_commands", {
+      command_key: commandKey,
+      auction_id: input.auctionId,
+      actor_user: me.id,
+      actor_username: me.username,
+      actor_admin: me.admin ? 1 : 0,
+      command_type: "RETRACT_BID",
+      target_bid_id: input.bidId,
+      reason,
+      expected_version: input.expectedVersion ?? null,
+    });
+    existing = id != null
+      ? await store.get("auction_commands", id)
+      : await findByCommandKey(store, "auction_commands", commandKey);
+    replayed = id == null && existing != null;
+  }
+
+  if (!existing) {
+    return {
+      ok: false,
+      code: "COMMAND_PERSIST_FAILED",
+      error: "The retraction command could not be persisted.",
+      commandKey,
+      replayed,
+    };
+  }
+  if (existing.status !== "accepted") {
+    const code = String(existing.error_code ?? "COMMAND_REJECTED");
+    return {
+      ok: false,
+      code,
+      error: rejectionMessage(code),
+      commandKey,
+      replayed,
+      command: existing,
+    };
+  }
+
+  const auction = await store.get("auctions", input.auctionId);
+  const winning = String(existing.result_winner_user) === String(me.id);
+  return {
+    ok: true,
+    commandKey,
+    replayed,
+    amount: Number(existing.result_price),
+    winning,
+    outbid: !winning,
+    auction,
+    command: existing,
+  };
+}
+
+export async function submitFinalizationCommand(
+  store: AuctionCoreStore,
+  input: FinalizationInput,
+): Promise<FinalizationResult> {
+  const commandKey = key(input.commandKey, `final:${input.source.toLowerCase()}:${input.auctionId}`);
+  let existing = await findByCommandKey(store, "auction_finalization_commands", commandKey);
+  let replayed = existing != null;
+
+  if (existing) {
+    const mismatched =
+      Number(existing.auction_id) !== input.auctionId ||
+      String(existing.source) !== input.source ||
+      String(existing.requested_outcome) !== input.requestedOutcome ||
+      (input.buyer && String(existing.buyer_user) !== String(input.buyer.id)) ||
+      !sameNumber(existing.final_price, input.price ?? null);
+    if (mismatched) {
+     
