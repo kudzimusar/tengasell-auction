@@ -54,6 +54,12 @@ import {
   submitVehicleInspection,
   vehicleBundle,
 } from "./vehicle-authority";
+import {
+  createAuctionEventSession,
+  createAuctionVenue,
+  runListBundle,
+  submitRunListCommand,
+} from "./event-authority";
 
 const PORT = 3002;
 const TRAILBASE = "http://localhost:3001";
@@ -448,31 +454,32 @@ async function endUnsold(
 
 /** Advance a live room to its next unsold lot, or close the room. */
 async function advanceRoom(session: any): Promise<void> {
-  const lots = await getRecords(
-    "auctions",
-    `filter[live_session_id][$eq]=${session.id}&filter[status][$eq]=live&order=id&limit=100`,
+  const currentLotId = Number(session.current_auction_lot_id ?? 0);
+  if (!currentLotId) return;
+  const result = await submitRunListCommand(
+    auctionCoreStore,
+    {
+      id: String(session.host_user ?? ""),
+      username: String(session.host_username ?? "system"),
+      admin: true,
+    },
+    {
+      commandKey: `system-close:${session.id}:${currentLotId}:v${Number(session.run_list_version ?? 0)}`,
+      sessionId: Number(session.id),
+      commandType: "CLOSE",
+      lotId: currentLotId,
+      expectedVersion: Number(session.run_list_version ?? 0),
+    },
   );
-  const remaining = lots.filter((l: any) => l.id !== session.current_lot_id);
-  if (remaining.length > 0) {
-    await updateRecord("live_sessions", session.id, {
-      current_lot_id: remaining[0].id,
-      lot_index: Number(session.lot_index ?? 0) + 1,
-      close_at: null,
-      updated_at: nowIso(),
-    });
-  } else {
-    await updateRecord("live_sessions", session.id, {
-      status: "closed",
-      current_lot_id: null,
-      close_at: null,
-      updated_at: nowIso(),
-    });
+  if (!result.ok) {
+    console.warn("[runlist:auto-close]", result.code, result.error);
+    return;
   }
-  const updated = await getRecord("live_sessions", session.id);
-  if (updated) io.emit("room:update", { session: updated });
+  const fresh = result.session ?? await getRecord("live_sessions", Number(session.id));
+  if (fresh) io.emit("room:update", { session: fresh, runList: result.runList ?? [] });
 }
 
-let auctionOutboxDraining = false;
+let auctionOutboxDraininglet auctionOutboxDraining = false;
 
 async function publishAuctionCoreEvent(event: AuctionOutboxEnvelope): Promise<void> {
   const auction = await getRecord("auctions", Number(event.auction_id));
