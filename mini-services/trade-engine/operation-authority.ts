@@ -9,7 +9,7 @@ export type OperationCapability =
   | "AUCTION_OPERATOR"
   | "TASK_OPERATOR";
 
-export interface OperationIdentity extends AuctionCoreIdentity {}
+export type OperationIdentity = AuctionCoreIdentity;
 
 function safeKey(value: unknown, prefix: string) {
   const raw = typeof value === "string" ? value.trim() : "";
