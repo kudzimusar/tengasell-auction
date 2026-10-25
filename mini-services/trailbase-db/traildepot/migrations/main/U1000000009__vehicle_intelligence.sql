@@ -228,3 +228,263 @@ WHEN NEW.command_type='PLACE_BID'
 BEGIN
   SELECT RAISE(ABORT,'VEHICLE_NOT_ELIGIBLE');
 END;
+
+
+CREATE TRIGGER IF NOT EXISTS trg_vehicle_review_process
+AFTER INSERT ON vehicle_review_commands
+BEGIN
+  UPDATE vehicle_review_commands
+     SET received_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE id=NEW.id;
+
+  UPDATE vehicle_review_commands SET status='rejected', error_code='VEHICLE_NOT_FOUND'
+   WHERE id=NEW.id AND status='pending'
+     AND NOT EXISTS (SELECT 1 FROM vehicles WHERE id=NEW.vehicle_id);
+
+  UPDATE vehicle_review_commands SET status='rejected', error_code='REVIEWER_PERMISSION_REQUIRED'
+   WHERE id=NEW.id AND status='pending'
+     AND NOT EXISTS (
+       SELECT 1 FROM vehicle_staff_roles r
+        WHERE r.user=NEW.reviewer_user AND r.role='REVIEWER' AND r.active=1
+     )
+     AND NOT EXISTS (
+       SELECT 1 FROM _user u WHERE u.id=NEW.reviewer_user AND u.admin=TRUE
+     );
+
+  UPDATE vehicle_review_commands SET status='rejected', error_code='INSPECTION_NOT_SUBMITTED'
+   WHERE id=NEW.id AND status='pending'
+     AND NOT EXISTS (
+       SELECT 1 FROM vehicle_inspections i
+        WHERE i.id=NEW.inspection_id
+          AND i.vehicle_id=NEW.vehicle_id
+          AND i.lifecycle='SUBMITTED'
+     );
+
+  UPDATE vehicle_review_commands SET status='rejected', error_code='MAKER_CHECKER_REQUIRED'
+   WHERE id=NEW.id AND status='pending'
+     AND EXISTS (
+       SELECT 1 FROM vehicle_inspections i
+        WHERE i.id=NEW.inspection_id AND i.inspector_user=NEW.reviewer_user
+     )
+     AND NOT EXISTS (
+       SELECT 1 FROM _user u WHERE u.id=NEW.reviewer_user AND u.admin=TRUE
+     );
+
+  UPDATE vehicle_review_commands
+     SET result_score=MAX(0,100-COALESCE((
+       SELECT SUM(CASE f.severity
+         WHEN 'MINOR' THEN 2
+         WHEN 'MODERATE' THEN 7
+         WHEN 'MAJOR' THEN 18
+         WHEN 'CRITICAL' THEN 35
+         ELSE 0 END)
+       FROM vehicle_inspection_findings f
+       WHERE f.inspection_id=NEW.inspection_id
+     ),0))
+   WHERE id=NEW.id AND status='pending';
+
+  UPDATE vehicle_review_commands
+     SET result_grade=CASE
+       WHEN EXISTS (
+         SELECT 1 FROM vehicle_inspections i
+          WHERE i.id=NEW.inspection_id AND i.roadworthy=0
+       ) THEN 'REJECT'
+       WHEN EXISTS (
+         SELECT 1 FROM vehicle_inspection_findings f
+          WHERE f.inspection_id=NEW.inspection_id
+            AND (f.safety_critical=1 OR f.severity='CRITICAL')
+       ) THEN 'REJECT'
+       WHEN result_score>=90 THEN 'A'
+       WHEN result_score>=80 THEN 'B'
+       WHEN result_score>=70 THEN 'C'
+       WHEN result_score>=60 THEN 'D'
+       WHEN result_score>=50 THEN 'E'
+       ELSE 'REJECT'
+     END
+   WHERE id=NEW.id AND status='pending';
+
+  UPDATE vehicle_inspections
+     SET reviewer_user=NEW.reviewer_user,
+         reviewer_name=NEW.reviewer_name,
+         lifecycle='REVIEWED',
+         grade_score=(SELECT result_score FROM vehicle_review_commands WHERE id=NEW.id),
+         grade=(SELECT result_grade FROM vehicle_review_commands WHERE id=NEW.id),
+         reviewed_at=strftime('%Y-%m-%dT%H:%M:%SZ','now'),
+         updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE id=NEW.inspection_id
+     AND (SELECT status FROM vehicle_review_commands WHERE id=NEW.id)='pending';
+
+  INSERT INTO vehicle_eligibility
+    (vehicle_id,inspection_id,version,status,decided_by,decided_at,created_at)
+  SELECT NEW.vehicle_id,NEW.inspection_id,
+         COALESCE((SELECT MAX(version)+1 FROM vehicle_eligibility WHERE vehicle_id=NEW.vehicle_id),1),
+         'ELIGIBLE',NEW.reviewer_user,
+         strftime('%Y-%m-%dT%H:%M:%SZ','now'),
+         strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE (SELECT status FROM vehicle_review_commands WHERE id=NEW.id)='pending';
+
+  UPDATE vehicle_review_commands
+     SET eligibility_id=(
+       SELECT id FROM vehicle_eligibility
+        WHERE vehicle_id=NEW.vehicle_id
+        ORDER BY version DESC LIMIT 1
+     )
+   WHERE id=NEW.id AND status='pending';
+
+  INSERT OR IGNORE INTO vehicle_eligibility_reasons (eligibility_id,code,detail)
+  SELECT eligibility_id,'NO_VERIFIED_OWNERSHIP','A verified ownership document is required.'
+    FROM vehicle_review_commands c
+   WHERE c.id=NEW.id AND c.status='pending'
+     AND NOT EXISTS (
+       SELECT 1 FROM vehicle_documents d
+        WHERE d.vehicle_id=NEW.vehicle_id
+          AND d.document_type='OWNERSHIP' AND d.status='VERIFIED'
+          AND (d.expires_at IS NULL OR unixepoch(d.expires_at)>unixepoch('now'))
+     );
+
+  INSERT OR IGNORE INTO vehicle_eligibility_reasons (eligibility_id,code,detail)
+  SELECT eligibility_id,'NO_VERIFIED_REGISTRATION','The declared registration requires verified evidence.'
+    FROM vehicle_review_commands c
+   WHERE c.id=NEW.id AND c.status='pending'
+     AND EXISTS (
+       SELECT 1 FROM vehicles v
+        WHERE v.id=NEW.vehicle_id
+          AND v.registration_number IS NOT NULL
+          AND length(trim(v.registration_number))>0
+     )
+     AND NOT EXISTS (
+       SELECT 1 FROM vehicle_documents d
+        WHERE d.vehicle_id=NEW.vehicle_id
+          AND d.document_type='REGISTRATION' AND d.status='VERIFIED'
+          AND (d.expires_at IS NULL OR unixepoch(d.expires_at)>unixepoch('now'))
+     );
+
+  INSERT OR IGNORE INTO vehicle_eligibility_reasons (eligibility_id,code,detail)
+  SELECT eligibility_id,'CUSTOMS_EVIDENCE_REQUIRED','Cleared imported vehicles require verified customs evidence.'
+    FROM vehicle_review_commands c
+   WHERE c.id=NEW.id AND c.status='pending'
+     AND EXISTS (SELECT 1 FROM vehicles v WHERE v.id=NEW.vehicle_id AND v.customs_status='CLEARED')
+     AND NOT EXISTS (
+       SELECT 1 FROM vehicle_documents d
+        WHERE d.vehicle_id=NEW.vehicle_id
+          AND d.document_type='CUSTOMS_CLEARANCE' AND d.status='VERIFIED'
+          AND (d.expires_at IS NULL OR unixepoch(d.expires_at)>unixepoch('now'))
+     );
+
+  INSERT OR IGNORE INTO vehicle_eligibility_reasons (eligibility_id,code,detail)
+  SELECT eligibility_id,'CUSTOMS_STATUS_UNRESOLVED','Customs status must be resolved before auction eligibility.'
+    FROM vehicle_review_commands c
+   WHERE c.id=NEW.id AND c.status='pending'
+     AND EXISTS (
+       SELECT 1 FROM vehicles v
+        WHERE v.id=NEW.vehicle_id AND v.customs_status IN ('PENDING','UNKNOWN')
+     );
+
+  INSERT OR IGNORE INTO vehicle_eligibility_reasons (eligibility_id,code,detail)
+  SELECT eligibility_id,'ROADWORTHY_FAILED','Inspection did not establish roadworthiness.'
+    FROM vehicle_review_commands c
+   WHERE c.id=NEW.id AND c.status='pending'
+     AND EXISTS (
+       SELECT 1 FROM vehicle_inspections i WHERE i.id=NEW.inspection_id AND i.roadworthy=0
+     );
+
+  INSERT OR IGNORE INTO vehicle_eligibility_reasons (eligibility_id,code,detail)
+  SELECT eligibility_id,'CRITICAL_SAFETY_FINDING','Inspection contains a critical or safety-critical finding.'
+    FROM vehicle_review_commands c
+   WHERE c.id=NEW.id AND c.status='pending'
+     AND EXISTS (
+       SELECT 1 FROM vehicle_inspection_findings f
+        WHERE f.inspection_id=NEW.inspection_id
+          AND (f.safety_critical=1 OR f.severity='CRITICAL')
+     );
+
+  INSERT OR IGNORE INTO vehicle_eligibility_reasons (eligibility_id,code,detail)
+  SELECT eligibility_id,'GRADE_REJECTED','Tengasell grade is below the auction eligibility threshold.'
+    FROM vehicle_review_commands c
+   WHERE c.id=NEW.id AND c.status='pending' AND c.result_grade='REJECT';
+
+  UPDATE vehicle_eligibility
+     SET status=CASE
+       WHEN EXISTS (
+         SELECT 1 FROM vehicle_eligibility_reasons r
+          WHERE r.eligibility_id=vehicle_eligibility.id
+       ) THEN 'INELIGIBLE'
+       ELSE 'ELIGIBLE'
+     END
+   WHERE id=(SELECT eligibility_id FROM vehicle_review_commands WHERE id=NEW.id)
+     AND (SELECT status FROM vehicle_review_commands WHERE id=NEW.id)='pending';
+
+  UPDATE vehicle_review_commands
+     SET eligibility_status=(
+       SELECT status FROM vehicle_eligibility
+        WHERE id=vehicle_review_commands.eligibility_id
+     )
+   WHERE id=NEW.id AND status='pending';
+
+  UPDATE vehicle_inspections
+     SET lifecycle='SUPERSEDED',
+         updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE vehicle_id=NEW.vehicle_id
+     AND id<>NEW.inspection_id
+     AND lifecycle='REVIEWED'
+     AND (SELECT status FROM vehicle_review_commands WHERE id=NEW.id)='pending';
+
+  UPDATE vehicles
+     SET tengasell_grade=(SELECT result_grade FROM vehicle_review_commands WHERE id=NEW.id),
+         lifecycle=CASE
+           WHEN (SELECT eligibility_status FROM vehicle_review_commands WHERE id=NEW.id)='ELIGIBLE'
+             THEN 'ELIGIBLE'
+           ELSE 'INELIGIBLE'
+         END,
+         updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE id=NEW.vehicle_id
+     AND (SELECT status FROM vehicle_review_commands WHERE id=NEW.id)='pending';
+
+  INSERT INTO vehicle_evidence
+    (vehicle_id,field_key,source_type,source_id,value_json,asserted_by,verified_by,verified_at,created_at)
+  SELECT NEW.vehicle_id,'tengasell_grade','REVIEW',NEW.inspection_id,
+         json_object(
+           'score',(SELECT result_score FROM vehicle_review_commands WHERE id=NEW.id),
+           'grade',(SELECT result_grade FROM vehicle_review_commands WHERE id=NEW.id),
+           'eligibility',(SELECT eligibility_status FROM vehicle_review_commands WHERE id=NEW.id)
+         ),
+         NEW.reviewer_user,NEW.reviewer_user,
+         strftime('%Y-%m-%dT%H:%M:%SZ','now'),
+         strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE (SELECT status FROM vehicle_review_commands WHERE id=NEW.id)='pending';
+
+  -- Vehicle auctions are activated only by the canonical review transaction.
+  UPDATE auctions
+     SET status='live',
+         started_at=strftime('%Y-%m-%dT%H:%M:%SZ','now'),
+         ends_at=strftime(
+           '%Y-%m-%dT%H:%M:%SZ','now',
+           '+' || (SELECT requested_duration_hours FROM vehicles WHERE id=NEW.vehicle_id) || ' hours'
+         ),
+         version=version+1,
+         updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE id=(SELECT auction_id FROM vehicles WHERE id=NEW.vehicle_id)
+     AND status='draft'
+     AND (SELECT eligibility_status FROM vehicle_review_commands WHERE id=NEW.id)='ELIGIBLE'
+     AND (SELECT status FROM vehicle_review_commands WHERE id=NEW.id)='pending';
+
+  INSERT INTO audit_events (user,action,entity,entity_id,source,payload,created_at)
+  SELECT NEW.reviewer_user,'vehicle:review','vehicles',NEW.vehicle_id,'vehicle-authority',
+         json_object(
+           'inspectionId',NEW.inspection_id,
+           'score',(SELECT result_score FROM vehicle_review_commands WHERE id=NEW.id),
+           'grade',(SELECT result_grade FROM vehicle_review_commands WHERE id=NEW.id),
+           'eligibility',(SELECT eligibility_status FROM vehicle_review_commands WHERE id=NEW.id)
+         ),
+         strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE (SELECT status FROM vehicle_review_commands WHERE id=NEW.id)='pending';
+
+  UPDATE vehicle_review_commands
+     SET status='accepted',
+         completed_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE id=NEW.id AND status='pending';
+
+  UPDATE vehicle_review_commands
+     SET completed_at=COALESCE(completed_at,strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+   WHERE id=NEW.id;
+END;
