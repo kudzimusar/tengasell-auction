@@ -11,7 +11,8 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:reset": "prisma migrate reset",
-    "test:auction-authority": "node tests/auction-authority-barrier.mjs"
+    "test:auction-authority": "node tests/auction-authority-barrier.mjs",
+    "test:auction-core": "python3 tests/auction-core-concurrency.py"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
