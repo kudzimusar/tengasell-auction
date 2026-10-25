@@ -21,6 +21,8 @@
     "test:bidder-qualification": "python3 tests/bidder-qualification-capacity.py",
     "test:auction-settlement": "python3 tests/auction-settlement-lifecycle.py",
     "test:auction-operations": "python3 tests/operator-operations.py",
+    "test:auction-policy": "python3 tests/zimbabwe-policy-production-gates.py",
+    "test:commercial-ui": "node tests/commercial-ui-contract.mjs",
     "test:trailbase-migrations": "python3 tests/trailbase-migration-chain.py"
   },
   "dependencies": {
