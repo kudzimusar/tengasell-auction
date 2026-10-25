@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATIONS = ROOT / "mini-services/trailbase-db/traildepot/migrations/main"
-EXPECTED = [f"U100000000{i}__" for i in range(1, 11)]
+EXPECTED = [f"U{1_000_000_000 + i}__" for i in range(1, 11)]
 
 def connection() -> sqlite3.Connection:
     db = sqlite3.connect(":memory:")
