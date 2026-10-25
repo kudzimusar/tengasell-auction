@@ -51,6 +51,9 @@ jobs:
       - name: Transactional auction-core concurrency proof
         run: npm run test:auction-core
 
+      - name: Prisma AUCTION convergence and consumer inventory
+        run: npm run test:auction-convergence
+
       - name: Setup Bun for canonical trade engine
         uses: oven-sh/setup-bun@v2
         with:
