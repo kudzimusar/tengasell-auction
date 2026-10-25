@@ -62,6 +62,11 @@ import {
   grantEventOperator,
   submitRunListCommand,
 } from "./event-authority";
+import {
+  qualificationBundle,
+  submitQualificationCommand,
+  submitQualifiedBidCommand,
+} from "./commercial-authority";
 
 const PORT = 3002;
 const TRAILBASE = "http://localhost:3001";
@@ -357,7 +362,18 @@ async function placeBid(
   maxAmount: number,
   commandKey?: string | null,
   expectedVersion?: number | null,
-): Promise<BidOutcome & { code?: string; commandKey?: string; replayed?: boolean }> {
+): Promise<BidOutcome & { code?: string; commandKey?: string; replayed?: boolean; eventId?: number; capacity?: any }> {
+  const auction = await getRecord("auctions", auctionId);
+  // LR02 qualification/capacity is required for whole-vehicle auctions.
+  // General marketplace auctions preserve the frozen LR01 core path.
+  if (auction?.asset_kind === "vehicle") {
+    return submitQualifiedBidCommand(auctionCoreStore, me, {
+      auctionId,
+      maxAmount,
+      commandId: commandKey,
+      expectedVersion,
+    });
+  }
   return submitBidCommand(auctionCoreStore, me, {
     auctionId,
     maxAmount,
@@ -1165,6 +1181,53 @@ io.on("connection", (socket: Socket) => {
     } catch (err) {
       console.error("[run-list:command]", err);
       ack?.({ ok: false, error: "Run-list command failed." });
+    }
+  });
+
+  // ── IMP-06: event-scoped bidder qualification + financial capacity ──
+  socket.on("qualification:bundle", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      const eventId = Number(data?.eventId);
+      if (!Number.isFinite(eventId) || eventId <= 0)
+        return ack?.({ ok: false, error: "Auction event is required." });
+      const targetUser = user.admin && typeof data?.user === "string" ? data.user : null;
+      const bundle = await qualificationBundle(auctionCoreStore, eventId, user, targetUser);
+      ack?.({ ok: true, bundle });
+    } catch (err) {
+      console.error("[qualification:bundle]", err);
+      ack?.({ ok: false, error: "Qualification status could not be loaded." });
+    }
+  });
+
+  socket.on("qualification:command", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      const result = await submitQualificationCommand(auctionCoreStore, user, {
+        commandId: typeof data?.commandId === "string" ? data.commandId : null,
+        eventId: Number(data?.eventId),
+        targetUser: String(data?.targetUser ?? ""),
+        targetUsername: String(data?.targetUsername ?? ""),
+        commandType: data?.commandType,
+        qualificationBasis: data?.qualificationBasis ?? null,
+        approvedLimit: data?.approvedLimit == null ? null : Number(data.approvedLimit),
+        lotLimit: data?.lotLimit == null ? null : Number(data.lotLimit),
+        accountState: data?.accountState ?? null,
+        riskState: data?.riskState ?? null,
+        depositState: data?.depositState ?? null,
+        depositReference: data?.depositReference ?? null,
+        depositAmount: data?.depositAmount == null ? null : Number(data.depositAmount),
+        creditState: data?.creditState ?? null,
+        creditLimit: data?.creditLimit == null ? null : Number(data.creditLimit),
+        reasonCode: data?.reasonCode ?? null,
+        expiresAt: data?.expiresAt ?? null,
+      });
+      ack?.(result);
+    } catch (err) {
+      console.error("[qualification:command]", err);
+      ack?.({ ok: false, error: "Qualification command failed." });
     }
   });
 
