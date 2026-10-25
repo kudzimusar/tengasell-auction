@@ -42,8 +42,14 @@ const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
 const page = await context.newPage();
 const consoleErrors = [];
+const httpFailures = [];
 page.on("console", (m) => { if (m.type() === "error") consoleErrors.push(m.text()); });
 page.on("pageerror", (e) => consoleErrors.push(`pageerror: ${e.message}`));
+page.on("response", (response) => {
+  if (response.status() >= 500) {
+    httpFailures.push({ status: response.status(), url: response.url() });
+  }
+});
 
 const ordinaryToken = await loginToken(context.request, fixture.ordinaryUsername);
 const adminToken = await loginToken(context.request, fixture.adminUsername);
@@ -111,10 +117,16 @@ await page.screenshot({ path: file("04-event-production-run-list-mobile.png"), f
 await page.setViewportSize({ width: 1440, height: 1000 });
 await page.getByRole("link", { name: "Open Live Room" }).click();
 await page.waitForURL(/#\/live\/\d+$/);
-await page.getByText("LR01-R1 Synthetic 2022 Toyota Hilux GD-6", { exact: true }).first().waitFor();
+const liveRoomInfo = page.locator('section[aria-label="LR01-R1 Owner UAT — Vehicle Auction"]');
+await liveRoomInfo.waitFor({ state: "visible" });
+await page.getByRole("link", { name: "Run List" }).waitFor({ state: "visible" });
+await page.getByText("LR01-R1 Synthetic 2022 Toyota Hilux GD-6", { exact: true }).first().waitFor({ state: "visible" });
 const sessionMatch = page.url().match(/#\/live\/(\d+)$/);
 assert(sessionMatch, "event-backed session id missing from Live Room URL");
 const sessionId = Number(sessionMatch[1]);
+// The application uses a short route-transition fade. Require the destination
+// UI first, then let that visual transition settle before capturing evidence.
+await page.waitForTimeout(500);
 await page.screenshot({ path: file("07-event-backed-live-room.png"), fullPage: true });
 
 // Vehicle Item Page with Vehicle / inspection.
@@ -190,6 +202,7 @@ const manifest = {
   },
   screenshots: fs.readdirSync(OUT).filter((name) => name.endsWith(".png")).sort(),
   consoleErrors,
+  httpFailures,
 };
 fs.writeFileSync(file("manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
 
