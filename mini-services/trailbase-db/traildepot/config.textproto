@@ -326,5 +326,47 @@ record_apis: [
     read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
     update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
     delete_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    # IMP-05: public auction venue discovery; engine-only mutation.
+    name: "auction_venues"
+    table_name: "auction_venues"
+    acl_world: [READ]
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    # IMP-05: public Event / Calendar authority; engine-only mutation.
+    name: "auction_events"
+    table_name: "auction_events"
+    acl_world: [READ]
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    # IMP-05: explicit ordered lots are public sale state; engine-only mutation.
+    name: "auction_lots"
+    table_name: "auction_lots"
+    acl_world: [READ]
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    # IMP-05: idempotent operator command ledger. Never browser-writable.
+    name: "auction_runlist_commands"
+    table_name: "auction_runlist_commands"
+    acl_authenticated: [CREATE, READ]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    # IMP-05: durable event/session/lot operator audit.
+    name: "auction_event_audit"
+    table_name: "auction_event_audit"
+    acl_authenticated: [READ]
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
   }
 ]
