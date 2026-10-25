@@ -45,13 +45,21 @@ record_apis: [
     delete_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
   },
   {
+    # Canonical auction table contains private reserve authority. Public reads
+    # use the redacted auction_public view below.
     name: "auctions"
     table_name: "auctions"
-    acl_world: [READ]
     acl_authenticated: [CREATE, READ, UPDATE, DELETE]
     create_access_rule: "(_REQ_.user = _USER_.id) OR (EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE))"
+    read_access_rule: "(_ROW_.user = _USER_.id) OR (EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE))"
     update_access_rule: "((_ROW_.user = _USER_.id) AND (_ROW_.status = 'draft')) OR (EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE))"
     delete_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_public"
+    table_name: "auction_public"
+    acl_world: [READ]
+    acl_authenticated: [READ]
   },
   {
     # Bids are written exclusively by the trade engine (proxy-bid integrity).
