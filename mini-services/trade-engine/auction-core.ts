@@ -115,6 +115,7 @@ function rejectionMessage(code: string | null | undefined): string {
     MAX_NOT_RAISED: "Your new maximum must be higher than your standing maximum.",
     MAX_BELOW_OPENING: "Your maximum is below the opening bid.",
     MAX_BELOW_MINIMUM: "Your maximum is below the current minimum bid.",
+    VEHICLE_NOT_ELIGIBLE: "This vehicle is not eligible for commercial bidding until Tengasell Inspection approval.",
     TIMED_FINALIZATION_NOT_DUE: "The timed auction is not due to close.",
     LIVE_HAMMER_NOT_DUE: "The live hammer clock has not elapsed.",
     SOLD_REQUIRES_BUYER: "A sold outcome requires a buyer and final price.",
@@ -150,6 +151,30 @@ export async function submitBidCommand(
       commandKey,
       replayed: false,
     };
+  }
+
+  const auctionBefore = await store.get("auctions", input.auctionId);
+  if (auctionBefore?.asset_kind === "vehicle") {
+    const vehicles = await store.list(
+      "vehicles",
+      `filter[auction_id][$eq]=${input.auctionId}&limit=1`,
+    );
+    const vehicle = vehicles[0];
+    const eligibility = vehicle
+      ? await store.list(
+          "vehicle_eligibility",
+          `filter[vehicle_id][$eq]=${vehicle.id}&order=-version&limit=1`,
+        )
+      : [];
+    if (!vehicle || eligibility[0]?.status !== "ELIGIBLE") {
+      return {
+        ok: false,
+        code: "VEHICLE_NOT_ELIGIBLE",
+        error: rejectionMessage("VEHICLE_NOT_ELIGIBLE"),
+        commandKey,
+        replayed: false,
+      };
+    }
   }
 
   let existing = await findByCommandKey(store, "auction_commands", commandKey);
