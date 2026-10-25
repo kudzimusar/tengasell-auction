@@ -5,6 +5,7 @@ import { db } from "@/lib/db"
 import { ok, fail, ctxFrom, json } from "@/lib/server/api"
 import { requireUser, STAFF_ROLES } from "@/lib/server/auth-core"
 import { PUBLIC_LISTING_STATUSES, anonName, getSettings, round2 } from "@/app/api/listings/shared/mkt"
+import { auctionAuthorityPayload, canonicalBidHistory, resolveLegacyAuction } from "@/lib/server/legacy-auction-convergence"
 
 export const runtime = "nodejs"
 
@@ -18,7 +19,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!listing) return fail("Listing not found", 404, requestId)
 
   const isOwner = !!user && user.id === listing.sellerId
-  const isPublic = (PUBLIC_LISTING_STATUSES as readonly string[]).includes(listing.status)
+  const auctionResolution = await resolveLegacyAuction(listing)
+  const effectiveStatus = auctionResolution.effective.status
+  const isPublic = (PUBLIC_LISTING_STATUSES as readonly string[]).includes(effectiveStatus)
   if (!isPublic && !isOwner && !isStaff) {
     return fail("This listing is not available", 404, requestId)
   }
@@ -35,6 +38,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }),
     getSettings(),
   ])
+  const canonicalBids = listing.type === "AUCTION"
+    ? await canonicalBidHistory(auctionResolution, 10)
+    : []
 
   // Anonymised bid history
   const bidderIds = [...new Set(bids.map(b => b.bidderId))]
@@ -56,7 +62,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   // Fire-and-forget view counter (skip owner self-views)
-  if (!isOwner) {
+  if (!isOwner && listing.type !== "AUCTION") {
     void db.listing.update({ where: { id: listing.id }, data: { viewCount: { increment: 1 } } }).catch(() => undefined)
   }
 
@@ -68,15 +74,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     type: listing.type,
     startingPrice: round2(listing.startingPrice),
     buyNowPrice: listing.buyNowPrice === null ? null : round2(listing.buyNowPrice),
-    currentPrice: round2(listing.currentPrice),
+    currentPrice: round2(auctionResolution.effective.currentPrice),
     stock: listing.stock,
     images: json(listing.images, [] as string[]),
-    status: listing.status,
+    status: effectiveStatus,
     rejectReason: isOwner || isStaff ? listing.rejectReason : undefined,
-    endsAt: listing.endsAt,
+    endsAt: auctionResolution.effective.endsAt,
     endedAt: listing.endedAt,
     viewCount: listing.viewCount,
-    bidCount: listing.bidCount,
+    bidCount: auctionResolution.effective.bidCount,
     watchCount: listing.watchCount,
     createdAt: listing.createdAt,
     publishedAt: listing.publishedAt,
@@ -99,13 +105,21 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
           identityVerified: profile?.identityVerified ?? false,
         }
       : null,
-    bids: bids.map(b => ({
-      id: b.id,
-      amount: round2(b.amount),
-      bidderName: anonName(bidderMap.get(b.bidderId)?.name || ""),
-      isMine: !!user && b.bidderId === user.id,
-      createdAt: b.createdAt,
-    })),
+    bids: canonicalBids.length
+      ? canonicalBids.map((b) => ({
+          id: b.id,
+          amount: round2(b.amount),
+          bidderName: anonName(String(b.bidder_username ?? "")),
+          isMine: false,
+          createdAt: b.created_at,
+        }))
+      : bids.map(b => ({
+          id: b.id,
+          amount: round2(b.amount),
+          bidderName: anonName(bidderMap.get(b.bidderId)?.name || ""),
+          isMine: !!user && b.bidderId === user.id,
+          createdAt: b.createdAt,
+        })),
     versionCount,
     similar: similarRows.map(s => {
       const u = simUserMap.get(s.sellerId)
@@ -125,6 +139,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       }
     }),
     viewer: { isOwner, isStaff, isWatched },
+    auctionAuthority: listing.type === "AUCTION" ? auctionAuthorityPayload(auctionResolution) : undefined,
     meta: { bidIncrement: settings.bidIncrement, vatRate: settings.vatRate, sellerFeePct: settings.sellerFeePct },
   }
   return ok(data, requestId)
