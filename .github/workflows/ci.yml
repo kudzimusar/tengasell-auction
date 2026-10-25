@@ -132,7 +132,12 @@ jobs:
       - name: Production build
         run: npm run build
 
-      - name: Boot standalone server and probe endpoints
+      - name: Install Chromium browser UAT harness
+        run: |
+          npm install --no-save --no-package-lock @playwright/test@1.56.1
+          npx playwright install --with-deps chromium
+
+      - name: Boot standalone server, probe endpoints, and run commercial browser UAT
         run: |
           set -euo pipefail
           PORT=3100 node .next/standalone/server.js &
@@ -168,6 +173,9 @@ jobs:
           echo "$body" | head -c 300; echo
           echo "$body" | grep -q '"ok":true'
           echo "smoke contract satisfied"
+
+          npx playwright test tests/commercial-browser-uat.spec.mjs --reporter=line
+          echo "desktop/mobile commercial browser UAT satisfied"
 
       - name: Upload build log on failure
         if: failure()
