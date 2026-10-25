@@ -3,6 +3,7 @@ import { NextRequest } from "next/server"
 import { db } from "@/lib/db"
 import { json } from "@/lib/server/api"
 import { v1Auth, v1Json, v1Error, logV1Call, V1_PUBLIC_STATUSES } from "../_shared"
+import { auctionAuthorityPayload, resolveLegacyAuctionBatch } from "@/lib/server/legacy-auction-convergence"
 
 export const runtime = "nodejs"
 
@@ -64,10 +65,18 @@ export async function GET(req: NextRequest) {
     ])
 
     const { cat, seller } = await decorate(rows)
+    const auctionResolution = await resolveLegacyAuctionBatch(rows)
 
     const items = rows.map((r) => {
       const c = cat.get(r.categoryId)
       const s = seller.get(r.sellerId)
+      const resolution = auctionResolution.get(r.id)
+      const effective = resolution?.effective ?? {
+        currentPrice: effective.currentPrice,
+        status: effective.status,
+        endsAt: effective.endsAt,
+        bidCount: effective.bidCount,
+      }
       return {
         id: r.id,
         title: r.title,
@@ -82,6 +91,7 @@ export async function GET(req: NextRequest) {
         category: c ? { slug: c.slug, name: c.name } : null,
         seller: s ? { shopName: s.shopName, slug: s.slug, ratingAvg: s.ratingAvg } : null,
         images: json<string[]>(r.images, []),
+        auctionAuthority: r.type === "AUCTION" && resolution ? auctionAuthorityPayload(resolution) : undefined,
       }
     })
 
