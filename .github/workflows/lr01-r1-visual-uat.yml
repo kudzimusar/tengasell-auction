@@ -1,6 +1,9 @@
 name: LR01-R1 Exact-Head Visual UAT
 
 on:
+  push:
+    branches:
+      - fix/tengasell-auction-imp-lr01-r1-rbac-preview
   pull_request:
     branches:
       - feat/tengasell-auction-imp-lr01-core-vehicle-events
