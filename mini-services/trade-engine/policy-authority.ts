@@ -208,7 +208,7 @@ export async function updateServiceHealth(
   ))[0] ?? null;
   if (!row) return { ok: false, code: "HEALTH_SERVICE_UNKNOWN", error: "Unknown production dependency." };
   const now = new Date().toISOString().replace(/\.\d+Z$/, "Z");
-  await store.update("auction_service_health", row.service_key ?? row.id, {
+  await store.update("auction_service_health", row.id, {
     status: input.status,
     detail: input.detail ?? null,
     checked_by: actor.id,
@@ -304,4 +304,33 @@ export async function observabilitySnapshot(store: AuctionCoreStore) {
     auctionOutboxBacklog: outbox.filter((row) => !row.dispatched_at).length,
     financeBridgeBacklog: financeBridge.filter((row) => !row.acknowledged_at).length,
   };
+}
+
+
+export async function updateAuctionDisclosure(
+  store: AuctionCoreStore,
+  actor: PolicyIdentity,
+  input: {
+    auctionId: number;
+    reserveDisclosure: "NO_RESERVE" | "RESERVE_APPLIES" | "UPSET_APPLIES";
+    ownerBidRightDisclosure?: "NOT_PERMITTED" | "DISCLOSED";
+  },
+) {
+  const auction = await store.get("auctions", input.auctionId);
+  if (!auction) return { ok: false, code: "AUCTION_NOT_FOUND", error: "Auction not found." };
+  const owns = String(auction.user) === String(actor.id);
+  if (!actor.admin && !owns)
+    return { ok: false, code: "DISCLOSURE_FORBIDDEN", error: "Only the seller or administrator can set auction disclosures." };
+  const hasReserve = auction.reserve_price != null;
+  if (hasReserve && input.reserveDisclosure === "NO_RESERVE")
+    return { ok: false, code: "RESERVE_DISCLOSURE_CONFLICT", error: "This auction has a reserve/upset value and cannot be advertised as no-reserve." };
+  if (!hasReserve && input.reserveDisclosure !== "NO_RESERVE")
+    return { ok: false, code: "RESERVE_DISCLOSURE_CONFLICT", error: "A reserve/upset disclosure requires an authoritative reserve/upset configuration." };
+  await store.update("auctions", input.auctionId, {
+    reserve_disclosure: input.reserveDisclosure,
+    owner_bid_right_disclosure: input.ownerBidRightDisclosure ?? "NOT_PERMITTED",
+    commercial_policy_ready: 1,
+    updated_at: new Date().toISOString().replace(/\.\d+Z$/, "Z"),
+  });
+  return { ok: true, auction: await store.get("auctions", input.auctionId) };
 }
