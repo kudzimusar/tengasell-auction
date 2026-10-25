@@ -337,14 +337,14 @@ export class RemoteApi {
       offset: q.offset ?? 0,
       count: "true",
     };
-    const res = await tbFetch("/api/records/v1/auctions", { params });
+    const res = await tbFetch("/api/records/v1/auction_public", { params });
     if (!res.ok) throw new Error(await errorMessage(res));
     const data = await res.json();
     return { items: data.records ?? [], total: data.total_count ?? data.records?.length ?? 0 };
   }
 
   async auction(id: number): Promise<Auction | null> {
-    const res = await tbFetch(`/api/records/v1/auctions/${id}`);
+    const res = await tbFetch(`/api/records/v1/auction_public/${id}`);
     if (res.status === 404) return null;
     if (!res.ok) throw new Error(await errorMessage(res));
     return await res.json();
@@ -370,7 +370,7 @@ export class RemoteApi {
 
   async suggest(term: string): Promise<{ id: number; title: string; current_price: number }[]> {
     if (!term.trim()) return [];
-    const res = await tbFetch("/api/records/v1/auctions", {
+    const res = await tbFetch("/api/records/v1/auction_public", {
       params: { [`filter[title][$like]`]: `%${term}%`, [`filter[status][$eq]`]: "live", limit: 6 },
     });
     if (!res.ok) return [];
@@ -647,7 +647,7 @@ export class RemoteApi {
 
   async mySelling(): Promise<Auction[]> {
     if (!this.cachedUser && !(await this.currentUser())) return [];
-    const res = await tbFetch("/api/records/v1/auctions", {
+    const res = await tbFetch("/api/records/v1/auction_public", {
       headers: this.authHeaders(),
       params: {
         [`filter[user][$eq]`]: this.cachedUser!.id,
@@ -864,7 +864,7 @@ export class RemoteApi {
     if (!this.cachedUser && !(await this.currentUser()))
       throw new Error("Sign in to save searches.");
     // high-water mark: only listings created AFTER this point trigger alerts
-    const top = await tbFetch("/api/records/v1/auctions", {
+    const top = await tbFetch("/api/records/v1/auction_public", {
       headers: this.authHeaders(),
       params: { order: "-id", limit: 1 },
     });
@@ -1080,7 +1080,7 @@ export class RemoteApi {
         .map((lot) => lot.auction)
         .filter((auction): auction is Auction => !!auction);
     }
-    const res = await tbFetch("/api/records/v1/auctions", {
+    const res = await tbFetch("/api/records/v1/auction_public", {
       params: {
         [`filter[live_session_id][$eq]`]: sessionId,
         order: "id",
