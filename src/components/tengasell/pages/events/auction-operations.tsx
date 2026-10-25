@@ -96,7 +96,9 @@ export default function AuctionOperationsPage() {
   }, [user]);
 
   useEffect(() => {
-    if (!authLoading && user) void load();
+    if (authLoading || !user) return;
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
   }, [authLoading, user, load]);
 
   const completeTask = async (task: any) => {
