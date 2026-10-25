@@ -213,13 +213,6 @@ record_apis: [
     read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
   },
   {
-    # IMP-02: private proxy maxima. Public clients must never see these rows.
-    name: "auction_standing_bids"
-    table_name: "auction_standing_bids"
-    acl_authenticated: [READ]
-    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
-  },
-  {
     # IMP-03: verified legacy Prisma AUCTION -> canonical TrailBase identity.
     # No client can create/update these records; reconciliation is dry-run by
     # default and approved mapping insertion is an administrative migration act.
