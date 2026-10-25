@@ -66,6 +66,9 @@ jobs:
       - name: Event UI responsive and accessibility contract
         run: node tests/event-ui-contract.mjs
 
+      - name: LR01-R1 event RBAC and Auction Hub discoverability contract
+        run: node tests/lr01-r1-rbac-navigation-contract.mjs
+
       - name: Setup Bun for canonical trade engine
         uses: oven-sh/setup-bun@v2
         with:
@@ -75,9 +78,9 @@ jobs:
         working-directory: mini-services/trade-engine
         run: bun install
 
-      - name: Vehicle authority behavioral RBAC proof
+      - name: Vehicle and event authority behavioral RBAC proof
         working-directory: mini-services/trade-engine
-        run: bun test vehicle-authority.test.ts
+        run: bun test vehicle-authority.test.ts event-authority.test.ts
 
       - name: Compile canonical trade engine
         working-directory: mini-services/trade-engine
