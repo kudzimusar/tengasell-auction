@@ -2578,6 +2578,31 @@ io.on("connection", (socket: Socket) => {
         return ack?.({ ok: false, error: "Only the buyer can pay this order." });
       if (order.status !== "pending_payment")
         return ack?.({ ok: false, error: "This order is not awaiting payment." });
+      const payAuction = await getRecord("auctions", Number(order.auction_id)).catch(() => null);
+      if (payAuction?.asset_kind === "vehicle") {
+        const settlementRows = await getRecords(
+          "auction_settlements",
+          `filter[order_id][$eq]=${orderId}&limit=1`,
+        );
+        const settlement = settlementRows[0];
+        if (!settlement) {
+          return ack?.({
+            ok: false,
+            code: "VEHICLE_SETTLEMENT_REQUIRED",
+            error: "Vehicle auction payment is blocked until the canonical settlement exists.",
+          });
+        }
+        const gate = await commercialGate(user, Number(order.auction_id));
+        if (!gate.ok) {
+          return ack?.({ ok: false, code: gate.code, error: gate.error, gates: gate.report });
+        }
+        return ack?.({
+          ok: false,
+          code: "FINANCE_CONFIRMATION_REQUIRED",
+          error: "Vehicle auction payment cannot be marked paid from the client. Complete payment through the certified Finance channel; settlement advances only after an authoritative Finance confirmation.",
+          settlementId: settlement.id,
+        });
+      }
       const method = String(data?.method ?? "ecocash");
       const reference =
         String(data?.reference ?? "") ||
@@ -2599,7 +2624,6 @@ io.on("connection", (socket: Socket) => {
       // Finance (12-b): fund escrow for this payment — item price + the
       // auction's shipping fee (§G: buyer pays win price + shipping).
       // Fire-and-forget; the finance sweep backfills if this is missed.
-      const payAuction = await getRecord("auctions", Number(order.auction_id)).catch(() => null);
       financeEvent("order.paid", {
         orderId,
         buyer: order.buyer_username,
@@ -2635,6 +2659,14 @@ io.on("connection", (socket: Socket) => {
       if (!order) return ack?.({ ok: false, error: "Order not found." });
       if (order.seller_user !== user.id)
         return ack?.({ ok: false, error: "Only the seller can dispatch this order." });
+      const shipAuction = await getRecord("auctions", Number(order.auction_id)).catch(() => null);
+      if (shipAuction?.asset_kind === "vehicle") {
+        return ack?.({
+          ok: false,
+          code: "VEHICLE_RELEASE_AUTHORITY_REQUIRED",
+          error: "Vehicle auction orders do not use generic dispatch. Use transfer, release authorization and handover.",
+        });
+      }
       if (order.status !== "paid")
         return ack?.({ ok: false, error: "Order must be paid before dispatch." });
       const carrier = String(data?.carrier ?? "SwiftExpress");
@@ -2674,6 +2706,14 @@ io.on("connection", (socket: Socket) => {
       if (!order) return ack?.({ ok: false, error: "Order not found." });
       if (order.buyer_user !== user.id)
         return ack?.({ ok: false, error: "Only the buyer can confirm delivery." });
+      const deliveryAuction = await getRecord("auctions", Number(order.auction_id)).catch(() => null);
+      if (deliveryAuction?.asset_kind === "vehicle") {
+        return ack?.({
+          ok: false,
+          code: "VEHICLE_HANDOVER_AUTHORITY_REQUIRED",
+          error: "Vehicle auction orders do not use generic delivery confirmation. Completion follows authorized physical handover.",
+        });
+      }
       if (order.status !== "shipped")
         return ack?.({ ok: false, error: "Order must be shipped first." });
       await updateRecord("orders", orderId, {
