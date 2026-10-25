@@ -34,7 +34,7 @@ jobs:
           bad=""
           while IFS= read -r path; do
             case "$path" in
-              .github/workflows/cert01-stg01-custody.yml|              .github/workflows/ci.yml|              mini-services/trailbase-db/traildepot/migrations/main/U1000000016__cert01_legal_cooling_off_gate.sql|              tests/trailbase-migration-chain.py|              tests/zimbabwe-policy-production-gates.py|              docs/auction/TENGASELL_AUCTION_CERT_01_STG01*)
+              .github/workflows/cert01-stg01-custody.yml|              .github/workflows/cert01-stg01-regression.yml|              .github/workflows/ci.yml|              mini-services/trailbase-db/traildepot/migrations/main/U1000000016__cert01_legal_cooling_off_gate.sql|              tests/trailbase-migration-chain.py|              tests/zimbabwe-policy-production-gates.py|              docs/auction/TENGASELL_AUCTION_CERT_01_STG01*)
                 ;;
               *)
                 bad="$bad$path"$'\n'
