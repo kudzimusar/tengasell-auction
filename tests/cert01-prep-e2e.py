@@ -124,7 +124,7 @@ def main() -> None:
           command_key,event_id,target_user,target_username,actor_user,actor_username,
           actor_admin,command_type,qualification_basis,approved_limit,lot_limit,
           account_state,risk_state,deposit_state,deposit_amount,credit_state,credit_limit,reason_code
-        ) VALUES('cert-qualify',?,?,?,?,?,1,'APPROVE','MANUAL_REVIEW',5000,4000,
+        ) VALUES('cert-qualify',?,?,?,?,?,1,'APPROVE','MANUAL_REVIEW',50000,40000,
                  'ELIGIBLE','CLEAR','NOT_REQUIRED',0,'NONE',0,'CERT_APPROVED')""",
         (event_id,bidder[0],bidder[1],admin[0],admin[1]),
     )
