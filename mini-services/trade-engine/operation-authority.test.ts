@@ -156,7 +156,7 @@ test("scoped operation grant unlocks only server-authorized operational work", a
   const workbench = await operatorWorkbench(store, buyer);
   expect(workbench.ok).toBe(true);
   if (!workbench.ok) throw new Error("workbench unexpectedly denied");
-  expect(workbench.paymentQueue.map((s: any) => s.id)).toEqual([10, 11]);
+  expect((workbench.paymentQueue ?? []).map((s: any) => s.id)).toEqual([10, 11]);
   expect(workbench.transferQueue).toHaveLength(0);
 
   const start = await submitTaskCommand(store, buyer, {
