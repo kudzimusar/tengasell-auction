@@ -91,11 +91,20 @@ jobs:
       - name: Tasks / timeline / exception operations proof
         run: npm run test:auction-operations
 
+      - name: Zimbabwe policy / production gates proof
+        run: npm run test:auction-policy
+
+      - name: CERT-01-PREP full commercial journey proof
+        run: npm run test:cert01-prep
+
       - name: TrailBase migration fresh-install and parent-to-tip proof
         run: npm run test:trailbase-migrations
 
       - name: Event UI responsive and accessibility contract
         run: node tests/event-ui-contract.mjs
+
+      - name: LR02 commercial lifecycle responsive/accessibility contract
+        run: npm run test:commercial-ui
 
       - name: LR01-R1 event RBAC and Auction Hub discoverability contract
         run: node tests/lr01-r1-rbac-navigation-contract.mjs
@@ -109,9 +118,9 @@ jobs:
         working-directory: mini-services/trade-engine
         run: bun install
 
-      - name: Vehicle / event / operations behavioral RBAC proof
+      - name: Vehicle / event / operations / policy behavioral RBAC proof
         working-directory: mini-services/trade-engine
-        run: bun test vehicle-authority.test.ts event-authority.test.ts operation-authority.test.ts
+        run: bun test vehicle-authority.test.ts event-authority.test.ts operation-authority.test.ts policy-authority.test.ts
 
       - name: Compile canonical trade engine
         working-directory: mini-services/trade-engine
