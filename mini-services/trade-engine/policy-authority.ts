@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { AuctionCoreIdentity, AuctionCoreStore } from "./auction-core";
 
-export interface PolicyIdentity extends AuctionCoreIdentity {}
+export type PolicyIdentity = AuctionCoreIdentity;
 
 function commandKey(value: unknown, prefix: string) {
   const raw = typeof value === "string" ? value.trim() : "";
