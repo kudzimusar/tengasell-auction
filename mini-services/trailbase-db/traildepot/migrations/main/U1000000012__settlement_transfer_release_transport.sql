@@ -538,15 +538,17 @@ BEGIN
    WHERE id=NEW.id AND status='pending' AND NEW.actor_admin<>1;
   UPDATE auction_release_commands SET status='rejected',error_code='SETTLEMENT_NOT_FOUND'
    WHERE id=NEW.id AND status='pending' AND NOT EXISTS(SELECT 1 FROM auction_settlements WHERE id=NEW.settlement_id);
+  -- A dispute is an independent release blocker and receives the most specific
+  -- rejection reason even when payment_state is represented as DISPUTED.
+  UPDATE auction_release_commands SET status='rejected',error_code='ACTIVE_DISPUTE'
+   WHERE id=NEW.id AND status='pending'
+     AND EXISTS(SELECT 1 FROM auction_settlements WHERE id=NEW.settlement_id AND dispute_state='OPEN');
   UPDATE auction_release_commands SET status='rejected',error_code='PAYMENT_NOT_SETTLED'
    WHERE id=NEW.id AND status='pending'
      AND EXISTS(SELECT 1 FROM auction_settlements WHERE id=NEW.settlement_id AND payment_state<>'PAID');
   UPDATE auction_release_commands SET status='rejected',error_code='TRANSFER_NOT_COMPLETE'
    WHERE id=NEW.id AND status='pending'
      AND EXISTS(SELECT 1 FROM auction_settlements WHERE id=NEW.settlement_id AND transfer_state<>'COMPLETE');
-  UPDATE auction_release_commands SET status='rejected',error_code='ACTIVE_DISPUTE'
-   WHERE id=NEW.id AND status='pending'
-     AND EXISTS(SELECT 1 FROM auction_settlements WHERE id=NEW.settlement_id AND dispute_state='OPEN');
   UPDATE auction_release_commands SET status='rejected',error_code='COLLECTOR_REQUIRED'
    WHERE id=NEW.id AND status='pending'
      AND (NEW.collector_type NOT IN ('BUYER','REPRESENTATIVE','TRANSPORTER') OR length(trim(NEW.collector_name))<2);
