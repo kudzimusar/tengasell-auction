@@ -41,6 +41,19 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
+      - name: Publish LR01-R1 regression pending status
+        if: github.job == 'build-and-smoke'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/statuses/${EXPECTED_HEAD_SHA}" \
+            -f state="pending" \
+            -f context="tengasell/lr01-r1-regression" \
+            -f description="LR01 exact-head regression is running" \
+            -f target_url="$RUN_URL" >/dev/null
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
