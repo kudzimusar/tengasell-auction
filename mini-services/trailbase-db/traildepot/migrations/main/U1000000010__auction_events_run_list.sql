@@ -137,7 +137,7 @@ BEGIN
 
   INSERT INTO audit_events(user,action,entity,entity_id,source,payload,created_at)
   VALUES
-    (NEW.host_user,'auction_event:create','auction_events',NEW.id,'event-authority',
+    (lower(hex(NEW.host_user)),'auction_event:create','auction_events',NEW.id,'event-authority',
      json_object('sessionId',(SELECT session_id FROM auction_events WHERE id=NEW.id)),
      strftime('%Y-%m-%dT%H:%M:%SZ','now'));
 END;
@@ -535,7 +535,7 @@ BEGIN
    WHERE id=NEW.id AND status='pending';
 
   INSERT INTO audit_events(user,action,entity,entity_id,source,payload,created_at)
-  SELECT NEW.operator_user,
+  SELECT lower(hex(NEW.operator_user)),
          'run_list:'||lower(NEW.command_type),
          'auction_events',NEW.event_id,'run-list-authority',
          json_object(

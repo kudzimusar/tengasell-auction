@@ -482,7 +482,7 @@ BEGIN
      AND (SELECT status FROM vehicle_review_commands WHERE id=NEW.id)='pending';
 
   INSERT INTO audit_events (user,action,entity,entity_id,source,payload,created_at)
-  SELECT NEW.reviewer_user,'vehicle:review','vehicles',NEW.vehicle_id,'vehicle-authority',
+  SELECT lower(hex(NEW.reviewer_user)),'vehicle:review','vehicles',NEW.vehicle_id,'vehicle-authority',
          json_object(
            'inspectionId',NEW.inspection_id,
            'score',(SELECT result_score FROM vehicle_review_commands WHERE id=NEW.id),

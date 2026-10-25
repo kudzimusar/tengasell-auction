@@ -19,7 +19,7 @@ CREATE TABLE _user(id BLOB PRIMARY KEY, username TEXT, admin INTEGER);
 CREATE TABLE audit_events(
   id INTEGER PRIMARY KEY AUTOINCREMENT,user TEXT,action TEXT,entity TEXT,
   entity_id INTEGER,source TEXT,payload TEXT,created_at TEXT
-);
+) STRICT;
 CREATE TABLE auctions(
   id INTEGER PRIMARY KEY,user BLOB,seller_username TEXT,title TEXT,start_price REAL,current_price REAL,
   reserve_price REAL,bid_count INTEGER,ends_at TEXT,status TEXT,live_session_id INTEGER,
@@ -109,6 +109,10 @@ def main() -> None:
         "SELECT role FROM auction_event_operators WHERE event_id=? AND user=?",
         (event_id,b"host"),
     ).fetchone() == ("HOST",)
+    assert conn.execute(
+        "SELECT user FROM audit_events WHERE action='auction_event:create' AND entity_id=?",
+        (event_id,),
+    ).fetchone() == (b"host".hex(),)
 
     denied = command(conn,"unauthorized",event_id,session_id,"ADD",0,actor=b"other",username="other",auction_id=1)
     assert denied[0:2] == ("rejected","OPERATOR_PERMISSION_REQUIRED")
@@ -200,6 +204,10 @@ def main() -> None:
     assert conn.execute("SELECT status FROM auction_events WHERE id=?", (event_id,)).fetchone() == ("CLOSED",)
     assert conn.execute("SELECT status FROM live_sessions WHERE id=?", (session_id,)).fetchone() == ("closed",)
     assert conn.execute("SELECT COUNT(*) FROM audit_events WHERE source='run-list-authority'").fetchone()[0] >= 10
+    assert conn.execute(
+        "SELECT COUNT(*) FROM audit_events WHERE source='run-list-authority' AND user=?",
+        (b"host".hex(),),
+    ).fetchone()[0] >= 10
 
     # Real concurrent stale-operator proof against a disposable file DB.
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:

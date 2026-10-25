@@ -51,7 +51,7 @@ def main():
         ) STRICT;
         CREATE TABLE audit_events (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user BLOB,
+          user TEXT,
           action TEXT NOT NULL,
           entity TEXT NOT NULL DEFAULT '',
           entity_id INTEGER,
@@ -155,8 +155,10 @@ def main():
         eq(good["eligibility_status"],"ELIGIBLE","eligibility")
         eq(db.execute("SELECT status FROM auctions WHERE id=2").fetchone()[0],"live","eligible activation")
         eq(db.execute("SELECT lifecycle FROM vehicles WHERE id=?",(vehicle_id,)).fetchone()[0],"ELIGIBLE","vehicle lifecycle")
-        if db.execute("SELECT COUNT(*) FROM audit_events WHERE action='vehicle:review'").fetchone()[0] != 1:
+        review_audit=db.execute("SELECT user FROM audit_events WHERE action='vehicle:review'").fetchone()
+        if review_audit is None:
             raise AssertionError("review audit not persisted")
+        eq(review_audit[0],b"reviewer".hex(),"review audit identity text")
 
         # Database bid gate permits current eligible authority.
         db.execute("INSERT INTO auction_commands(command_key,auction_id,command_type) VALUES('bid-ok',2,'PLACE_BID')")
