@@ -12,6 +12,11 @@ const value = (flag) => {
 const fixture = value("--fixture")
 const out = value("--out")
 
+if (args.includes("--apply")) {
+  process.stderr.write("ERROR: --apply is forbidden; reconciliation is non-destructive dry-run only.\n")
+  process.exit(2)
+}
+
 async function fromFixture(path) {
   return JSON.parse(await fs.readFile(path, "utf8"))
 }
@@ -79,8 +84,3 @@ const json = JSON.stringify(report, null, 2) + "\n"
 if (out) await fs.writeFile(out, json, "utf8")
 process.stdout.write(json)
 
-// This tool is intentionally dry-run only. There is no --apply mode.
-if (args.includes("--apply")) {
-  process.stderr.write("ERROR: --apply is forbidden; reconciliation is non-destructive dry-run only.\n")
-  process.exitCode = 2
-}
