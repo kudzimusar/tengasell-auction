@@ -77,21 +77,23 @@ def main() -> None:
     assert "reserve_price" not in public_cols
     assert {"reserve_disclosure","owner_bid_right_disclosure"}.issubset(public_cols)
 
-    # Prepare a normal live seed auction as a vehicle event fixture. Lot admission
-    # happens while the seed remains general; then the fixture switches to vehicle
-    # to exercise the vehicle-specific policy without fabricating inspection data.
-    auction = db.execute(
-        """SELECT a.id,a.user,a.seller_username,a.version,a.current_price
-             FROM auctions a
-            WHERE a.status='live'
-              AND NOT EXISTS(
-                SELECT 1 FROM bids b
-                 WHERE b.auction_id=a.id AND b.status='active'
-              )
-            ORDER BY a.id LIMIT 1"""
-    ).fetchone()
-    assert auction, "seed live auction missing"
-    auction_id,seller_user,seller_username,version,current_price = auction
+    # Create a fresh disposable general auction so policy proof is independent
+    # of seeded bid history. It becomes a whole-vehicle auction only after the
+    # accepted IMP-04 eligibility evidence is present.
+    seller = users[0]
+    bidder = users[1]
+    auction_id = 99001
+    current_price = 1000.0
+    db.execute(
+        """INSERT INTO auctions(
+          id,user,seller_username,title,start_price,current_price,ends_at,started_at,
+          status,created_at,updated_at,asset_kind
+        ) VALUES(?,?,?,'Zimbabwe policy synthetic lot',?,?,datetime('now','+4 hours'),
+                 datetime('now','-1 hour'),'live',datetime('now'),datetime('now'),'general')""",
+        (auction_id,seller[0],seller[1],current_price,current_price),
+    )
+    seller_user = seller[0]
+    seller_username = seller[1]
 
     event_id = db.execute(
         """INSERT INTO auction_events(
@@ -109,12 +111,8 @@ def main() -> None:
         (event_id,session_id,auction_id,auction_id,admin[0]),
     )
 
-    # Pick a bidder that is not the seller.
-    bidder = next(row for row in users if row[0] != seller_user)
-
     # Keep the disposable fixture genuinely live and prepare the accepted
     # IMP-04 eligibility evidence before changing whole-vehicle authority.
-    db.execute("UPDATE auctions SET ends_at=datetime('now','+4 hours') WHERE id=?",(auction_id,))
     vehicle_id = db.execute(
         """INSERT INTO vehicles(
           auction_id,seller_user,seller_username,vin,make,model,model_year,fuel_type,
