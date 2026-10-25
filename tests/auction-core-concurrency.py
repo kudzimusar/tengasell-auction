@@ -221,4 +221,91 @@ def main() -> None:
 
         # Server-time anti-snipe.
         insert_auction(db, 9200, seconds=120)
-        old_end = db.execute("SELECT ends_at FRO
+        old_end = db.execute("SELECT ends_at FROM auctions WHERE id=9200").fetchone()[0]
+        anti = command(db, "anti-1", 9200, b"A", "A", 200)
+        assert_eq(anti["status"], "accepted", "anti-snipe bid accepted")
+        new_end, ext = db.execute(
+            "SELECT ends_at,extension_count FROM auctions WHERE id=9200"
+        ).fetchone()
+        delta = int(datetime.fromisoformat(new_end.replace("Z","+00:00")).timestamp()
+                    - datetime.fromisoformat(old_end.replace("Z","+00:00")).timestamp())
+        assert_eq(delta, 300, "anti-snipe exact extension")
+        assert_eq(ext, 1, "anti-snipe extension count")
+
+        # Persisted 20-second live hammer is set atomically with accepted bid.
+        now = iso(datetime.now(timezone.utc))
+        db.execute("""INSERT INTO live_sessions
+          (id,host_user,host_username,title,scheduled_at,status,current_lot_id,created_at,updated_at)
+          VALUES (77,?,'host','Live',?,'live',9300,?,?)""", (b"host", now, now, now))
+        insert_auction(db, 9300, seconds=3600, live_session_id=77)
+        live = command(db, "live-1", 9300, b"A", "A", 200)
+        assert_eq(live["status"], "accepted", "live bid accepted")
+        close_at = db.execute("SELECT close_at FROM live_sessions WHERE id=77").fetchone()[0]
+        close_delta = datetime.fromisoformat(close_at.replace("Z","+00:00")).timestamp() - time.time()
+        if not (17 <= close_delta <= 21):
+            raise AssertionError(f"persisted hammer expected ~20s, got {close_delta:.2f}s")
+
+        # Real concurrent writers against one disposable SQLite database.
+        insert_auction(db, 9400, start=100)
+        db.close()
+        contenders = [(f"c-{i}", bytes([65+i]), chr(65+i), 140 + i*13) for i in range(10)]
+        def worker(item):
+            key, user, name, maximum = item
+            conn = connect(path)
+            try:
+                row = command(conn, key, 9400, user, name, maximum)
+                return row["status"], row["error_code"]
+            finally:
+                conn.close()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as pool:
+            results = list(pool.map(worker, contenders))
+        db = connect(path)
+        accepted = sum(1 for status, _ in results if status == "accepted")
+        if accepted < 2:
+            raise AssertionError(f"concurrency proof too weak: only {accepted} accepted writes")
+        version = db.execute("SELECT version FROM auctions WHERE id=9400").fetchone()[0]
+        assert_eq(version, accepted, "serialized version equals accepted writes")
+        assert_eq(db.execute(
+            "SELECT COUNT(*) FROM bids WHERE auction_id=9400 AND status='active'"
+        ).fetchone()[0], 1, "single active winner under concurrency")
+        assert_eq(db.execute(
+            "SELECT COUNT(*) FROM auction_outbox WHERE auction_id=9400 AND event_type='AUCTION_BID_ACCEPTED'"
+        ).fetchone()[0], accepted, "outbox event per committed bid")
+
+        # Unified finalization + CREATE_ORDER_ONCE + duplicate-finalization race.
+        # Make timed auction genuinely due using DB server-time semantics.
+        insert_auction(db, 9500, start=100, seconds=60)
+        command(db, "final-bid-A", 9500, b"A", "A", 250)
+        command(db, "final-bid-B", 9500, b"B", "B", 180)
+        db.execute("UPDATE auctions SET ends_at=strftime('%Y-%m-%dT%H:%M:%SZ','now','-1 second') WHERE id=9500")
+        db.close()
+        def final_worker(i: int):
+            conn = connect(path)
+            try:
+                row = finalize(conn, f"final-{i}", 9500)
+                return row["status"], row["result_order_id"]
+            finally:
+                conn.close()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+            finals = list(pool.map(final_worker, range(8)))
+        db = connect(path)
+        assert_eq(db.execute("SELECT COUNT(*) FROM auction_outcomes WHERE auction_id=9500").fetchone()[0],
+                  1, "single durable outcome")
+        assert_eq(db.execute("SELECT COUNT(*) FROM orders WHERE auction_id=9500").fetchone()[0],
+                  1, "CREATE_ORDER_ONCE")
+        assert_eq(db.execute(
+            "SELECT COUNT(*) FROM auction_outbox WHERE auction_id=9500 AND event_type='AUCTION_SOLD'"
+        ).fetchone()[0], 1, "single final outbox event")
+        accepted_final = sum(1 for s, _ in finals if s == "accepted")
+        idempotent_final = sum(1 for s, _ in finals if s == "idempotent_existing")
+        assert_eq(accepted_final, 1, "one finalization winner")
+        assert_eq(idempotent_final, 7, "duplicate finalization replay classification")
+
+        # Restart durability: close all connections, reopen, rows/outbox/outcome remain,
+        # and another deterministic finalization is idempotent_existing.
+        db.close()
+        db = connect(path)
+        replay = finalize(db, "final-after-restart", 9500)
+        assert_eq(replay["status"], "idempotent_existing", "restart finalization replay")
+        pending = db.execute(
+            "SELECT COUNT(*) FR
