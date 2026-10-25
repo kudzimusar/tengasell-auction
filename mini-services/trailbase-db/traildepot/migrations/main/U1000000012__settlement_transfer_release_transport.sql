@@ -281,6 +281,95 @@ BEGIN
     FROM auction_settlements s WHERE s.order_id=NEW.order_id;
 END;
 
+CREATE TRIGGER IF NOT EXISTS trg_canonical_order_create_settlement
+AFTER INSERT ON orders
+WHEN NEW.auction_outcome_key IS NOT NULL
+BEGIN
+  INSERT OR IGNORE INTO auction_settlements(
+    order_id,auction_id,event_id,vehicle_id,buyer_user,buyer_username,seller_user,seller_username,
+    hammer_price,invoice_total,paid_amount,outstanding_amount,payment_state,settlement_deadline,
+    created_at,updated_at
+  )
+  VALUES(
+    NEW.id,NEW.auction_id,
+    (SELECT event_id FROM auction_lots WHERE auction_id=NEW.auction_id LIMIT 1),
+    (SELECT id FROM vehicles WHERE auction_id=NEW.auction_id LIMIT 1),
+    NEW.buyer_user,NEW.buyer_username,NEW.seller_user,NEW.seller_username,
+    NEW.final_price,NEW.final_price,
+    CASE WHEN NEW.paid_at IS NULL THEN 0 ELSE NEW.final_price END,
+    CASE WHEN NEW.paid_at IS NULL THEN NEW.final_price ELSE 0 END,
+    CASE WHEN NEW.paid_at IS NULL THEN 'PENDING' ELSE 'PAID' END,
+    NEW.pay_by,
+    strftime('%Y-%m-%dT%H:%M:%SZ','now'),
+    strftime('%Y-%m-%dT%H:%M:%SZ','now')
+  );
+
+  INSERT OR IGNORE INTO auction_invoice_lines(settlement_id,line_key,label,amount,currency,source,created_at)
+  SELECT s.id,'HAMMER','Hammer price',s.hammer_price,s.currency,'AUCTION_OUTCOME',
+         strftime('%Y-%m-%dT%H:%M:%SZ','now')
+    FROM auction_settlements s WHERE s.order_id=NEW.id;
+
+  INSERT OR IGNORE INTO auction_finance_bridge_outbox(event_key,settlement_id,order_id,event_type,payload,occurred_at)
+  SELECT 'invoice-required:'||s.order_id,s.id,s.order_id,'AUCTION_INVOICE_REQUIRED',
+         json_object('orderId',s.order_id,'auctionId',s.auction_id,'hammerPrice',s.hammer_price,'currency',s.currency),
+         strftime('%Y-%m-%dT%H:%M:%SZ','now')
+    FROM auction_settlements s WHERE s.order_id=NEW.id;
+
+  INSERT INTO auction_settlement_events(settlement_id,event_type,payload,created_at)
+  SELECT s.id,'SETTLEMENT_CREATED',json_object('orderId',s.order_id,'auctionId',s.auction_id),
+         strftime('%Y-%m-%dT%H:%M:%SZ','now')
+    FROM auction_settlements s
+   WHERE s.order_id=NEW.id
+     AND NOT EXISTS(
+       SELECT 1 FROM auction_settlement_events e
+        WHERE e.settlement_id=s.id AND e.event_type='SETTLEMENT_CREATED'
+     );
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_outcome_order_link_create_settlement
+AFTER UPDATE OF order_id ON auction_outcomes
+WHEN NEW.outcome='sold' AND NEW.order_id IS NOT NULL AND OLD.order_id IS NULL
+BEGIN
+  INSERT OR IGNORE INTO auction_settlements(
+    order_id,auction_id,event_id,vehicle_id,buyer_user,buyer_username,seller_user,seller_username,
+    hammer_price,invoice_total,paid_amount,outstanding_amount,payment_state,settlement_deadline,
+    created_at,updated_at
+  )
+  SELECT o.id,o.auction_id,
+         (SELECT event_id FROM auction_lots WHERE auction_id=o.auction_id LIMIT 1),
+         (SELECT id FROM vehicles WHERE auction_id=o.auction_id LIMIT 1),
+         o.buyer_user,o.buyer_username,o.seller_user,o.seller_username,
+         o.final_price,o.final_price,
+         CASE WHEN o.paid_at IS NULL THEN 0 ELSE o.final_price END,
+         CASE WHEN o.paid_at IS NULL THEN o.final_price ELSE 0 END,
+         CASE WHEN o.paid_at IS NULL THEN 'PENDING' ELSE 'PAID' END,
+         o.pay_by,
+         strftime('%Y-%m-%dT%H:%M:%SZ','now'),
+         strftime('%Y-%m-%dT%H:%M:%SZ','now')
+    FROM orders o WHERE o.id=NEW.order_id;
+
+  INSERT OR IGNORE INTO auction_invoice_lines(settlement_id,line_key,label,amount,currency,source,created_at)
+  SELECT s.id,'HAMMER','Hammer price',s.hammer_price,s.currency,'AUCTION_OUTCOME',
+         strftime('%Y-%m-%dT%H:%M:%SZ','now')
+    FROM auction_settlements s WHERE s.order_id=NEW.order_id;
+
+  INSERT OR IGNORE INTO auction_finance_bridge_outbox(event_key,settlement_id,order_id,event_type,payload,occurred_at)
+  SELECT 'invoice-required:'||s.order_id,s.id,s.order_id,'AUCTION_INVOICE_REQUIRED',
+         json_object('orderId',s.order_id,'auctionId',s.auction_id,'hammerPrice',s.hammer_price,'currency',s.currency),
+         strftime('%Y-%m-%dT%H:%M:%SZ','now')
+    FROM auction_settlements s WHERE s.order_id=NEW.order_id;
+
+  INSERT INTO auction_settlement_events(settlement_id,event_type,payload,created_at)
+  SELECT s.id,'SETTLEMENT_CREATED',json_object('orderId',s.order_id,'auctionId',s.auction_id),
+         strftime('%Y-%m-%dT%H:%M:%SZ','now')
+    FROM auction_settlements s
+   WHERE s.order_id=NEW.order_id
+     AND NOT EXISTS(
+       SELECT 1 FROM auction_settlement_events e
+        WHERE e.settlement_id=s.id AND e.event_type='SETTLEMENT_CREATED'
+     );
+END;
+
 CREATE TRIGGER IF NOT EXISTS trg_finance_callback_process
 AFTER INSERT ON auction_finance_callbacks
 BEGIN
