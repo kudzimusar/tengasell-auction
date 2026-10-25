@@ -23,6 +23,7 @@ concurrency:
 
 permissions:
   contents: read
+  statuses: write
 
 jobs:
   build-and-smoke:
@@ -146,6 +147,23 @@ jobs:
             npm-install.log
           if-no-files-found: ignore
           retention-days: 7
+
+      - name: Publish LR01-R1 exact-head regression status
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          state=failure
+          if [ "$JOB_STATUS" = "success" ]; then state=success; fi
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/statuses/${EXPECTED_HEAD_SHA}" \
+            -f state="$state" \
+            -f context="tengasell/lr01-r1-regression" \
+            -f description="LR01 full regression + build/smoke: $JOB_STATUS" \
+            -f target_url="$RUN_URL" >/dev/null
 
   quality:
     name: Lint and typecheck (baseline debt — non-blocking)
