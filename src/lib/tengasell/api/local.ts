@@ -1149,6 +1149,39 @@ export class LocalStore {
     return this.seed.auctions.filter((a) => a.live_session_id === sessionId);
   }
 
+  // IMP-05 is live-authority only. Explicit static demo exposes no synthetic
+  // AuctionEvent data and rejects event/run-list writes rather than inventing it.
+  async auctionEvents(): Promise<never[]> {
+    return [];
+  }
+
+  async auctionEventBundle(_id: number): Promise<any> {
+    return {
+      event: null,
+      venue: null,
+      session: null,
+      lots: [],
+      operators: [],
+      permissions: { operate: false, host: false, auctioneer: false, clerk: false, administer: false },
+    };
+  }
+
+  async createAuctionEvent(_input: unknown): Promise<never> {
+    throw new Error("Auction events require the canonical live Tengasell service.");
+  }
+
+  async grantEventOperator(
+    _eventId: number,
+    _username: string,
+    _role: "AUCTIONEER" | "CLERK",
+  ): Promise<never> {
+    throw new Error("Event operator authority is unavailable in explicit demo mode.");
+  }
+
+  async runListCommand(_input: unknown): Promise<never> {
+    throw new Error("Production run-list authority is unavailable in explicit demo mode.");
+  }
+
   // engine-style sweep: ends auctions whose time passed (keeps demo honest)
   sweep() {
     const now = Date.now();

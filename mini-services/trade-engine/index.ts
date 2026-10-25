@@ -54,6 +54,13 @@ import {
   submitVehicleInspection,
   vehicleBundle,
 } from "./vehicle-authority";
+import {
+  createAuctionEvent,
+  eventBundle,
+  eventPermissions,
+  grantEventOperator,
+  submitRunListCommand,
+} from "./event-authority";
 
 const PORT = 3002;
 const TRAILBASE = "http://localhost:3001";
@@ -448,11 +455,53 @@ async function endUnsold(
 
 /** Advance a live room to its next unsold lot, or close the room. */
 async function advanceRoom(session: any): Promise<void> {
+  if (session?.event_id != null) {
+    const event = await getRecord("auction_events", Number(session.event_id));
+    if (!event) {
+      console.warn("[run-list:advance] linked event not found", session.event_id);
+      return;
+    }
+    const rows = await getRecords(
+      "auction_lots",
+      `filter[event_id][$eq]=${Number(event.id)}&filter[auction_id][$eq]=${Number(session.current_lot_id ?? 0)}&limit=1`,
+    );
+    const lot = rows[0];
+    if (!lot) {
+      console.warn("[run-list:advance] current auction has no event lot", session.current_lot_id);
+      return;
+    }
+    const result = await submitRunListCommand(
+      auctionCoreStore,
+      {
+        id: String(event.host_user),
+        username: String(event.host_username),
+        admin: false,
+      },
+      {
+        commandKey: `advance:${event.id}:${lot.id}:v${Number(event.run_list_version ?? 0)}`,
+        eventId: Number(event.id),
+        sessionId: Number(session.id),
+        commandType: "ADVANCE",
+        lotId: Number(lot.id),
+        expectedRunListVersion: Number(event.run_list_version ?? 0),
+        source: "SYSTEM",
+      },
+    );
+    if (!result.ok) {
+      console.warn("[run-list:advance]", result.code, result.error);
+      return;
+    }
+    if (result.event) io.emit("event:update", { event: result.event });
+    if (result.session) io.emit("room:update", { session: result.session });
+    return;
+  }
+
+  // Historical standalone rooms retain their legacy read/write compatibility.
   const lots = await getRecords(
     "auctions",
     `filter[live_session_id][$eq]=${session.id}&filter[status][$eq]=live&order=id&limit=100`,
   );
-  const remaining = lots.filter((l: any) => l.id !== session.current_lot_id);
+  const remaining = lots.filter((lot: any) => lot.id !== session.current_lot_id);
   if (remaining.length > 0) {
     await updateRecord("live_sessions", session.id, {
       current_lot_id: remaining[0].id,
@@ -1030,6 +1079,90 @@ io.on("connection", (socket: Socket) => {
     }
   });
 
+  // ── IMP-05: AuctionEvent / Session / production Run List ─────────
+  socket.on("event:bundle", async (data: any, ack?: Ack) => {
+    try {
+      const viewer = await requireAuth();
+      const eventId = Number(data?.eventId);
+      const bundle = await eventBundle(auctionCoreStore, eventId, viewer);
+      if (!bundle.event) return ack?.({ ok: false, error: "Auction event not found." });
+      ack?.({ ok: true, bundle });
+    } catch (err) {
+      console.error("[event:bundle]", err);
+      ack?.({ ok: false, error: "Auction event could not be loaded." });
+    }
+  });
+
+  socket.on("event:create", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in to create an auction event." });
+      const result = await createAuctionEvent(auctionCoreStore, audit, user, data?.event ?? {});
+      if (!result.ok || !result.event)
+        return ack?.({ ok: false, error: result.error ?? "Auction event could not be created." });
+      const bundle = await eventBundle(auctionCoreStore, Number(result.event.id), user);
+      io.emit("event:update", { event: bundle.event });
+      if (bundle.session) io.emit("room:update", { session: bundle.session });
+      ack?.({ ok: true, bundle });
+    } catch (err) {
+      console.error("[event:create]", err);
+      ack?.({ ok: false, error: "Auction event could not be created." });
+    }
+  });
+
+  socket.on("event:operator:grant", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      const role = data?.role === "CLERK" ? "CLERK" : "AUCTIONEER";
+      const result = await grantEventOperator(
+        auctionCoreStore,
+        audit,
+        user,
+        Number(data?.eventId),
+        String(data?.username ?? ""),
+        role,
+      );
+      if (!result.ok) return ack?.({ ok: false, error: result.error });
+      const bundle = await eventBundle(auctionCoreStore, Number(data?.eventId), user);
+      ack?.({ ok: true, bundle });
+    } catch (err) {
+      console.error("[event:operator:grant]", err);
+      ack?.({ ok: false, error: "Operator assignment failed." });
+    }
+  });
+
+  socket.on("run-list:command", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      const result = await submitRunListCommand(auctionCoreStore, user, {
+        commandKey: typeof data?.commandId === "string" ? data.commandId : null,
+        eventId: Number(data?.eventId),
+        sessionId: Number(data?.sessionId),
+        commandType: data?.commandType,
+        lotId: data?.lotId == null ? null : Number(data.lotId),
+        auctionId: data?.auctionId == null ? null : Number(data.auctionId),
+        targetSequenceNo: data?.targetSequenceNo == null ? null : Number(data.targetSequenceNo),
+        reason: typeof data?.reason === "string" ? data.reason : null,
+        expectedRunListVersion: Number(data?.expectedRunListVersion),
+        source: "OPERATOR",
+      });
+      if (!result.ok) return ack?.({ ok: false, error: result.error, code: result.code });
+      const bundle = await eventBundle(auctionCoreStore, Number(data?.eventId), user);
+      if (bundle.event) io.emit("event:update", { event: bundle.event });
+      if (bundle.session) io.emit("room:update", { session: bundle.session });
+      if (result.lot?.auction_id != null) {
+        const auction = await getRecord("auctions", Number(result.lot.auction_id));
+        if (auction) io.emit("auction:update", { auction });
+      }
+      ack?.({ ok: true, bundle, command: result.command });
+    } catch (err) {
+      console.error("[run-list:command]", err);
+      ack?.({ ok: false, error: "Run-list command failed." });
+    }
+  });
+
   socket.on("bid:place", async (data: any, ack?: Ack) => {
     try {
       const user = await requireAuth();
@@ -1429,27 +1562,17 @@ io.on("connection", (socket: Socket) => {
     try {
       const user = await requireAuth();
       if (!user) return ack?.({ ok: false, error: "Sign in to host a live room." });
-      const title = String(data?.title ?? "").trim().slice(0, 120);
-      const scheduledAt = String(data?.scheduledAt ?? "").trim();
-      if (title.length < 3)
-        return ack?.({ ok: false, error: "Give the room a title (3+ characters)." });
-      const when = scheduledAt && !Number.isNaN(Date.parse(scheduledAt))
-        ? new Date(Date.parse(scheduledAt)).toISOString().replace(/\.\d+Z$/, "Z")
-        : nowIso();
-      const id = await createRecord("live_sessions", {
-        host_user: user.id,
-        host_username: user.username,
-        title,
-        scheduled_at: when,
-        status: "scheduled",
-        lot_index: 0,
-        created_at: nowIso(),
-        updated_at: nowIso(),
+      const result = await createAuctionEvent(auctionCoreStore, audit, user, {
+        title: String(data?.title ?? ""),
+        startsAt: typeof data?.scheduledAt === "string" ? data.scheduledAt : null,
+        timezone: "Africa/Harare",
       });
-      const session = await getRecord("live_sessions", id ?? 0);
-      await audit(user.id, "room:create", "live_sessions", id, "web", { title });
-      if (session) io.emit("room:update", { session });
-      ack?.({ ok: true, session });
+      if (!result.ok || !result.event || !result.session)
+        return ack?.({ ok: false, error: result.error ?? "Could not create the live room." });
+      const bundle = await eventBundle(auctionCoreStore, Number(result.event.id), user);
+      io.emit("event:update", { event: bundle.event });
+      io.emit("room:update", { session: bundle.session });
+      ack?.({ ok: true, session: bundle.session, event: bundle.event });
     } catch (err) {
       console.error("[room:create]", err);
       ack?.({ ok: false, error: "Unexpected error — please retry." });
@@ -1464,6 +1587,30 @@ io.on("connection", (socket: Socket) => {
       const auctionId = Number(data?.auctionId);
       const session = await getRecord("live_sessions", sessionId);
       if (!session) return ack?.({ ok: false, error: "Live room not found." });
+
+      if (session.event_id != null) {
+        const event = await getRecord("auction_events", Number(session.event_id));
+        if (!event) return ack?.({ ok: false, error: "Auction event not found." });
+        const permissions = await eventPermissions(auctionCoreStore, Number(event.id), user);
+        if (!permissions.operate) return ack?.({ ok: false, error: "Auction-event operator permission is required." });
+        const result = await submitRunListCommand(auctionCoreStore, user, {
+          commandKey: typeof data?.commandId === "string" ? data.commandId : null,
+          eventId: Number(event.id),
+          sessionId,
+          commandType: "ADD",
+          auctionId,
+          expectedRunListVersion: Number(event.run_list_version ?? 0),
+          source: "OPERATOR",
+        });
+        if (!result.ok) return ack?.({ ok: false, error: result.error, code: result.code });
+        const bundle = await eventBundle(auctionCoreStore, Number(event.id), user);
+        const updatedAuction = await getRecord("auctions", auctionId);
+        io.emit("event:update", { event: bundle.event });
+        io.emit("room:update", { session: bundle.session });
+        if (updatedAuction) io.emit("auction:update", { auction: updatedAuction });
+        return ack?.({ ok: true, auction: updatedAuction, session: bundle.session, event: bundle.event });
+      }
+
       if (session.host_user !== user.id && !user.admin)
         return ack?.({ ok: false, error: "Only the host can add lots." });
       const auction = await getRecord("auctions", auctionId);
@@ -1478,12 +1625,10 @@ io.on("connection", (socket: Socket) => {
         return ack?.({ ok: false, error: "Only listings without bids can be auctioned live." });
       await updateRecord("auctions", auctionId, {
         live_session_id: sessionId,
-        // lots live at the room's pace — park the timed end 30 days out so
-        // the timed sweep never ends a lot mid-room.
         ends_at: isoPlus(30 * 24 * 3600_000),
         updated_at: nowIso(),
       });
-      await audit(user.id, "room:add-lot", "auctions", auctionId, "web", { sessionId });
+      await audit(user.id, "room:add-lot", "auctions", auctionId, "web", { sessionId, legacy: true });
       const updated = await getRecord("auctions", auctionId);
       const updatedSession = await getRecord("live_sessions", sessionId);
       io.emit("auction:update", { auction: updated });
@@ -1503,6 +1648,37 @@ io.on("connection", (socket: Socket) => {
       const auctionId = Number(data?.auctionId);
       const session = await getRecord("live_sessions", sessionId);
       if (!session) return ack?.({ ok: false, error: "Live room not found." });
+
+      if (session.event_id != null) {
+        const event = await getRecord("auction_events", Number(session.event_id));
+        if (!event) return ack?.({ ok: false, error: "Auction event not found." });
+        const permissions = await eventPermissions(auctionCoreStore, Number(event.id), user);
+        if (!permissions.operate) return ack?.({ ok: false, error: "Auction-event operator permission is required." });
+        const rows = await getRecords(
+          "auction_lots",
+          `filter[event_id][$eq]=${Number(event.id)}&filter[auction_id][$eq]=${auctionId}&limit=1`,
+        );
+        const lot = rows[0];
+        if (!lot) return ack?.({ ok: false, error: "This auction is not in the event run list." });
+        const result = await submitRunListCommand(auctionCoreStore, user, {
+          commandKey: typeof data?.commandId === "string" ? data.commandId : null,
+          eventId: Number(event.id),
+          sessionId,
+          commandType: "WITHDRAW",
+          lotId: Number(lot.id),
+          reason: "Removed by event operator",
+          expectedRunListVersion: Number(event.run_list_version ?? 0),
+          source: "OPERATOR",
+        });
+        if (!result.ok) return ack?.({ ok: false, error: result.error, code: result.code });
+        const bundle = await eventBundle(auctionCoreStore, Number(event.id), user);
+        const updatedAuction = await getRecord("auctions", auctionId);
+        io.emit("event:update", { event: bundle.event });
+        io.emit("room:update", { session: bundle.session });
+        if (updatedAuction) io.emit("auction:update", { auction: updatedAuction });
+        return ack?.({ ok: true, auction: updatedAuction, session: bundle.session });
+      }
+
       if (session.host_user !== user.id && !user.admin)
         return ack?.({ ok: false, error: "Only the host can remove lots." });
       const auction = await getRecord("auctions", auctionId);
@@ -1517,7 +1693,7 @@ io.on("connection", (socket: Socket) => {
         ends_at: isoPlus(7 * 24 * 3600_000),
         updated_at: nowIso(),
       });
-      await audit(user.id, "room:remove-lot", "auctions", auctionId, "web", { sessionId });
+      await audit(user.id, "room:remove-lot", "auctions", auctionId, "web", { sessionId, legacy: true });
       const updated = await getRecord("auctions", auctionId);
       io.emit("auction:update", { auction: updated });
       ack?.({ ok: true, auction: updated });
@@ -1534,6 +1710,60 @@ io.on("connection", (socket: Socket) => {
       const sessionId = Number(data?.sessionId);
       const session = await getRecord("live_sessions", sessionId);
       if (!session) return ack?.({ ok: false, error: "Live room not found." });
+
+      if (session.event_id != null) {
+        const event = await getRecord("auction_events", Number(session.event_id));
+        if (!event) return ack?.({ ok: false, error: "Auction event not found." });
+        const permissions = await eventPermissions(auctionCoreStore, Number(event.id), user);
+        if (!permissions.operate) return ack?.({ ok: false, error: "Auction-event operator permission is required." });
+        let lot: any = null;
+        if (data?.auctionId != null) {
+          const rows = await getRecords(
+            "auction_lots",
+            `filter[event_id][$eq]=${Number(event.id)}&filter[auction_id][$eq]=${Number(data.auctionId)}&limit=1`,
+          );
+          lot = rows[0] ?? null;
+        } else if (event.next_lot_id != null) {
+          lot = await getRecord("auction_lots", Number(event.next_lot_id));
+        } else {
+          const ready = await getRecords(
+            "auction_lots",
+            `filter[event_id][$eq]=${Number(event.id)}&filter[status][$eq]=READY&order=sequence_no&limit=1`,
+          );
+          lot = ready[0] ?? null;
+        }
+        if (!lot) return ack?.({ ok: false, error: "No ready lot is available." });
+        const result = await submitRunListCommand(auctionCoreStore, user, {
+          commandKey: typeof data?.commandId === "string" ? data.commandId : null,
+          eventId: Number(event.id),
+          sessionId,
+          commandType: "OPEN",
+          lotId: Number(lot.id),
+          expectedRunListVersion: Number(event.run_list_version ?? 0),
+          source: "OPERATOR",
+        });
+        if (!result.ok) return ack?.({ ok: false, error: result.error, code: result.code });
+        const bundle = await eventBundle(auctionCoreStore, Number(event.id), user);
+        const auction = await getRecord("auctions", Number(lot.auction_id));
+        if (auction) {
+          const watchers = await getRecords("watchlist", `filter[auction_id][$eq]=${auction.id}&limit=100`);
+          for (const watcher of watchers) {
+            if (String(watcher.user) !== String(user.id)) {
+              await notify(
+                watcher.user,
+                "live",
+                "Live lot opening",
+                `${auction.title} is on the block in “${event.title}”.`,
+                `#/live/${sessionId}`,
+              );
+            }
+          }
+        }
+        io.emit("event:update", { event: bundle.event });
+        io.emit("room:update", { session: bundle.session });
+        return ack?.({ ok: true, session: bundle.session, lot: auction });
+      }
+
       if (session.host_user !== user.id && !user.admin)
         return ack?.({ ok: false, error: "Only the host can open lots." });
       if (session.status === "closed")
@@ -1544,10 +1774,10 @@ io.on("connection", (socket: Socket) => {
       );
       let lot: any = null;
       if (data?.auctionId != null) {
-        lot = lots.find((l: any) => l.id === Number(data.auctionId)) ?? null;
+        lot = lots.find((row: any) => row.id === Number(data.auctionId)) ?? null;
         if (!lot) return ack?.({ ok: false, error: "That lot is not available in this room." });
       } else {
-        lot = lots.find((l: any) => l.id !== session.current_lot_id) ?? null;
+        lot = lots.find((row: any) => row.id !== session.current_lot_id) ?? null;
       }
       if (!lot) return ack?.({ ok: false, error: "No more lots to open." });
       await updateRecord("live_sessions", sessionId, {
@@ -1557,23 +1787,8 @@ io.on("connection", (socket: Socket) => {
         close_at: null,
         updated_at: nowIso(),
       });
-      await audit(user.id, "host:open-lot", "live_sessions", sessionId, "web", { lotId: lot.id });
+      await audit(user.id, "host:open-lot", "live_sessions", sessionId, "web", { lotId: lot.id, legacy: true });
       const updatedSession = await getRecord("live_sessions", sessionId);
-      const watchers = await getRecords(
-        "watchlist",
-        `filter[auction_id][$eq]=${lot.id}&limit=100`,
-      );
-      for (const w of watchers) {
-        if (w.user !== user.id) {
-          await notify(
-            w.user,
-            "live",
-            "Live room opening",
-            `${lot.title} is on the block in “${session.title}”.`,
-            `#/live/${sessionId}`,
-          );
-        }
-      }
       io.emit("room:update", { session: updatedSession });
       ack?.({ ok: true, session: updatedSession, lot });
     } catch (err) {
@@ -1590,8 +1805,12 @@ io.on("connection", (socket: Socket) => {
       const sold = data?.sold === true;
       const session = await getRecord("live_sessions", sessionId);
       if (!session) return ack?.({ ok: false, error: "Live room not found." });
-      if (session.host_user !== user.id && !user.admin)
+      if (session.event_id != null) {
+        const permissions = await eventPermissions(auctionCoreStore, Number(session.event_id), user);
+        if (!permissions.operate) return ack?.({ ok: false, error: "Auction-event operator permission is required." });
+      } else if (session.host_user !== user.id && !user.admin) {
         return ack?.({ ok: false, error: "Only the host can close lots." });
+      }
       if (session.status !== "live" || !session.current_lot_id)
         return ack?.({ ok: false, error: "No lot is open in this room." });
       const lot = await getRecord("auctions", session.current_lot_id);
@@ -1601,7 +1820,7 @@ io.on("connection", (socket: Socket) => {
           "bids",
           `filter[auction_id][$eq]=${lot.id}&order=-id&limit=50`,
         );
-        const active = bids.find((b: any) => b.status === "active");
+        const active = bids.find((bid: any) => bid.status === "active");
         if (!active)
           return ack?.({ ok: false, error: "No bids to sell to — pass the lot instead." });
         const orderId = await sellAuctionTo(
@@ -1615,15 +1834,16 @@ io.on("connection", (socket: Socket) => {
         if (orderId == null) return ack?.({ ok: false, error: "Could not complete the sale." });
         await audit(user.id, "room:hammer", "auctions", lot.id, "web", { sessionId, manual: true });
       } else {
-        await endUnsold(
+        const ended = await endUnsold(
           lot,
           "MANUAL_PASS",
           typeof data?.commandId === "string" ? data.commandId : null,
         );
+        if (!ended) return ack?.({ ok: false, error: "Could not pass the lot." });
         await audit(user.id, "room:pass", "auctions", lot.id, "web", { sessionId });
       }
       const fresh = await getRecord("live_sessions", sessionId);
-      await advanceRoom(fresh);
+      if (fresh) await advanceRoom(fresh);
       const updatedSession = await getRecord("live_sessions", sessionId);
       ack?.({ ok: true, session: updatedSession });
     } catch (err) {
@@ -1639,11 +1859,31 @@ io.on("connection", (socket: Socket) => {
       const sessionId = Number(data?.sessionId);
       const session = await getRecord("live_sessions", sessionId);
       if (!session) return ack?.({ ok: false, error: "Live room not found." });
+
+      if (session.event_id != null) {
+        const event = await getRecord("auction_events", Number(session.event_id));
+        if (!event) return ack?.({ ok: false, error: "Auction event not found." });
+        const permissions = await eventPermissions(auctionCoreStore, Number(event.id), user);
+        if (!permissions.operate) return ack?.({ ok: false, error: "Auction-event operator permission is required." });
+        const result = await submitRunListCommand(auctionCoreStore, user, {
+          commandKey: typeof data?.commandId === "string" ? data.commandId : null,
+          eventId: Number(event.id),
+          sessionId,
+          commandType: "CLOSE_EVENT",
+          expectedRunListVersion: Number(event.run_list_version ?? 0),
+          source: "OPERATOR",
+        });
+        if (!result.ok) return ack?.({ ok: false, error: result.error, code: result.code });
+        const bundle = await eventBundle(auctionCoreStore, Number(event.id), user);
+        io.emit("event:update", { event: bundle.event });
+        io.emit("room:update", { session: bundle.session });
+        return ack?.({ ok: true, session: bundle.session, event: bundle.event });
+      }
+
       if (session.host_user !== user.id && !user.admin)
         return ack?.({ ok: false, error: "Only the host can end the room." });
       if (session.status === "live" && session.current_lot_id)
         return ack?.({ ok: false, error: "Close the current lot first." });
-      // unsold lots return to normal listings (7-day window) or end
       const lots = await getRecords(
         "auctions",
         `filter[live_session_id][$eq]=${sessionId}&filter[status][$eq]=live&limit=100`,
@@ -1665,6 +1905,7 @@ io.on("connection", (socket: Socket) => {
       });
       await audit(user.id, "host:end-session", "live_sessions", sessionId, "web", {
         returnedLots: lots.length,
+        legacy: true,
       });
       const updatedSession = await getRecord("live_sessions", sessionId);
       io.emit("room:update", { session: updatedSession });

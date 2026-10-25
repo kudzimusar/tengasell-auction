@@ -57,6 +57,15 @@ jobs:
       - name: Vehicle / Inspection database authority proof
         run: npm run test:vehicle-intelligence
 
+      - name: Event / Session / Run-List database authority proof
+        run: npm run test:auction-events
+
+      - name: TrailBase migration fresh-install and parent-to-tip proof
+        run: npm run test:trailbase-migrations
+
+      - name: Event UI responsive and accessibility contract
+        run: node tests/event-ui-contract.mjs
+
       - name: Setup Bun for canonical trade engine
         uses: oven-sh/setup-bun@v2
         with:

@@ -5,7 +5,7 @@
 //   #/ #/search #/c/{slug} #/item/{id} #/sell #/sell/new #/signin #/register
 //   #/my/{section} #/u/{username} #/messages[/{id}] #/orders[/{id}]
 //   #/checkout/{auctionId} #/pay/{reference} #/assistant #/developers #/help
-//   #/policies/{key} #/admin/{section} #/live[/{id}]
+//   #/policies/{key} #/admin/{section} #/live[/{id}] #/events[/{id}]
 
 import { AnimatePresence, motion } from "framer-motion";
 import { Component, lazy, Suspense, useEffect, type ReactNode } from "react";
@@ -35,6 +35,7 @@ const DevelopersPage = lazy(() => import("./pages/developers/developers-page"));
 const HelpPage = lazy(() => import("./pages/help/help-page"));
 const PoliciesPage = lazy(() => import("./pages/policies/policies-page"));
 const LiveRoomPage = lazy(() => import("./pages/live/live-room"));
+const AuctionEventsPage = lazy(() => import("./pages/events/auction-events"));
 const NotFoundPage = lazy(() => import("./pages/not-found"));
 
 function PageFallback() {
@@ -197,6 +198,9 @@ function RouteView() {
         break;
       case "live":
         content = <LiveRoomPage sessionId={seg[1] ? Number(seg[1]) : undefined} />;
+        break;
+      case "events":
+        content = <AuctionEventsPage eventId={seg[1] ? Number(seg[1]) : undefined} />;
         break;
       case "assistant":
         content = <AssistantPage />;

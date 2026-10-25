@@ -7,7 +7,7 @@
 import { LocalStore } from "./local";
 import { RemoteApi } from "./remote";
 import { AuctionAuthorityError, DEGRADED_COMMERCIAL_MUTATIONS, isExplicitDemoIntent } from "@/lib/auction-authority";
-import type { Auction, AuctionQuery, Bid, BidResult, Category, CurrentUser, LiveSession, Message, Notification, Offer, Order, Paginated, Payment, Profile, Question, Rating, SavedSearch, SaveSearchInput, Thread, VehicleBundle, VehicleDocument, VehicleFinding, VehicleInspection, VehicleIntakeInput } from "../types";
+import type { Auction, AuctionEvent, AuctionEventBundle, AuctionQuery, Bid, BidResult, Category, CurrentUser, LiveSession, Message, Notification, Offer, Order, Paginated, Payment, Profile, Question, Rating, RunListCommandInput, SavedSearch, SaveSearchInput, Thread, VehicleBundle, VehicleDocument, VehicleFinding, VehicleInspection, VehicleIntakeInput } from "../types";
 
 export type ApiMode = "live" | "demo" | "degraded";
 
@@ -96,8 +96,28 @@ export interface TengasellApi {
   openRoomLot(sessionId: number, auctionId?: number): Promise<LiveSession>;
   closeRoomLot(sessionId: number, sold: boolean): Promise<LiveSession>;
   endLiveRoom(sessionId: number): Promise<LiveSession>;
-  /** Lots of a room (all auctions linked to the session). */
+  /** Lots of a room, in canonical run-list order for event-backed sessions. */
   roomLots(sessionId: number): Promise<Auction[]>;
+  /** IMP-05 Auction Hub / Calendar / production run-list authority. */
+  auctionEvents(): Promise<AuctionEvent[]>;
+  auctionEventBundle(id: number): Promise<AuctionEventBundle>;
+  createAuctionEvent(input: {
+    title: string;
+    description?: string | null;
+    startsAt?: string | null;
+    endsAt?: string | null;
+    timezone?: string | null;
+    venue?: {
+      name: string;
+      address?: string | null;
+      city?: string | null;
+      country?: string | null;
+      timezone?: string | null;
+      venueType?: "PHYSICAL" | "HYBRID" | "ONLINE";
+    } | null;
+  }): Promise<AuctionEventBundle>;
+  grantEventOperator(eventId: number, username: string, role: "AUCTIONEER" | "CLERK"): Promise<AuctionEventBundle>;
+  runListCommand(input: RunListCommandInput): Promise<AuctionEventBundle>;
 }
 
 const explicitDemoIntent = isExplicitDemoIntent(process.env.NEXT_PUBLIC_TENGASELL_EXPLICIT_DEMO);

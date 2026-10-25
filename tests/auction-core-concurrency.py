@@ -167,11 +167,32 @@ def main() -> None:
           VALUES (1,9000,?,'legacyA',100,180,'superseded','2026-01-01T00:00:00Z'),
                  (2,9000,?,'legacyB',110,150,'active','2026-01-01T00:01:00Z')""",
           (b"legacyA", b"legacyB"))
+        # Historical duplicate orders are deliberately retained. IMP-02 must
+        # not fail parent->tip migration or destructively rewrite this evidence.
+        db.execute("""INSERT INTO orders
+          (auction_id,auction_title,buyer_user,seller_user,buyer_username,seller_username,
+           final_price,status,created_at,updated_at)
+          VALUES (9000,'Legacy auction 9000',?,?,'legacyA','seller',180,'completed',
+                  '2026-01-02T00:00:00Z','2026-01-02T00:00:00Z'),
+                 (9000,'Legacy auction 9000',?,?,'legacyB','seller',175,'cancelled',
+                  '2026-01-03T00:00:00Z','2026-01-03T00:00:00Z')""",
+          (b"legacyA", b"seller", b"legacyB", b"seller"))
         db.executescript(migration)
         legacy = db.execute(
             "SELECT COUNT(*) FROM auction_standing_bids WHERE auction_id=9000"
         ).fetchone()[0]
         assert_eq(legacy, 2, "legacy standing-max backfill")
+        assert_eq(
+            db.execute("SELECT COUNT(*) FROM orders WHERE auction_id=9000").fetchone()[0],
+            2,
+            "legacy duplicate orders preserved",
+        )
+        assert_eq(
+            db.execute("""SELECT COUNT(*) FROM orders
+                          WHERE auction_id=9000 AND auction_outcome_key IS NULL""").fetchone()[0],
+            2,
+            "legacy orders remain unkeyed reconciliation evidence",
+        )
 
         # Proxy bidding + dynamic increment + winner raising own max.
         insert_auction(db, 9100)
@@ -291,6 +312,12 @@ def main() -> None:
         db = connect(path)
         assert_eq(db.execute("SELECT COUNT(*) FROM auction_outcomes WHERE auction_id=9500").fetchone()[0],
                   1, "single durable outcome")
+        assert_eq(
+            db.execute("""SELECT COUNT(*) FROM orders
+                          WHERE auction_id=9500 AND auction_outcome_key='auction:9500'""").fetchone()[0],
+            1,
+            "CREATE_ORDER_ONCE canonical outcome key",
+        )
         assert_eq(db.execute("SELECT COUNT(*) FROM orders WHERE auction_id=9500").fetchone()[0],
                   1, "CREATE_ORDER_ONCE")
         assert_eq(db.execute(

@@ -16,7 +16,9 @@
     "test:auction-convergence": "node tests/prisma-auction-convergence.mjs",
     "auction:reconcile": "node scripts/reconcile-prisma-auctions.mjs",
     "auction:inventory": "node scripts/inventory-prisma-auction-consumers.mjs",
-    "test:vehicle-intelligence": "python3 tests/vehicle-intelligence.py"
+    "test:vehicle-intelligence": "python3 tests/vehicle-intelligence.py",
+    "test:auction-events": "python3 tests/event-run-list.py",
+    "test:trailbase-migrations": "python3 tests/trailbase-migration-chain.py"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

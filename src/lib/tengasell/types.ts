@@ -245,8 +245,111 @@ export interface LiveSession {
   lot_index: number;
   /** going-going-sold hammer clock (each bid pushes it +20s) */
   close_at: string | null;
+  /** IMP-05 evolved Event / Run-List linkage. */
+  event_id?: number | null;
+  next_lot_id?: number | null;
+  run_list_version?: number;
+  run_list_locked?: number;
   created_at: string;
   updated_at: string;
+}
+
+
+// ── IMP-05 Auction Event / Session / Run-List ─────────────────────────
+
+export interface AuctionVenue {
+  id: number;
+  name: string;
+  address: string;
+  city: string;
+  country: string;
+  timezone: string;
+  venue_type: "PHYSICAL" | "HYBRID" | "ONLINE";
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AuctionEvent {
+  id: number;
+  host_user: string;
+  host_username: string;
+  title: string;
+  description: string;
+  venue_id: number | null;
+  session_id: number | null;
+  starts_at: string;
+  ends_at: string | null;
+  timezone: string;
+  status: "DRAFT" | "SCHEDULED" | "LIVE" | "CLOSED" | "CANCELLED";
+  version: number;
+  run_list_version: number;
+  run_list_locked: number;
+  current_lot_id: number | null;
+  next_lot_id: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AuctionEventOperator {
+  id: number;
+  event_id: number;
+  user: string;
+  username: string;
+  role: "HOST" | "AUCTIONEER" | "CLERK";
+  active: number;
+  granted_by: string;
+  granted_at: string;
+}
+
+export interface AuctionLot {
+  id: number;
+  event_id: number;
+  session_id: number;
+  auction_id: number;
+  sequence_no: number;
+  status: "QUEUED" | "READY" | "LIVE" | "SOLD" | "PASSED" | "WITHDRAWN";
+  version: number;
+  original_ends_at: string;
+  original_live_session_id: number | null;
+  ready_at: string | null;
+  opened_at: string | null;
+  closed_at: string | null;
+  withdrawn_at: string | null;
+  withdrawal_reason: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  auction?: Auction | null;
+}
+
+export interface AuctionEventPermissions {
+  operate: boolean;
+  host: boolean;
+  auctioneer: boolean;
+  clerk: boolean;
+  administer: boolean;
+}
+
+export interface AuctionEventBundle {
+  event: AuctionEvent | null;
+  venue: AuctionVenue | null;
+  session: LiveSession | null;
+  lots: AuctionLot[];
+  operators?: AuctionEventOperator[];
+  permissions: AuctionEventPermissions;
+}
+
+export interface RunListCommandInput {
+  eventId: number;
+  sessionId: number;
+  commandType: "ADD" | "MOVE" | "READY" | "WITHDRAW" | "LOCK" | "UNLOCK" | "OPEN" | "ADVANCE" | "CLOSE_EVENT";
+  expectedRunListVersion: number;
+  lotId?: number | null;
+  auctionId?: number | null;
+  targetSequenceNo?: number | null;
+  reason?: string | null;
+  commandId?: string | null;
 }
 
 export interface SaveSearchInput {

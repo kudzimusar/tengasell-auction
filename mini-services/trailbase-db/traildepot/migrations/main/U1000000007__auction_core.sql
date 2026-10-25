@@ -7,7 +7,14 @@ ALTER TABLE auctions ADD COLUMN final_order_id INTEGER;
 ALTER TABLE bids ADD COLUMN command_key TEXT;
 ALTER TABLE bids ADD COLUMN sequence_no INTEGER;
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_orders_auction_once ON orders (auction_id);
+-- Legacy Prisma/early TrailBase history may contain more than one historical
+-- order row for the same auction. Preserve those rows non-destructively and
+-- apply CREATE_ORDER_ONCE only to canonical outcomes created from IMP-02.
+ALTER TABLE orders ADD COLUMN auction_outcome_key TEXT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_orders_auction_outcome_key
+  ON orders (auction_outcome_key)
+  WHERE auction_outcome_key IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_bids_command_key ON bids (command_key) WHERE command_key IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_bids_active_per_auction ON bids (auction_id) WHERE status = 'active';
 
@@ -664,13 +671,14 @@ BEGIN
 
   INSERT OR IGNORE INTO orders
     (auction_id,auction_title,buyer_user,seller_user,buyer_username,seller_username,
-     final_price,status,pay_by,address,created_at,updated_at)
+     final_price,status,pay_by,address,created_at,updated_at,auction_outcome_key)
   SELECT a.id,a.title,o.winner_user,a.user,o.winner_username,a.seller_username,
          o.final_price,'pending_payment',
          strftime('%Y-%m-%dT%H:%M:%SZ','now','+48 hours'),
          CASE WHEN NEW.address IS NULL THEN NULL ELSE substr(NEW.address,1,200) END,
          strftime('%Y-%m-%dT%H:%M:%SZ','now'),
-         strftime('%Y-%m-%dT%H:%M:%SZ','now')
+         strftime('%Y-%m-%dT%H:%M:%SZ','now'),
+         'auction:'||a.id
     FROM auction_outcomes o
     JOIN auctions a ON a.id=o.auction_id
    WHERE o.auction_id=NEW.auction_id
@@ -678,7 +686,10 @@ BEGIN
      AND o.command_id=NEW.id;
 
   UPDATE auction_outcomes
-     SET order_id=(SELECT id FROM orders WHERE auction_id=NEW.auction_id)
+     SET order_id=(
+       SELECT id FROM orders
+        WHERE auction_outcome_key='auction:'||NEW.auction_id
+     )
    WHERE auction_id=NEW.auction_id
      AND command_id=NEW.id;
 
