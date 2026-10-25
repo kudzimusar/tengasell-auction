@@ -108,7 +108,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     bids: auctionResolution.state === "VERIFIED_CANONICAL"
       ? canonicalBids.map((b) => ({
           id: b.id,
-          amount: round2(b.amount),
+          amount: round2(Number(b.amount)),
           bidderName: anonName(String(b.bidder_username ?? "")),
           isMine: false,
           createdAt: b.created_at,

@@ -72,21 +72,21 @@ export async function GET(req: NextRequest) {
       const s = seller.get(r.sellerId)
       const resolution = auctionResolution.get(r.id)
       const effective = resolution?.effective ?? {
-        currentPrice: effective.currentPrice,
-        status: effective.status,
-        endsAt: effective.endsAt,
-        bidCount: effective.bidCount,
+        currentPrice: r.currentPrice,
+        status: r.status,
+        endsAt: r.endsAt,
+        bidCount: r.bidCount,
       }
       return {
         id: r.id,
         title: r.title,
         condition: r.condition,
         type: r.type,
-        currentPrice: r.currentPrice,
+        currentPrice: effective.currentPrice,
         buyNowPrice: r.buyNowPrice,
-        status: r.status,
-        endsAt: r.endsAt,
-        bidCount: r.bidCount,
+        status: effective.status,
+        endsAt: effective.endsAt,
+        bidCount: effective.bidCount,
         watchCount: r.watchCount,
         category: c ? { slug: c.slug, name: c.name } : null,
         seller: s ? { shopName: s.shopName, slug: s.slug, ratingAvg: s.ratingAvg } : null,

@@ -89,9 +89,9 @@ export async function GET(req: NextRequest) {
       const resolution = auctionResolution.get(l.id)
       const effective = resolution?.effective ?? {
         currentPrice: l.currentPrice,
-        status: effective.status,
-        endsAt: effective.endsAt,
-        bidCount: effective.bidCount,
+        status: l.status,
+        endsAt: l.endsAt,
+        bidCount: l.bidCount,
       }
       return {
         id: l.id,
@@ -104,11 +104,11 @@ export async function GET(req: NextRequest) {
         currentPrice: round2(effective.currentPrice),
         stock: l.stock,
         images: json(l.images, [] as string[]).slice(0, 4),
-        status: l.status,
+        status: effective.status,
         rejectReason: mine && sessionUser?.id === l.sellerId ? l.rejectReason : undefined,
-        endsAt: l.endsAt,
+        endsAt: effective.endsAt,
         viewCount: l.viewCount,
-        bidCount: l.bidCount,
+        bidCount: effective.bidCount,
         watchCount: l.watchCount,
         createdAt: l.createdAt,
         seller: {
