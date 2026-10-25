@@ -45,6 +45,17 @@ jobs:
           echo "actual=${actual}"
           test "$actual" = "$EXPECTED_HEAD_SHA"
 
+      - name: Publish LR01-R1 visual UAT pending status
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/statuses/${EXPECTED_HEAD_SHA}" \
+            -f state="pending" \
+            -f context="tengasell/lr01-r1-visual-uat" \
+            -f description="Real-stack Chromium visual UAT is running" \
+            -f target_url="$RUN_URL" >/dev/null
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -88,6 +99,7 @@ jobs:
           set -euo pipefail
           rm -rf /tmp/lr01-r1-traildepot
           cp -R mini-services/trailbase-db/traildepot /tmp/lr01-r1-traildepot
+          rm -rf /tmp/lr01-r1-traildepot/data
           chmod -R a+rwX /tmp/lr01-r1-traildepot
           docker run -d --name trailbase-lr01-r1             -p 3001:4000             -v /tmp/lr01-r1-traildepot:/app/traildepot             trailbase/trailbase:0.35.1
           ready=0
