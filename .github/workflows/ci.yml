@@ -9,7 +9,10 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main, feat/tengasell-auction-imp01-authority-safety-barrier]
+    branches:
+      - main
+      - feat/tengasell-auction-imp01-authority-safety-barrier
+      - feat/tengasell-auction-imp-lr01-core-vehicle-events
   workflow_dispatch:
 
 concurrency:
