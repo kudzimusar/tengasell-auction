@@ -46,19 +46,26 @@ def main() -> None:
     seller = users[0]
     bidder = users[1]
 
-    # SELLER / VEHICLE: reuse a real seed auction but attach synthetic vehicle
-    # intelligence and eligibility evidence in the disposable certification DB.
-    auction = row(
-        db,
-        """SELECT id,user,seller_username,reserve_price,version,current_price,ends_at
-             FROM auctions
-            WHERE status='live'
-            ORDER BY id LIMIT 1""",
+    # SELLER / VEHICLE: use a fresh disposable auction so the end-to-end
+    # journey is independent of seeded timing and bid history.
+    seller = users[0]
+    bidder = users[1]
+    auction_id = 99002
+    current_price = 18000.0
+    disclosure = "NO_RESERVE"
+    db.execute(
+        """INSERT INTO auctions(
+          id,user,seller_username,title,slug,description,category,condition,
+          start_price,current_price,bid_count,watch_count,views,shipping_fee,shipping,city,
+          ends_at,started_at,status,extension_count,featured,images,created_at,updated_at,
+          allow_offers,asset_kind
+        ) VALUES(?,?,?,'CERT-01 Toyota Hilux','cert01-toyota-hilux',
+                 'Disposable CERT-01 vehicle-auction fixture','vehicles','used',
+                 ?,?,0,0,0,0,'pickup','Harare',
+                 datetime('now','+6 hours'),datetime('now','-1 hour'),'live',0,0,'[]',
+                 datetime('now'),datetime('now'),0,'general')""",
+        (auction_id,seller[0],seller[1],current_price,current_price),
     )
-    auction_id = int(auction[0])
-    # Keep canonical seller identity from the auction itself.
-    seller = (auction[1], auction[2])
-    disclosure = "NO_RESERVE" if auction[3] is None else "RESERVE_APPLIES"
 
     vehicle_id = db.execute(
         """INSERT INTO vehicles(
