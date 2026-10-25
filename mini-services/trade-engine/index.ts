@@ -43,6 +43,17 @@ import {
   type AuctionOutboxEnvelope,
   type FinalizationInput,
 } from "./auction-core";
+import {
+  addVehicleDocument,
+  addVehicleFinding,
+  grantVehicleRole,
+  reviewVehicleDocument,
+  reviewVehicleInspection,
+  saveVehicleIntake,
+  startVehicleInspection,
+  submitVehicleInspection,
+  vehicleBundle,
+} from "./vehicle-authority";
 
 const PORT = 3002;
 const TRAILBASE = "http://localhost:3001";
@@ -903,6 +914,121 @@ io.on("connection", (socket: Socket) => {
     if (!me) me = await identityPromise;
     return me;
   };
+
+  // ── IMP-04: Vehicle / Tengasell Inspection authority ───────────────
+  socket.on("vehicle:get", async (data: any, ack?: Ack) => {
+    try {
+      const viewer = await identityPromise;
+      const auctionId = Number(data?.auctionId);
+      if (!Number.isSafeInteger(auctionId) || auctionId <= 0)
+        return ack?.({ ok: false, error: "Invalid auction id." });
+      ack?.({ ok: true, bundle: await vehicleBundle(auctionCoreStore, auctionId, viewer) });
+    } catch (err) {
+      console.error("[vehicle:get]", err);
+      ack?.({ ok: false, error: "Vehicle details are temporarily unavailable." });
+    }
+  });
+
+  socket.on("vehicle:intake", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in to submit vehicle intake." });
+      ack?.(await saveVehicleIntake(auctionCoreStore, audit, user, Number(data?.auctionId), data?.vehicle ?? {}));
+    } catch (err) {
+      console.error("[vehicle:intake]", err);
+      ack?.({ ok: false, error: "Vehicle intake failed." });
+    }
+  });
+
+  socket.on("vehicle:document:add", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      ack?.(await addVehicleDocument(auctionCoreStore, audit, user, Number(data?.vehicleId), data?.document ?? {}));
+    } catch (err) {
+      console.error("[vehicle:document:add]", err);
+      ack?.({ ok: false, error: "Vehicle document could not be recorded." });
+    }
+  });
+
+  socket.on("vehicle:document:review", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      ack?.(await reviewVehicleDocument(
+        auctionCoreStore, audit, user, Number(data?.documentId),
+        data?.action === "REJECT" ? "REJECT" : "VERIFY", data?.reason,
+      ));
+    } catch (err) {
+      console.error("[vehicle:document:review]", err);
+      ack?.({ ok: false, error: "Document review failed." });
+    }
+  });
+
+  socket.on("vehicle:inspection:start", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      ack?.(await startVehicleInspection(auctionCoreStore, audit, user, Number(data?.vehicleId)));
+    } catch (err) {
+      console.error("[vehicle:inspection:start]", err);
+      ack?.({ ok: false, error: "Inspection could not be started." });
+    }
+  });
+
+  socket.on("vehicle:inspection:finding", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      ack?.(await addVehicleFinding(
+        auctionCoreStore, audit, user, Number(data?.inspectionId), data?.finding ?? {},
+      ));
+    } catch (err) {
+      console.error("[vehicle:inspection:finding]", err);
+      ack?.({ ok: false, error: "Inspection finding could not be saved." });
+    }
+  });
+
+  socket.on("vehicle:inspection:submit", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      ack?.(await submitVehicleInspection(
+        auctionCoreStore, audit, user, Number(data?.inspectionId), data?.inspection ?? {},
+      ));
+    } catch (err) {
+      console.error("[vehicle:inspection:submit]", err);
+      ack?.({ ok: false, error: "Inspection could not be submitted." });
+    }
+  });
+
+  socket.on("vehicle:inspection:review", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      ack?.(await reviewVehicleInspection(
+        auctionCoreStore, audit, user, Number(data?.inspectionId), String(data?.commandId ?? ""),
+      ));
+    } catch (err) {
+      console.error("[vehicle:inspection:review]", err);
+      ack?.({ ok: false, error: "Vehicle review failed." });
+    }
+  });
+
+  socket.on("vehicle:role:grant", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      ack?.(await grantVehicleRole(auctionCoreStore, audit, user, {
+        user: String(data?.user ?? ""),
+        username: String(data?.username ?? ""),
+        role: data?.role === "REVIEWER" ? "REVIEWER" : "INSPECTOR",
+      }));
+    } catch (err) {
+      console.error("[vehicle:role:grant]", err);
+      ack?.({ ok: false, error: "Vehicle role could not be granted." });
+    }
+  });
 
   socket.on("bid:place", async (data: any, ack?: Ack) => {
     try {
