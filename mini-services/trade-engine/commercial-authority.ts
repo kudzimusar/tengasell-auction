@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { AuctionCoreIdentity, AuctionCoreStore, BidCommandResult } from "./auction-core";
+import { hasOperationCapability } from "./operation-authority";
 
 export interface CommercialIdentity extends AuctionCoreIdentity {}
 
@@ -76,6 +77,9 @@ export async function submitQualificationCommand(
     expiresAt?: string | null;
   },
 ) {
+  const authorized =
+    actor.admin ||
+    await hasOperationCapability(store, actor, "QUALIFICATION_REVIEWER", input.eventId);
   const key = commandKey(input.commandId, `qualification:${input.eventId}:${input.targetUsername}`);
   let row = await first(
     store,
@@ -90,7 +94,7 @@ export async function submitQualificationCommand(
       target_username: input.targetUsername,
       actor_user: actor.id,
       actor_username: actor.username,
-      actor_admin: actor.admin ? 1 : 0,
+      actor_admin: authorized ? 1 : 0,
       command_type: input.commandType,
       qualification_basis: input.qualificationBasis ?? null,
       approved_limit: input.approvedLimit ?? null,
@@ -226,7 +230,13 @@ export async function settlementBundle(
   const participant =
     String(settlement.buyer_user) === String(viewer.id) ||
     String(settlement.seller_user) === String(viewer.id);
-  if (!viewer.admin && !participant) {
+  const eventId = settlement.event_id == null ? null : Number(settlement.event_id);
+  const operator =
+    viewer.admin ||
+    await hasOperationCapability(store, viewer, "FINANCE_OPERATOR", eventId) ||
+    await hasOperationCapability(store, viewer, "RELEASE_OPERATOR", eventId) ||
+    await hasOperationCapability(store, viewer, "TRANSPORT_OPERATOR", eventId);
+  if (!participant && !operator) {
     return { ok: false, code: "SETTLEMENT_FORBIDDEN", error: "You cannot view this settlement." };
   }
   const [lines, documents, releaseRows, transport, handovers, events] = await Promise.all([
@@ -284,6 +294,11 @@ export async function submitFinanceCallback(
     payoutState?: string | null;
   },
 ) {
+  const settlement = await store.get("auction_settlements", input.settlementId);
+  const eventId = settlement?.event_id == null ? null : Number(settlement.event_id);
+  const authorized =
+    actor.admin ||
+    await hasOperationCapability(store, actor, "FINANCE_OPERATOR", eventId);
   const key = commandKey(input.idempotencyKey, `finance:${input.settlementId}:${input.eventType}`);
   let row = await first(
     store,
@@ -303,7 +318,7 @@ export async function submitFinanceCallback(
       payout_state: input.payoutState ?? null,
       actor_user: actor.id,
       actor_username: actor.username,
-      actor_admin: actor.admin ? 1 : 0,
+      actor_admin: authorized ? 1 : 0,
     });
     row = id == null ? null : await store.get("auction_finance_callbacks", id);
   }
@@ -351,6 +366,11 @@ export async function submitTransferCommand(
     reason?: string | null;
   },
 ) {
+  const settlement = await store.get("auction_settlements", input.settlementId);
+  const eventId = settlement?.event_id == null ? null : Number(settlement.event_id);
+  const authorized =
+    actor.admin ||
+    await hasOperationCapability(store, actor, "RELEASE_OPERATOR", eventId);
   const key = commandKey(input.commandId, `transfer:${input.settlementId}:${input.commandType}`);
   let row = await first(store, "auction_transfer_commands", `filter[command_key][$eq]=${encodeURIComponent(key)}&limit=1`);
   const replayed = !!row;
@@ -360,7 +380,7 @@ export async function submitTransferCommand(
       settlement_id: input.settlementId,
       actor_user: actor.id,
       actor_username: actor.username,
-      actor_admin: actor.admin ? 1 : 0,
+      actor_admin: authorized ? 1 : 0,
       command_type: input.commandType,
       document_type: input.documentType ?? null,
       document_ref: input.documentRef ?? null,
@@ -398,6 +418,11 @@ export async function submitReleaseCommand(
     conditions?: string | null;
   },
 ) {
+  const settlement = await store.get("auction_settlements", input.settlementId);
+  const eventId = settlement?.event_id == null ? null : Number(settlement.event_id);
+  const authorized =
+    actor.admin ||
+    await hasOperationCapability(store, actor, "RELEASE_OPERATOR", eventId);
   const key = commandKey(input.commandId, `release:${input.settlementId}`);
   let row = await first(store, "auction_release_commands", `filter[command_key][$eq]=${encodeURIComponent(key)}&limit=1`);
   const replayed = !!row;
@@ -407,7 +432,7 @@ export async function submitReleaseCommand(
       settlement_id: input.settlementId,
       actor_user: actor.id,
       actor_username: actor.username,
-      actor_admin: actor.admin ? 1 : 0,
+      actor_admin: authorized ? 1 : 0,
       collector_type: input.collectorType,
       collector_user: input.collectorUser ?? null,
       collector_name: input.collectorName.trim().slice(0, 120),
@@ -447,8 +472,12 @@ export async function requestTransport(
   const settlement = await store.get("auction_settlements", input.settlementId);
   if (!settlement) return { ok: false, code: "SETTLEMENT_NOT_FOUND", error: "Auction settlement not found." };
   const buyer = String(settlement.buyer_user) === String(actor.id);
-  if (!actor.admin && !buyer)
-    return { ok: false, code: "TRANSPORT_FORBIDDEN", error: "Only the buyer or an authorized operator can request transport." };
+  const eventId = settlement.event_id == null ? null : Number(settlement.event_id);
+  const transportOperator =
+    actor.admin ||
+    await hasOperationCapability(store, actor, "TRANSPORT_OPERATOR", eventId);
+  if (!buyer && !transportOperator)
+    return { ok: false, code: "TRANSPORT_FORBIDDEN", error: "Only the buyer or an authorized transport operator can request transport." };
   const key = commandKey(input.requestId, `transport:${input.settlementId}`);
   let row = await first(store, "auction_transport_bookings", `filter[request_key][$eq]=${encodeURIComponent(key)}&limit=1`);
   const replayed = !!row;
@@ -478,6 +507,12 @@ export async function submitHandoverCommand(
   actor: CommercialIdentity,
   input: { commandId?: string | null; settlementId: number; evidenceReference: string },
 ) {
+  const settlement = await store.get("auction_settlements", input.settlementId);
+  const eventId = settlement?.event_id == null ? null : Number(settlement.event_id);
+  const authorized =
+    actor.admin ||
+    await hasOperationCapability(store, actor, "RELEASE_OPERATOR", eventId) ||
+    await hasOperationCapability(store, actor, "TRANSPORT_OPERATOR", eventId);
   const key = commandKey(input.commandId, `handover:${input.settlementId}`);
   let row = await first(store, "auction_handover_commands", `filter[command_key][$eq]=${encodeURIComponent(key)}&limit=1`);
   const replayed = !!row;
@@ -487,7 +522,7 @@ export async function submitHandoverCommand(
       settlement_id: input.settlementId,
       actor_user: actor.id,
       actor_username: actor.username,
-      actor_admin: actor.admin ? 1 : 0,
+      actor_admin: authorized ? 1 : 0,
       evidence_reference: input.evidenceReference.trim().slice(0, 160),
     });
     row = id == null ? null : await store.get("auction_handover_commands", id);
