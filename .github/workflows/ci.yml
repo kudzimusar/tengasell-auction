@@ -85,6 +85,9 @@ jobs:
       - name: Bidder qualification and concurrent capacity proof
         run: npm run test:bidder-qualification
 
+      - name: Auction settlement / transfer / release / transport proof
+        run: npm run test:auction-settlement
+
       - name: TrailBase migration fresh-install and parent-to-tip proof
         run: npm run test:trailbase-migrations
 
