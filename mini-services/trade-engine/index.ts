@@ -71,6 +71,16 @@ import {
   timelineProjection,
 } from "./operation-authority";
 import {
+  assertProductionMutationAllowed,
+  observabilitySnapshot,
+  policySnapshot,
+  productionGateReport,
+  submitPolicyCommand,
+  submitVehicleRetractionRequest,
+  updateAuctionDisclosure,
+  updateServiceHealth,
+} from "./policy-authority";
+import {
   qualificationBundle,
   requestTransport,
   settlementBundle,
@@ -382,6 +392,16 @@ async function placeBid(
   // LR02 qualification/capacity is required for whole-vehicle auctions.
   // General marketplace auctions preserve the frozen LR01 core path.
   if (auction?.asset_kind === "vehicle") {
+    const gate = await assertProductionMutationAllowed(auctionCoreStore, me, auctionId);
+    if (!gate.ok) {
+      return {
+        ok: false,
+        code: gate.code,
+        error: gate.error,
+        commandKey: commandKey ?? undefined,
+        replayed: false,
+      };
+    }
     return submitQualifiedBidCommand(auctionCoreStore, me, {
       auctionId,
       maxAmount,
@@ -395,6 +415,22 @@ async function placeBid(
     commandKey,
     expectedVersion,
   });
+}
+
+async function commercialGate(user: Identity, auctionId?: number | null) {
+  return assertProductionMutationAllowed(auctionCoreStore, user, auctionId ?? null);
+}
+
+async function finalizeAuctionWithPolicy(
+  input: FinalizationInput,
+  actor: Identity = { id: "system", username: "system", admin: true },
+) {
+  const auction = await getRecord("auctions", Number(input.auctionId));
+  if (auction?.asset_kind === "vehicle") {
+    const gate = await commercialGate(actor, Number(input.auctionId));
+    if (!gate.ok) return { ok: false, code: gate.code, error: gate.error } as any;
+  }
+  return submitFinalizationCommand(auctionCoreStore, input);
 }
 
 async function notifyWatchers(auction: any, bidder: Identity, price: number) {
@@ -446,7 +482,7 @@ async function sellAuctionTo(
   source: FinalizationInput["source"] = "OFFER_ACCEPT",
   commandKey?: string | null,
 ): Promise<number | null> {
-  const result = await submitFinalizationCommand(auctionCoreStore, {
+  const result = await finalizeAuctionWithPolicy({
     commandKey,
     auctionId: Number(auction.id),
     source,
@@ -470,7 +506,7 @@ async function endUnsold(
   source: FinalizationInput["source"] = "MANUAL_PASS",
   commandKey?: string | null,
 ): Promise<boolean> {
-  const result = await submitFinalizationCommand(auctionCoreStore, {
+  const result = await finalizeAuctionWithPolicy({
     commandKey,
     auctionId: Number(auction.id),
     source,
@@ -701,7 +737,7 @@ async function sweepAuctions() {
     `filter[status][$eq]=live&filter[ends_at][$lte]=${encodeURIComponent(nowIso())}&limit=100`,
   );
   for (const auction of due) {
-    await submitFinalizationCommand(auctionCoreStore, {
+    await finalizeAuctionWithPolicy({
       commandKey: `timer:${auction.id}:v${Number(auction.version ?? 0)}`,
       auctionId: Number(auction.id),
       source: "TIMED_SWEEP",
@@ -774,7 +810,7 @@ async function sweepLiveRooms() {
       await advanceRoom(session);
       continue;
     }
-    const result = await submitFinalizationCommand(auctionCoreStore, {
+    const result = await finalizeAuctionWithPolicy({
       commandKey: `hammer:${session.id}:${lotId}:v${Number(auction.version ?? 0)}`,
       auctionId: lotId,
       source: "LIVE_HAMMER",
@@ -2219,7 +2255,7 @@ io.on("connection", (socket: Socket) => {
       if (auction.user === user.id)
         return ack?.({ ok: false, error: "You cannot buy your own auction." });
 
-      const result = await submitFinalizationCommand(auctionCoreStore, {
+      const result = await finalizeAuctionWithPolicy({
         commandKey: typeof data?.commandId === "string" ? data.commandId : null,
         auctionId,
         source: "BUY_NOW",
