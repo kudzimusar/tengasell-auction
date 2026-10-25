@@ -32,7 +32,73 @@ jobs:
           git merge-base --is-ancestor "$ACCEPTED_PARENT" HEAD
           bad="$(
             git diff --name-only "$ACCEPTED_PARENT"..HEAD |
-            grep -Ev '^(.github/workflows/cert01-stg01-custody.yml|docs/auction/TENGASELL_AUCTION_CERT_01_STG01.*)$' || true
+            grep -Ev '^(\.github/workflows/(cert01-stg01-custody|ci)\.yml|docs/auction/TENGASELL_AUCTION_CERT_01_STG01.*|mini-services/trailbase-db/traildepot/migrations/main/U1000000016__cert01_legal_cooling_off_gate\.sql|tests/(trailbase-migration-chain|zimbabwe-policy-production-gates)\.py)
+          )"
+          if [ -n "$bad" ]; then
+            echo "::error::Certification branch contains unauthorized product/source drift:"
+            printf '%s\n' "$bad"
+            exit 1
+          fi
+          echo "accepted_parent=$ACCEPTED_PARENT"
+          echo "head=$(git rev-parse HEAD)"
+
+      - name: Require explicit staging identity and deployment authority
+        run: |
+          set -euo pipefail
+          missing=0
+          if [ -z "${STAGING_APP:-}" ]; then
+            echo "::error::TENGASELL_STAGING_FLY_APP repository/environment variable is not configured."
+            missing=1
+          fi
+          if [ -z "${STAGING_URL:-}" ]; then
+            echo "::error::TENGASELL_STAGING_URL repository/environment variable is not configured."
+            missing=1
+          fi
+          if [ -z "${FLY_API_TOKEN:-}" ]; then
+            echo "::error::FLY_API_TOKEN secret is not available to CERT-01-STG01."
+            missing=1
+          fi
+          if [ "$missing" -ne 0 ]; then
+            echo "CERT01_STAGING_AUTHORITY=BLOCKED_MISSING_ENVIRONMENT"
+            exit 1
+          fi
+
+          case "$STAGING_URL" in
+            https://*) ;;
+            *)
+              echo "::error::Staging URL must be an explicit HTTPS URL."
+              exit 1
+              ;;
+          esac
+
+          if [ "$STAGING_APP" = "tengasell-zw" ]; then
+            echo "::error::Refusing documented fly.toml app 'tengasell-zw': repository evidence does not establish it as a separate controlled staging environment."
+            echo "CERT01_STAGING_AUTHORITY=BLOCKED_PRODUCTION_CUSTODY_AMBIGUOUS"
+            exit 1
+          fi
+
+          echo "staging_app=$STAGING_APP"
+          echo "staging_url=$STAGING_URL"
+
+      - name: Install Fly CLI only after staging authority is proven
+        run: |
+          set -euo pipefail
+          curl -L https://fly.io/install.sh | sh
+          echo "$HOME/.fly/bin" >> "$GITHUB_PATH"
+
+      - name: Inspect staging read-only
+        run: |
+          set -euo pipefail
+          flyctl version
+          flyctl status --app "$STAGING_APP"
+          echo "--- releases help ---"
+          flyctl releases --help | head -80
+          echo "--- volume help ---"
+          flyctl volumes --help | head -80
+          echo "--- secrets help ---"
+          flyctl secrets --help | head -80
+          echo "CERT01_STAGING_AUTHORITY=DISCOVERED"
+ || true
           )"
           if [ -n "$bad" ]; then
             echo "::error::Certification branch contains unauthorized product/source drift:"
