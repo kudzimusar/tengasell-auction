@@ -385,6 +385,16 @@ function CategoryBar() {
             )}
           </AnimatePresence>
         </div>
+        <button
+          onClick={() => router.navigate("/events")}
+          aria-current={route.segments[0] === "events" ? "page" : undefined}
+          className={cn(
+            "shrink-0 min-h-11 px-3 rounded-control text-label font-bold whitespace-nowrap hover:bg-teal-tint transition-colors flex items-center gap-1.5",
+            route.segments[0] === "events" ? "bg-teal-tint text-teal-deep" : "text-teal",
+          )}
+        >
+          <Gavel className="size-4" aria-hidden /> Auction Hub
+        </button>
         {categories.slice(0, 8).map((c) => (
           <button
             key={c.slug}
@@ -482,6 +492,7 @@ function Footer() {
       links: [
         { label: "Browse categories", to: "/search" },
         { label: "Ending soon", to: "/search?ending=60" },
+        { label: "Auction Hub & calendar", to: "/events" },
         { label: "Live auction room", to: "/live" },
         { label: "Sell an item", to: "/sell" },
         { label: "Tenga AI assistant", to: "/assistant" },

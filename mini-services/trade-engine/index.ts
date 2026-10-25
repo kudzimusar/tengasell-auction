@@ -57,6 +57,7 @@ import {
 import {
   createAuctionEvent,
   eventBundle,
+  eventCreateAuthorization,
   eventPermissions,
   grantEventOperator,
   submitRunListCommand,
@@ -1097,6 +1098,10 @@ io.on("connection", (socket: Socket) => {
     try {
       const user = await requireAuth();
       if (!user) return ack?.({ ok: false, error: "Sign in to create an auction event." });
+      const authorization = eventCreateAuthorization(user);
+      if (!authorization.allowed) {
+        return ack?.({ ok: false, code: authorization.code, error: authorization.error });
+      }
       const result = await createAuctionEvent(auctionCoreStore, audit, user, data?.event ?? {});
       if (!result.ok || !result.event)
         return ack?.({ ok: false, error: result.error ?? "Auction event could not be created." });
@@ -1562,6 +1567,10 @@ io.on("connection", (socket: Socket) => {
     try {
       const user = await requireAuth();
       if (!user) return ack?.({ ok: false, error: "Sign in to host a live room." });
+      const authorization = eventCreateAuthorization(user);
+      if (!authorization.allowed) {
+        return ack?.({ ok: false, code: authorization.code, error: authorization.error });
+      }
       const result = await createAuctionEvent(auctionCoreStore, audit, user, {
         title: String(data?.title ?? ""),
         startsAt: typeof data?.scheduledAt === "string" ? data.scheduledAt : null,

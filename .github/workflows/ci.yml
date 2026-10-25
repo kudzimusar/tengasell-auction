@@ -7,9 +7,14 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - fix/tengasell-auction-imp-lr01-r1-rbac-preview
   pull_request:
-    branches: [main, feat/tengasell-auction-imp01-authority-safety-barrier]
+    branches:
+      - main
+      - feat/tengasell-auction-imp01-authority-safety-barrier
+      - feat/tengasell-auction-imp-lr01-core-vehicle-events
   workflow_dispatch:
 
 concurrency:
@@ -18,6 +23,7 @@ concurrency:
 
 permissions:
   contents: read
+  statuses: write
 
 jobs:
   build-and-smoke:
@@ -30,8 +36,23 @@ jobs:
       CI: "true"
 
     steps:
-      - name: Checkout
+      - name: Checkout exact source head
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Publish LR01-R1 regression pending status
+        if: github.job == 'build-and-smoke'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/statuses/${EXPECTED_HEAD_SHA}" \
+            -f state="pending" \
+            -f context="tengasell/lr01-r1-regression" \
+            -f description="LR01 exact-head regression is running" \
+            -f target_url="$RUN_URL" >/dev/null
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -66,6 +87,9 @@ jobs:
       - name: Event UI responsive and accessibility contract
         run: node tests/event-ui-contract.mjs
 
+      - name: LR01-R1 event RBAC and Auction Hub discoverability contract
+        run: node tests/lr01-r1-rbac-navigation-contract.mjs
+
       - name: Setup Bun for canonical trade engine
         uses: oven-sh/setup-bun@v2
         with:
@@ -75,9 +99,9 @@ jobs:
         working-directory: mini-services/trade-engine
         run: bun install
 
-      - name: Vehicle authority behavioral RBAC proof
+      - name: Vehicle and event authority behavioral RBAC proof
         working-directory: mini-services/trade-engine
-        run: bun test vehicle-authority.test.ts
+        run: bun test vehicle-authority.test.ts event-authority.test.ts
 
       - name: Compile canonical trade engine
         working-directory: mini-services/trade-engine
@@ -137,6 +161,23 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      - name: Publish LR01-R1 exact-head regression status
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          state=failure
+          if [ "$JOB_STATUS" = "success" ]; then state=success; fi
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/statuses/${EXPECTED_HEAD_SHA}" \
+            -f state="$state" \
+            -f context="tengasell/lr01-r1-regression" \
+            -f description="LR01 full regression + build/smoke: $JOB_STATUS" \
+            -f target_url="$RUN_URL" >/dev/null
+
   quality:
     name: Lint and typecheck (baseline debt — non-blocking)
     runs-on: ubuntu-latest
@@ -151,8 +192,10 @@ jobs:
       NEXT_TELEMETRY_DISABLED: "1"
 
     steps:
-      - name: Checkout
+      - name: Checkout exact source head
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
