@@ -88,6 +88,9 @@ jobs:
       - name: Auction settlement / transfer / release / transport proof
         run: npm run test:auction-settlement
 
+      - name: Tasks / timeline / exception operations proof
+        run: npm run test:auction-operations
+
       - name: TrailBase migration fresh-install and parent-to-tip proof
         run: npm run test:trailbase-migrations
 
@@ -106,9 +109,9 @@ jobs:
         working-directory: mini-services/trade-engine
         run: bun install
 
-      - name: Vehicle and event authority behavioral RBAC proof
+      - name: Vehicle / event / operations behavioral RBAC proof
         working-directory: mini-services/trade-engine
-        run: bun test vehicle-authority.test.ts event-authority.test.ts
+        run: bun test vehicle-authority.test.ts event-authority.test.ts operation-authority.test.ts
 
       - name: Compile canonical trade engine
         working-directory: mini-services/trade-engine
