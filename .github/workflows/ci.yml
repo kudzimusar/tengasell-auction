@@ -11,6 +11,7 @@ on:
       - main
       - fix/tengasell-auction-imp-lr01-r1-rbac-preview
       - feat/tengasell-auction-imp-lr02-commercial-operations
+      - cert/tengasell-auction-cert-01-stg01
   pull_request:
     branches:
       - main

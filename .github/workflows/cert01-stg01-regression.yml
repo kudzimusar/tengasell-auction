@@ -1,0 +1,210 @@
+name: CERT-01-STG01 exact-head regression
+
+on:
+  push:
+    branches:
+      - cert/tengasell-auction-cert-01-stg01
+  workflow_dispatch:
+
+concurrency:
+  group: cert01-stg01-regression-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  regression:
+    name: U16 full regression and browser proof
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: file:${{ github.workspace }}/ci.db
+      NEXT_TELEMETRY_DISABLED: "1"
+      CI: "true"
+      ACCEPTED_PARENT: 0e996697e1ef43fec64e51b14efec9aea251313e
+
+    steps:
+      - name: Checkout exact certification head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Assert accepted parent ancestry
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$ACCEPTED_PARENT" HEAD
+          echo "accepted_parent=$ACCEPTED_PARENT"
+          echo "cert_head=$(git rev-parse HEAD)"
+
+      - name: Publish certification regression pending status
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/statuses/${HEAD_SHA}" \
+            -f state=pending \
+            -f context=tengasell/cert01-stg01-regression \
+            -f description="CERT-01-STG01 exact-head regression running" \
+            -f target_url="$RUN_URL" >/dev/null
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: IMP-01 authority barrier
+        run: npm run test:auction-authority
+
+      - name: IMP-02 transactional auction core
+        run: npm run test:auction-core
+
+      - name: IMP-03 Prisma convergence
+        run: npm run test:auction-convergence
+
+      - name: IMP-04 vehicle intelligence
+        run: npm run test:vehicle-intelligence
+
+      - name: IMP-05 event run-list
+        run: npm run test:auction-events
+
+      - name: IMP-06 qualification capacity
+        run: npm run test:bidder-qualification
+
+      - name: IMP-07 settlement lifecycle
+        run: npm run test:auction-settlement
+
+      - name: IMP-08 operator operations
+        run: npm run test:auction-operations
+
+      - name: IMP-09 plus U16 legal production gate
+        run: npm run test:auction-policy
+
+      - name: CERT-01-PREP full commercial journey
+        run: npm run test:cert01-prep
+
+      - name: TrailBase U1 to U16 fresh and upgrade proof
+        run: npm run test:trailbase-migrations
+
+      - name: Event UI source contract
+        run: node tests/event-ui-contract.mjs
+
+      - name: Commercial UI source contract
+        run: npm run test:commercial-ui
+
+      - name: LR01-R1 RBAC navigation contract
+        run: node tests/lr01-r1-rbac-navigation-contract.mjs
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install trade-engine dependencies
+        working-directory: mini-services/trade-engine
+        run: bun install
+
+      - name: Behavioral RBAC
+        working-directory: mini-services/trade-engine
+        run: bun test vehicle-authority.test.ts event-authority.test.ts operation-authority.test.ts policy-authority.test.ts
+
+      - name: Compile canonical trade engine
+        working-directory: mini-services/trade-engine
+        run: bun build index.ts --target=node --outfile=/tmp/tengasell-trade-engine.js
+
+      - name: Create CI database
+        run: npx prisma db push --skip-generate
+
+      - name: Production build
+        run: npm run build
+
+      - name: Install Chromium
+        run: |
+          npm install --no-save --no-package-lock @playwright/test@1.56.1
+          npx playwright install --with-deps chromium
+
+      - name: Standalone smoke and desktop/mobile browser UAT
+        run: |
+          set -euo pipefail
+          PORT=3100 node .next/standalone/server.js &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+
+          ready=0
+          for i in $(seq 1 60); do
+            if curl -fsS -o /dev/null http://127.0.0.1:3100/api/public/status 2>/dev/null; then
+              echo "server ready after ${i}s"
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          test "$ready" = 1
+
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3100/)" = 200
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3100/api/public/status)" = 200
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3100/api/v1/listings)" = 401
+          curl -fsS http://127.0.0.1:3100/api/public/status | grep -q '"ok":true'
+
+          npx playwright test tests/commercial-browser-uat.spec.mjs --reporter=line
+          echo "CERT01_BROWSER_UAT=PASS"
+
+      - name: Publish certification regression result
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.sha }}
+          JOB_STATUS: ${{ job.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          state=failure
+          if [ "$JOB_STATUS" = success ]; then state=success; fi
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/statuses/${HEAD_SHA}" \
+            -f state="$state" \
+            -f context=tengasell/cert01-stg01-regression \
+            -f description="CERT-01-STG01 full regression: $JOB_STATUS" \
+            -f target_url="$RUN_URL" >/dev/null
+
+  quality:
+    name: Quality baseline comparison (non-blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    env:
+      DATABASE_URL: file:${{ github.workspace }}/ci.db
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - name: Checkout exact certification head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: ESLint baseline
+        run: npm run lint
+
+      - name: TypeScript baseline
+        if: always()
+        run: npx tsc --noEmit

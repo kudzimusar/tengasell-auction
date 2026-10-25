@@ -35,6 +35,7 @@ def main() -> None:
         "business.deposit_policy",
         "business.fee_policy",
         "business.customs_verification_policy",
+        "legal.electronic_transaction.auction_cooling_off_interaction",
     }
     assert expected_missing.issubset(missing), missing
 
@@ -47,6 +48,13 @@ def main() -> None:
         "SELECT classification,configured FROM auction_policy_registry WHERE policy_key='business.customs_verification_policy'"
     ).fetchone()
     assert customs == ("PENDING_LEGAL_REVIEW",0)
+
+    cooling = db.execute(
+        """SELECT classification,configured,required_for_production
+             FROM auction_policy_registry
+            WHERE policy_key='legal.electronic_transaction.auction_cooling_off_interaction'"""
+    ).fetchone()
+    assert cooling == ("PENDING_LEGAL_REVIEW",0,1), cooling
 
     # Ordinary users cannot mutate production policy; admins can do so with a reason.
     db.execute(
@@ -235,7 +243,8 @@ def main() -> None:
         assert "proxy" not in (payload or "").lower()
 
     print("IMP-09 Zimbabwe policy + production governance DB proof: PASS")
-    print("  required business policy starts fail-closed: PASS")
+    print("  required business/legal policy starts fail-closed: PASS")
+    print("  unresolved section 39/53 interaction remains Production-blocking: PASS")
     print("  admin policy governance / ordinary escalation block: PASS")
     print("  public reserve amount redaction: PASS")
     print("  vehicle pre-completion retraction ignores historical 60-minute rule: PASS")

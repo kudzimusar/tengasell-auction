@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATIONS = ROOT / "mini-services/trailbase-db/traildepot/migrations/main"
-EXPECTED = [f"U{1_000_000_000 + i}__" for i in range(1, 16)]
+EXPECTED = [f"U{1_000_000_000 + i}__" for i in range(1, 17)]
 
 def connection() -> sqlite3.Connection:
     db = sqlite3.connect(":memory:")
@@ -29,8 +29,8 @@ def connection() -> sqlite3.Connection:
 def migration_files() -> list[Path]:
     files = sorted(MIGRATIONS.glob("U*.sql"))
     names = [p.name for p in files]
-    if len(files) != 15:
-        raise AssertionError(f"expected 14 main migrations, found {names}")
+    if len(files) != 16:
+        raise AssertionError(f"expected 16 main migrations, found {names}")
     for prefix, name in zip(EXPECTED, names):
         if not name.startswith(prefix):
             raise AssertionError(f"migration sequence mismatch: expected {prefix}, got {name}")
@@ -79,6 +79,14 @@ def assert_tip(db: sqlite3.Connection) -> None:
     ).fetchone()[0]
     if policy_missing < 1:
         raise AssertionError("pre-certification policy fixture no longer proves production fail-closed")
+
+    legal_review = db.execute(
+        """SELECT classification,configured,required_for_production
+             FROM auction_policy_registry
+            WHERE policy_key='legal.electronic_transaction.auction_cooling_off_interaction'"""
+    ).fetchone()
+    if legal_review != ("PENDING_LEGAL_REVIEW",0,1):
+        raise AssertionError(f"electronic-auction cooling-off legal gate missing: {legal_review}")
 
     order_columns = {row[1] for row in db.execute("PRAGMA table_info(orders)")}
     if "auction_outcome_key" not in order_columns:
@@ -161,8 +169,8 @@ def main() -> None:
     upgraded.close()
 
     print("TrailBase migration chain proof: PASS")
-    print("  blank fresh install U1 -> U15: PASS")
-    print("  U1-U6 parent -> U15 tip: PASS")
+    print("  blank fresh install U1 -> U16: PASS")
+    print("  U1-U6 parent -> U16 tip: PASS")
     print("  legacy duplicate orders preserved: PASS")
     print("  canonical outcome-key uniqueness: PASS")
     print("  IMP-02/03/04/05/06/07/08/09 + CERT integrity present: PASS")
