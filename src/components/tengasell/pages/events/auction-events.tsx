@@ -298,11 +298,7 @@ function EventDetail({ eventId }: { eventId: number }) {
 
   useEffect(() => {
     let active = true;
-    if (!user) {
-      setQualification(null);
-      setQualificationError(null);
-      return () => { active = false; };
-    }
+    if (!user) return () => { active = false; };
     setQualificationLoading(true);
     setQualificationError(null);
     rpc<{ ok: boolean; bundle?: any }>("qualification:bundle", { eventId })
