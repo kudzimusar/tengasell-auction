@@ -27,6 +27,11 @@ import type {
   SavedSearch,
   SaveSearchInput,
   Thread,
+  VehicleBundle,
+  VehicleIntakeInput,
+  VehicleInspection,
+  VehicleFinding,
+  VehicleDocument,
 } from "../types";
 
 const TB = 3001;
@@ -510,6 +515,8 @@ export class RemoteApi {
     durationHours: number;
     images: string[];
     featured?: number;
+    /** IMP-04: category vehicles must explicitly be a whole vehicle or a part. */
+    assetKind?: "general" | "vehicle" | "part";
     /** Gap-8: accept Best-Offer on this listing. */
     allowOffers?: boolean;
     /** Gap-8: auto-decline offers below this minimum (US$). */
@@ -540,8 +547,9 @@ export class RemoteApi {
         .toISOString()
         .replace(/\.\d+Z$/, "Z"),
       started_at: now,
-      status: "live",
+      status: input.assetKind === "vehicle" ? "draft" : "live",
       extension_count: 0,
+      asset_kind: input.assetKind ?? "general",
       featured: input.featured ?? 0,
       allow_offers: input.allowOffers ? 1 : 0,
       offer_min: input.offerMin ?? null,
@@ -560,6 +568,78 @@ export class RemoteApi {
     const created = await this.auction(id);
     if (!created) throw new Error("Listing created but could not be read back.");
     return created;
+  }
+
+  // ── IMP-04 Vehicle / Tengasell Inspection ───────────────────────
+  async vehicleForAuction(auctionId: number): Promise<VehicleBundle> {
+    const res = await rpc<{ ok: boolean; bundle?: VehicleBundle }>("vehicle:get", { auctionId });
+    return res.bundle ?? { vehicle: null, permissions: { inspect: false, review: false, administer: false } };
+  }
+
+  async saveVehicleIntake(auctionId: number, vehicle: VehicleIntakeInput): Promise<VehicleBundle> {
+    await rpc("vehicle:intake", { auctionId, vehicle });
+    return this.vehicleForAuction(auctionId);
+  }
+
+  async addVehicleDocument(
+    vehicleId: number,
+    document: {
+      documentType: string; documentRef: string; issuer?: string | null;
+      issuedAt?: string | null; expiresAt?: string | null; storageRef?: string | null;
+    },
+  ): Promise<VehicleDocument> {
+    const res = await rpc<{ ok: boolean; document?: VehicleDocument }>("vehicle:document:add", { vehicleId, document });
+    if (!res.document) throw new Error("Vehicle document could not be read back.");
+    return res.document;
+  }
+
+  async reviewVehicleDocument(documentId: number, action: "VERIFY" | "REJECT", reason?: string): Promise<VehicleDocument> {
+    const res = await rpc<{ ok: boolean; document?: VehicleDocument }>(
+      "vehicle:document:review", { documentId, action, reason: reason ?? null },
+    );
+    if (!res.document) throw new Error("Vehicle document review could not be read back.");
+    return res.document;
+  }
+
+  async startVehicleInspection(vehicleId: number): Promise<VehicleInspection> {
+    const res = await rpc<{ ok: boolean; inspection?: VehicleInspection }>("vehicle:inspection:start", { vehicleId });
+    if (!res.inspection) throw new Error("Inspection could not be read back.");
+    return res.inspection;
+  }
+
+  async addVehicleFinding(
+    inspectionId: number,
+    finding: {
+      category: string; component: string; location?: string | null; severity: string;
+      description: string; repairRecommended?: boolean; safetyCritical?: boolean;
+      evidenceDocumentId?: number | null;
+    },
+  ): Promise<VehicleFinding> {
+    const res = await rpc<{ ok: boolean; finding?: VehicleFinding }>(
+      "vehicle:inspection:finding", { inspectionId, finding },
+    );
+    if (!res.finding) throw new Error("Finding could not be read back.");
+    return res.finding;
+  }
+
+  async submitVehicleInspection(
+    inspectionId: number,
+    inspection: { roadworthy: boolean; odometerKm: number; notes?: string | null },
+  ): Promise<VehicleInspection> {
+    const res = await rpc<{ ok: boolean; inspection?: VehicleInspection }>(
+      "vehicle:inspection:submit", { inspectionId, inspection },
+    );
+    if (!res.inspection) throw new Error("Inspection could not be read back.");
+    return res.inspection;
+  }
+
+  async reviewVehicleInspection(inspectionId: number): Promise<VehicleBundle> {
+    const res = await rpc<{ ok: boolean; bundle?: VehicleBundle }>(
+      "vehicle:inspection:review",
+      { inspectionId, commandId: globalThis.crypto.randomUUID() },
+    );
+    if (!res.bundle) throw new Error("Vehicle review could not be read back.");
+    return res.bundle;
   }
 
   async mySelling(): Promise<Auction[]> {

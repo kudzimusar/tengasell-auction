@@ -7,7 +7,7 @@
 import { LocalStore } from "./local";
 import { RemoteApi } from "./remote";
 import { AuctionAuthorityError, DEGRADED_COMMERCIAL_MUTATIONS, isExplicitDemoIntent } from "@/lib/auction-authority";
-import type { Auction, AuctionQuery, Bid, BidResult, Category, CurrentUser, LiveSession, Message, Notification, Offer, Order, Paginated, Payment, Profile, Question, Rating, SavedSearch, SaveSearchInput, Thread } from "../types";
+import type { Auction, AuctionQuery, Bid, BidResult, Category, CurrentUser, LiveSession, Message, Notification, Offer, Order, Paginated, Payment, Profile, Question, Rating, SavedSearch, SaveSearchInput, Thread, VehicleBundle, VehicleDocument, VehicleFinding, VehicleInspection, VehicleIntakeInput } from "../types";
 
 export type ApiMode = "live" | "demo" | "degraded";
 
@@ -36,6 +36,24 @@ export interface TengasellApi {
   askQuestion(auctionId: number, body: string): Promise<Question>;
   answerQuestion(questionId: number, body: string): Promise<Question>;
   createAuction(input: Parameters<RemoteApi["createAuction"]>[0]): Promise<Auction>;
+  // IMP-04 Vehicle / Tengasell Inspection authority.
+  vehicleForAuction(auctionId: number): Promise<VehicleBundle>;
+  saveVehicleIntake(auctionId: number, vehicle: VehicleIntakeInput): Promise<VehicleBundle>;
+  addVehicleDocument(vehicleId: number, document: {
+    documentType: string; documentRef: string; issuer?: string | null;
+    issuedAt?: string | null; expiresAt?: string | null; storageRef?: string | null;
+  }): Promise<VehicleDocument>;
+  reviewVehicleDocument(documentId: number, action: "VERIFY" | "REJECT", reason?: string): Promise<VehicleDocument>;
+  startVehicleInspection(vehicleId: number): Promise<VehicleInspection>;
+  addVehicleFinding(inspectionId: number, finding: {
+    category: string; component: string; location?: string | null; severity: string;
+    description: string; repairRecommended?: boolean; safetyCritical?: boolean;
+    evidenceDocumentId?: number | null;
+  }): Promise<VehicleFinding>;
+  submitVehicleInspection(inspectionId: number, inspection: {
+    roadworthy: boolean; odometerKm: number; notes?: string | null;
+  }): Promise<VehicleInspection>;
+  reviewVehicleInspection(inspectionId: number): Promise<VehicleBundle>;
   mySelling(): Promise<Auction[]>;
   myBids(): Promise<{ auction: Auction; myMax: number; winning: boolean; active: Bid | undefined }[]>;
   myWon(): Promise<Auction[]>;

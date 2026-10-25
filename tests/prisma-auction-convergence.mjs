@@ -138,7 +138,10 @@ for (const path of [
 const config = fs.readFileSync("mini-services/trailbase-db/traildepot/config.textproto", "utf8")
 assert.match(config, /name: "legacy_auction_mappings"/)
 const configStart = config.indexOf('name: "legacy_auction_mappings"')
-const configBlock = config.slice(configStart, configStart + 700)
+const configEnd = config.indexOf("\n  },\n  {", configStart)
+assert.ok(configStart >= 0 && configEnd > configStart, "legacy mapping collection block must be bounded")
+const configBlock = config.slice(configStart, configEnd)
+assert.match(configBlock, /acl_authenticated: \[READ\]/)
 assert.doesNotMatch(configBlock, /acl_authenticated: \[[^\]]*(CREATE|UPDATE|DELETE)/)
 
 const reconcileCli = fs.readFileSync("scripts/reconcile-prisma-auctions.mjs", "utf8")

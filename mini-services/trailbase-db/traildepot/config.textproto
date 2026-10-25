@@ -227,5 +227,104 @@ record_apis: [
     table_name: "legacy_auction_mappings"
     acl_authenticated: [READ]
     read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    # IMP-04: vehicle/inspection authority is server mediated through the
+    # canonical trade engine. Direct browser records access is forbidden.
+    name: "vehicles"
+    table_name: "vehicles"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    delete_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    # IMP-04: vehicle/inspection authority is server mediated through the
+    # canonical trade engine. Direct browser records access is forbidden.
+    name: "vehicle_evidence"
+    table_name: "vehicle_evidence"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    delete_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    # IMP-04: vehicle/inspection authority is server mediated through the
+    # canonical trade engine. Direct browser records access is forbidden.
+    name: "vehicle_documents"
+    table_name: "vehicle_documents"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    delete_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    # IMP-04: vehicle/inspection authority is server mediated through the
+    # canonical trade engine. Direct browser records access is forbidden.
+    name: "vehicle_staff_roles"
+    table_name: "vehicle_staff_roles"
+    acl_authenticated: [CREATE, READ, UPDATE, DELETE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    delete_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    # IMP-04: vehicle/inspection authority is server mediated through the
+    # canonical trade engine. Direct browser records access is forbidden.
+    name: "vehicle_inspections"
+    table_name: "vehicle_inspections"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    delete_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    # IMP-04: vehicle/inspection authority is server mediated through the
+    # canonical trade engine. Direct browser records access is forbidden.
+    name: "vehicle_inspection_findings"
+    table_name: "vehicle_inspection_findings"
+    acl_authenticated: [CREATE, READ]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    delete_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    # IMP-04: vehicle/inspection authority is server mediated through the
+    # canonical trade engine. Direct browser records access is forbidden.
+    name: "vehicle_eligibility"
+    table_name: "vehicle_eligibility"
+    acl_authenticated: [READ]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    delete_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    # IMP-04: vehicle/inspection authority is server mediated through the
+    # canonical trade engine. Direct browser records access is forbidden.
+    name: "vehicle_eligibility_reasons"
+    table_name: "vehicle_eligibility_reasons"
+    acl_authenticated: [READ]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    delete_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    # IMP-04: vehicle/inspection authority is server mediated through the
+    # canonical trade engine. Direct browser records access is forbidden.
+    name: "vehicle_review_commands"
+    table_name: "vehicle_review_commands"
+    acl_authenticated: [CREATE, READ]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    delete_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
   }
 ]

@@ -44,6 +44,13 @@ export function authorityDetails(code: AuctionAuthorityErrorCode) {
 export const DEGRADED_COMMERCIAL_MUTATIONS = new Set([
   "placeBid",
   "createAuction",
+  "saveVehicleIntake",
+  "addVehicleDocument",
+  "reviewVehicleDocument",
+  "startVehicleInspection",
+  "addVehicleFinding",
+  "submitVehicleInspection",
+  "reviewVehicleInspection",
   "buyNow",
   "submitOffer",
   "withdrawOffer",

@@ -54,6 +54,9 @@ jobs:
       - name: Prisma AUCTION convergence and consumer inventory
         run: npm run test:auction-convergence
 
+      - name: Vehicle / Inspection database authority proof
+        run: npm run test:vehicle-intelligence
+
       - name: Setup Bun for canonical trade engine
         uses: oven-sh/setup-bun@v2
         with:
@@ -62,6 +65,10 @@ jobs:
       - name: Install canonical trade-engine dependencies
         working-directory: mini-services/trade-engine
         run: bun install
+
+      - name: Vehicle authority behavioral RBAC proof
+        working-directory: mini-services/trade-engine
+        run: bun test vehicle-authority.test.ts
 
       - name: Compile canonical trade engine
         working-directory: mini-services/trade-engine

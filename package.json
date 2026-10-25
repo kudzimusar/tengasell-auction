@@ -15,7 +15,8 @@
     "test:auction-core": "python3 tests/auction-core-concurrency.py",
     "test:auction-convergence": "node tests/prisma-auction-convergence.mjs",
     "auction:reconcile": "node scripts/reconcile-prisma-auctions.mjs",
-    "auction:inventory": "node scripts/inventory-prisma-auction-consumers.mjs"
+    "auction:inventory": "node scripts/inventory-prisma-auction-consumers.mjs",
+    "test:vehicle-intelligence": "python3 tests/vehicle-intelligence.py"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
