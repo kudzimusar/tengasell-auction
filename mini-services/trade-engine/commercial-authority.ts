@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { AuctionCoreIdentity, AuctionCoreStore, BidCommandResult } from "./auction-core";
 import { hasOperationCapability } from "./operation-authority";
 
-export interface CommercialIdentity extends AuctionCoreIdentity {}
+export type CommercialIdentity = AuctionCoreIdentity;
 
 export type QualificationStatus =
   | "PENDING"
