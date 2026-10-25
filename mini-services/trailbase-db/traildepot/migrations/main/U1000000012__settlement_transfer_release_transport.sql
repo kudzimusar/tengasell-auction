@@ -591,6 +591,21 @@ BEGIN
          strftime('%Y-%m-%dT%H:%M:%SZ','now'));
 END;
 
+CREATE TRIGGER IF NOT EXISTS trg_transport_booking_update
+AFTER UPDATE OF status,scheduled_at ON auction_transport_bookings
+BEGIN
+  UPDATE auction_settlements
+     SET transport_state=NEW.status,
+         updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE id=NEW.settlement_id;
+
+  INSERT INTO auction_settlement_events(settlement_id,event_type,actor_user,actor_username,payload,created_at)
+  SELECT NEW.settlement_id,'TRANSPORT_'||NEW.status,NEW.requested_by,NEW.requested_by_username,
+         json_object('transporter',NEW.transporter,'reference',NEW.transporter_reference),
+         strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE OLD.status<>NEW.status;
+END;
+
 CREATE TRIGGER IF NOT EXISTS trg_handover_command_process
 AFTER INSERT ON auction_handover_commands
 BEGIN
