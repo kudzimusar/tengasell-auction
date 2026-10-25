@@ -244,7 +244,8 @@ def main() -> None:
 
     print("IMP-09 Zimbabwe policy + production governance DB proof: PASS")
     print("  required business/legal policy starts fail-closed: PASS")
-    print("  unresolved section 39/53 interaction remains Production-blocking: PASS")\n    print("  admin policy governance / ordinary escalation block: PASS")
+    print("  unresolved section 39/53 interaction remains Production-blocking: PASS")
+    print("  admin policy governance / ordinary escalation block: PASS")
     print("  public reserve amount redaction: PASS")
     print("  vehicle pre-completion retraction ignores historical 60-minute rule: PASS")
     print("  post-completion retraction=BLOCKED: PASS")
