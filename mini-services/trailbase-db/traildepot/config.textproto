@@ -399,5 +399,101 @@ record_apis: [
     acl_authenticated: [CREATE, READ]
     create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
     read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_settlements"
+    table_name: "auction_settlements"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_invoice_lines"
+    table_name: "auction_invoice_lines"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_finance_bridge_outbox"
+    table_name: "auction_finance_bridge_outbox"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_finance_callbacks"
+    table_name: "auction_finance_callbacks"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_transfer_documents"
+    table_name: "auction_transfer_documents"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_transfer_commands"
+    table_name: "auction_transfer_commands"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_release_authorizations"
+    table_name: "auction_release_authorizations"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_release_commands"
+    table_name: "auction_release_commands"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_transport_bookings"
+    table_name: "auction_transport_bookings"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_handover_commands"
+    table_name: "auction_handover_commands"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_handovers"
+    table_name: "auction_handovers"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "auction_settlement_events"
+    table_name: "auction_settlement_events"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
   }
 ]
