@@ -451,14 +451,14 @@ export class RemoteApi {
   async placeBid(auctionId: number, maxAmount: number) {
     return rpc<{ ok: boolean; error?: string; auction?: Auction; amount?: number; winning?: boolean; outbid?: boolean }>(
       "bid:place",
-      { auctionId, maxAmount },
+      { auctionId, maxAmount, commandId: globalThis.crypto.randomUUID() },
     );
   }
 
   async buyNow(auctionId: number, address?: string | null): Promise<{ orderId: number }> {
     const res = await rpc<{ ok: boolean; error?: string; orderId?: number; order?: Order }>(
       "buynow:purchase",
-      { auctionId, address: address ?? null },
+      { auctionId, address: address ?? null, commandId: globalThis.crypto.randomUUID() },
     );
     return { orderId: res.orderId ?? res.order?.id ?? 0 };
   }
@@ -900,6 +900,7 @@ export class RemoteApi {
     const res = await rpc<{ ok: boolean; error?: string; auction?: Auction }>("bid:retract", {
       bidId,
       reason,
+      commandId: globalThis.crypto.randomUUID(),
     });
     if (!res.ok) throw new Error(res.error || "Could not retract the bid.");
     return { auction: res.auction ?? null };
@@ -969,7 +970,7 @@ export class RemoteApi {
   async closeRoomLot(sessionId: number, sold: boolean): Promise<LiveSession> {
     const res = await rpc<{ ok: boolean; error?: string; session?: LiveSession }>(
       "host:close-lot",
-      { sessionId, sold },
+      { sessionId, sold, commandId: globalThis.crypto.randomUUID() },
     );
     if (!res.session) throw new Error(res.error || "Could not close the lot.");
     return res.session;

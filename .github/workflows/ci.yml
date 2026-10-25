@@ -9,7 +9,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    branches: [main, feat/tengasell-auction-imp01-authority-safety-barrier]
   workflow_dispatch:
 
 concurrency:
@@ -47,6 +47,22 @@ jobs:
 
       - name: Auction authority barrier contract
         run: npm run test:auction-authority
+
+      - name: Transactional auction-core concurrency proof
+        run: npm run test:auction-core
+
+      - name: Setup Bun for canonical trade engine
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install canonical trade-engine dependencies
+        working-directory: mini-services/trade-engine
+        run: bun install
+
+      - name: Compile canonical trade engine
+        working-directory: mini-services/trade-engine
+        run: bun build index.ts --target=node --outfile=/tmp/tengasell-trade-engine.js
 
       - name: Create CI database
         run: npx prisma db push --skip-generate

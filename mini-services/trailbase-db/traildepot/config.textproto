@@ -179,5 +179,44 @@ record_apis: [
     acl_authenticated: [CREATE, READ, UPDATE]
     create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
     update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    # IMP-02: persistent auction commands. Max bids and idempotency records are
+    # commercial authority and are never world-readable or client-writable.
+    name: "auction_commands"
+    table_name: "auction_commands"
+    acl_authenticated: [CREATE, READ]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    # IMP-02: unified sale/unsold command ledger.
+    name: "auction_finalization_commands"
+    table_name: "auction_finalization_commands"
+    acl_authenticated: [CREATE, READ]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    # IMP-02: durable domain outbox. Engine is the only reader/acker.
+    name: "auction_outbox"
+    table_name: "auction_outbox"
+    acl_authenticated: [READ, UPDATE]
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    # IMP-02: durable final commercial outcome.
+    name: "auction_outcomes"
+    table_name: "auction_outcomes"
+    acl_authenticated: [READ]
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    # IMP-02: private proxy maxima. Public clients must never see these rows.
+    name: "auction_standing_bids"
+    table_name: "auction_standing_bids"
+    acl_authenticated: [READ]
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
   }
 ]
