@@ -51,7 +51,7 @@ def main():
         ) STRICT;
         CREATE TABLE audit_events (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user TEXT,
+          user BLOB,
           action TEXT NOT NULL,
           entity TEXT NOT NULL DEFAULT '',
           entity_id INTEGER,
