@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-const BASE = "http://127.0.0.1:3000";
+const BASE = "http://127.0.0.1:3100";
 
 function jwt(username, admin) {
   const payload = Buffer.from(JSON.stringify({ username, admin })).toString("base64url");
