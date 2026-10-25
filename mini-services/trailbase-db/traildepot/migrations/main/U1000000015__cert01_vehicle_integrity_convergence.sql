@@ -83,8 +83,10 @@ BEGIN
   SELECT CASE
     WHEN NEW.status='completed'
      AND NOT EXISTS(
-       SELECT 1 FROM auction_settlements s
-        WHERE s.order_id=NEW.id AND s.completion_state='COMPLETE'
+       SELECT 1
+         FROM auction_settlements s
+         JOIN auction_handovers h ON h.settlement_id=s.id
+        WHERE s.order_id=NEW.id
      )
     THEN RAISE(ABORT,'VEHICLE_HANDOVER_REQUIRED')
   END;
