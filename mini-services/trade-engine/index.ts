@@ -1169,6 +1169,8 @@ io.on("connection", (socket: Socket) => {
       if (!authorization.allowed) {
         return ack?.({ ok: false, code: authorization.code, error: authorization.error });
       }
+      const gate = await commercialGate(user);
+      if (!gate.ok) return ack?.({ ok: false, code: gate.code, error: gate.error, gates: gate.report });
       const result = await createAuctionEvent(auctionCoreStore, audit, user, data?.event ?? {});
       if (!result.ok || !result.event)
         return ack?.({ ok: false, error: result.error ?? "Auction event could not be created." });
@@ -1232,6 +1234,92 @@ io.on("connection", (socket: Socket) => {
     } catch (err) {
       console.error("[run-list:command]", err);
       ack?.({ ok: false, error: "Run-list command failed." });
+    }
+  });
+
+  // ── IMP-09: Zimbabwe policy / production gates / observability ──
+  socket.on("policy:snapshot", async (_data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      ack?.({ ok: true, policies: await policySnapshot(auctionCoreStore) });
+    } catch (err) {
+      console.error("[policy:snapshot]", err);
+      ack?.({ ok: false, error: "Auction policy registry could not be loaded." });
+    }
+  });
+
+  socket.on("policy:command", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      ack?.(await submitPolicyCommand(auctionCoreStore, user, {
+        commandId: typeof data?.commandId === "string" ? data.commandId : null,
+        policyKey: String(data?.policyKey ?? ""),
+        value: data?.value,
+        classification: data?.classification ?? null,
+        configured: data?.configured == null ? null : Boolean(data.configured),
+        reason: String(data?.reason ?? ""),
+      }));
+    } catch (err) {
+      console.error("[policy:command]", err);
+      ack?.({ ok: false, error: "Auction policy could not be updated." });
+    }
+  });
+
+  socket.on("policy:service-health", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      ack?.(await updateServiceHealth(auctionCoreStore, user, {
+        serviceKey: String(data?.serviceKey ?? ""),
+        status: data?.status,
+        detail: data?.detail ?? null,
+      }));
+    } catch (err) {
+      console.error("[policy:service-health]", err);
+      ack?.({ ok: false, error: "Service health could not be certified." });
+    }
+  });
+
+  socket.on("policy:auction-disclosure", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      ack?.(await updateAuctionDisclosure(auctionCoreStore, user, {
+        auctionId: Number(data?.auctionId),
+        reserveDisclosure: data?.reserveDisclosure,
+        ownerBidRightDisclosure: data?.ownerBidRightDisclosure ?? "NOT_PERMITTED",
+      }));
+    } catch (err) {
+      console.error("[policy:auction-disclosure]", err);
+      ack?.({ ok: false, error: "Auction disclosure could not be updated." });
+    }
+  });
+
+  socket.on("production:gates", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      ack?.({ ok: true, report: await productionGateReport(
+        auctionCoreStore,
+        user,
+        data?.auctionId == null ? null : Number(data.auctionId),
+      ) });
+    } catch (err) {
+      console.error("[production:gates]", err);
+      ack?.({ ok: false, error: "Production readiness gates could not be evaluated." });
+    }
+  });
+
+  socket.on("operations:observability", async (_data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user || !user.admin) return ack?.({ ok: false, error: "Administrator authority is required." });
+      ack?.({ ok: true, ...(await observabilitySnapshot(auctionCoreStore)) });
+    } catch (err) {
+      console.error("[operations:observability]", err);
+      ack?.({ ok: false, error: "Auction observability could not be loaded." });
     }
   });
 
@@ -1347,6 +1435,10 @@ io.on("connection", (socket: Socket) => {
     try {
       const user = await requireAuth();
       if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      const settlement = await getRecord("auction_settlements", Number(data?.settlementId));
+      if (!settlement) return ack?.({ ok: false, code: "SETTLEMENT_NOT_FOUND", error: "Auction settlement not found." });
+      const gate = await commercialGate(user, Number(settlement.auction_id));
+      if (!gate.ok) return ack?.({ ok: false, code: gate.code, error: gate.error, gates: gate.report });
       ack?.(await submitFinanceCallback(auctionCoreStore, user, {
         idempotencyKey: typeof data?.idempotencyKey === "string" ? data.idempotencyKey : null,
         settlementId: Number(data?.settlementId),
@@ -1367,6 +1459,10 @@ io.on("connection", (socket: Socket) => {
     try {
       const user = await requireAuth();
       if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      const settlement = await getRecord("auction_settlements", Number(data?.settlementId));
+      if (!settlement) return ack?.({ ok: false, code: "SETTLEMENT_NOT_FOUND", error: "Auction settlement not found." });
+      const gate = await commercialGate(user, Number(settlement.auction_id));
+      if (!gate.ok) return ack?.({ ok: false, code: gate.code, error: gate.error, gates: gate.report });
       ack?.(await submitTransferCommand(auctionCoreStore, user, {
         commandId: typeof data?.commandId === "string" ? data.commandId : null,
         settlementId: Number(data?.settlementId),
@@ -1386,6 +1482,10 @@ io.on("connection", (socket: Socket) => {
     try {
       const user = await requireAuth();
       if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      const settlement = await getRecord("auction_settlements", Number(data?.settlementId));
+      if (!settlement) return ack?.({ ok: false, code: "SETTLEMENT_NOT_FOUND", error: "Auction settlement not found." });
+      const gate = await commercialGate(user, Number(settlement.auction_id));
+      if (!gate.ok) return ack?.({ ok: false, code: gate.code, error: gate.error, gates: gate.report });
       ack?.(await submitReleaseCommand(auctionCoreStore, user, {
         commandId: typeof data?.commandId === "string" ? data.commandId : null,
         settlementId: Number(data?.settlementId),
@@ -1405,6 +1505,10 @@ io.on("connection", (socket: Socket) => {
     try {
       const user = await requireAuth();
       if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      const settlement = await getRecord("auction_settlements", Number(data?.settlementId));
+      if (!settlement) return ack?.({ ok: false, code: "SETTLEMENT_NOT_FOUND", error: "Auction settlement not found." });
+      const gate = await commercialGate(user, Number(settlement.auction_id));
+      if (!gate.ok) return ack?.({ ok: false, code: gate.code, error: gate.error, gates: gate.report });
       ack?.(await requestTransport(auctionCoreStore, user, {
         requestId: typeof data?.requestId === "string" ? data.requestId : null,
         settlementId: Number(data?.settlementId),
@@ -1424,6 +1528,10 @@ io.on("connection", (socket: Socket) => {
     try {
       const user = await requireAuth();
       if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      const settlement = await getRecord("auction_settlements", Number(data?.settlementId));
+      if (!settlement) return ack?.({ ok: false, code: "SETTLEMENT_NOT_FOUND", error: "Auction settlement not found." });
+      const gate = await commercialGate(user, Number(settlement.auction_id));
+      if (!gate.ok) return ack?.({ ok: false, code: gate.code, error: gate.error, gates: gate.report });
       ack?.(await submitHandoverCommand(auctionCoreStore, user, {
         commandId: typeof data?.commandId === "string" ? data.commandId : null,
         settlementId: Number(data?.settlementId),
@@ -1456,6 +1564,8 @@ io.on("connection", (socket: Socket) => {
     try {
       const user = await requireAuth();
       if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      const gate = await commercialGate(user);
+      if (!gate.ok) return ack?.({ ok: false, code: gate.code, error: gate.error, gates: gate.report });
       const result = await submitQualificationCommand(auctionCoreStore, user, {
         commandId: typeof data?.commandId === "string" ? data.commandId : null,
         eventId: Number(data?.eventId),
@@ -1513,13 +1623,26 @@ io.on("connection", (socket: Socket) => {
       if (!bid) return ack?.({ ok: false, error: "Bid not found." });
       const auction = await getRecord("auctions", Number(bid.auction_id));
       if (!auction) return ack?.({ ok: false, error: "Auction not found." });
-      const result = await submitRetractCommand(auctionCoreStore, user, {
-        auctionId: Number(auction.id),
-        bidId,
-        reason: String(data?.reason ?? ""),
-        commandKey: typeof data?.commandId === "string" ? data.commandId : null,
-        expectedVersion: Number(auction.version ?? 0),
-      });
+      let result: any;
+      if (auction.asset_kind === "vehicle") {
+        const gate = await commercialGate(user, Number(auction.id));
+        if (!gate.ok) return ack?.({ ok: false, code: gate.code, error: gate.error, gates: gate.report });
+        result = await submitVehicleRetractionRequest(auctionCoreStore, user, {
+          auctionId: Number(auction.id),
+          bidId,
+          reason: String(data?.reason ?? ""),
+          commandId: typeof data?.commandId === "string" ? data.commandId : null,
+          expectedVersion: Number(auction.version ?? 0),
+        });
+      } else {
+        result = await submitRetractCommand(auctionCoreStore, user, {
+          auctionId: Number(auction.id),
+          bidId,
+          reason: String(data?.reason ?? ""),
+          commandKey: typeof data?.commandId === "string" ? data.commandId : null,
+          expectedVersion: Number(auction.version ?? 0),
+        });
+      }
       if (result.ok) await drainAuctionOutbox();
       ack?.(result);
     } catch (err) {
