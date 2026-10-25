@@ -150,12 +150,20 @@ function AuctionHub() {
               Calendar, events, live sessions and production run lists share one TrailBase authority.
             </p>
           </div>
-          <Button asChild variant="outline" className="min-h-11">
-            <a href="#/live">
-              <Radio className="size-4" aria-hidden="true" />
-              Live rooms
-            </a>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline" className="min-h-11">
+              <a href="#/events/operations">
+                <ShieldCheck className="size-4" aria-hidden="true" />
+                Operator Workbench
+              </a>
+            </Button>
+            <Button asChild variant="outline" className="min-h-11">
+              <a href="#/live">
+                <Radio className="size-4" aria-hidden="true" />
+                Live rooms
+              </a>
+            </Button>
+          </div>
         </div>
       </header>
 
