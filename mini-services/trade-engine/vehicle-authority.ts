@@ -258,3 +258,347 @@ export async function vehicleBundle(
     permissions,
   }
 }
+
+
+async function ownedVehicle(store: VehicleStore, me: VehicleIdentity, vehicleId: number) {
+  const vehicle = await store.get("vehicles", vehicleId)
+  if (!vehicle) return { vehicle: null, error: "Vehicle not found." }
+  if (String(vehicle.seller_user) !== String(me.id) && !me.admin) {
+    return { vehicle: null, error: "Only the seller can manage this vehicle." }
+  }
+  return { vehicle, error: null }
+}
+
+export async function addVehicleDocument(
+  store: VehicleStore,
+  audit: VehicleAudit,
+  me: VehicleIdentity,
+  vehicleId: number,
+  input: {
+    documentType: string
+    documentRef: string
+    issuer?: string | null
+    issuedAt?: string | null
+    expiresAt?: string | null
+    storageRef?: string | null
+  },
+) {
+  const owned = await ownedVehicle(store, me, vehicleId)
+  if (!owned.vehicle) return { ok: false, error: owned.error }
+  const allowed = new Set(["REGISTRATION","OWNERSHIP","CUSTOMS_CLEARANCE","IDENTITY","INSPECTION_PHOTO","OTHER"])
+  if (!allowed.has(input.documentType)) return { ok: false, error: "Unsupported document type." }
+  const ref = clean(input.documentRef, 120)
+  if (ref.length < 2) return { ok: false, error: "Document reference is required." }
+
+  const id = await store.create("vehicle_documents", {
+    vehicle_id: vehicleId,
+    document_type: input.documentType,
+    document_ref: ref,
+    issuer: nullable(input.issuer, 120),
+    issued_at: nullable(input.issuedAt, 40),
+    expires_at: nullable(input.expiresAt, 40),
+    storage_ref: nullable(input.storageRef, 240),
+    status: input.storageRef ? "UPLOADED" : "DECLARED",
+    uploaded_by: me.id,
+    verified_by: null,
+    verified_at: null,
+    rejection_reason: null,
+    created_at: nowIso(),
+    updated_at: nowIso(),
+  })
+  if (id == null) return { ok: false, error: "Document could not be recorded." }
+  await audit(me.id, "vehicle:document:add", "vehicle_documents", id, "trade-engine", {
+    vehicleId,
+    documentType: input.documentType,
+  })
+  return { ok: true, document: await store.get("vehicle_documents", id) }
+}
+
+export async function reviewVehicleDocument(
+  store: VehicleStore,
+  audit: VehicleAudit,
+  me: VehicleIdentity,
+  documentId: number,
+  action: "VERIFY" | "REJECT",
+  reason?: string | null,
+) {
+  const permissions = await vehiclePermissions(store, me)
+  if (!permissions.inspect && !permissions.review) {
+    return { ok: false, error: "Inspector or reviewer permission is required." }
+  }
+  const doc = await store.get("vehicle_documents", documentId)
+  if (!doc) return { ok: false, error: "Vehicle document not found." }
+  if (!["DECLARED","UPLOADED","REJECTED"].includes(String(doc.status))) {
+    return { ok: false, error: "This document lifecycle no longer allows review." }
+  }
+  if (action === "REJECT" && clean(reason, 240).length < 5) {
+    return { ok: false, error: "Give a rejection reason." }
+  }
+  const expired = doc.expires_at && Date.parse(doc.expires_at) <= Date.now()
+  const status = expired ? "EXPIRED" : action === "VERIFY" ? "VERIFIED" : "REJECTED"
+  const ok = await store.update("vehicle_documents", documentId, {
+    status,
+    verified_by: action === "VERIFY" && !expired ? me.id : null,
+    verified_at: action === "VERIFY" && !expired ? nowIso() : null,
+    rejection_reason: action === "REJECT" ? clean(reason, 240) : expired ? "Document expired." : null,
+    updated_at: nowIso(),
+  })
+  if (!ok) return { ok: false, error: "Document review could not be saved." }
+
+  if (status === "VERIFIED") {
+    await store.create("vehicle_evidence", {
+      vehicle_id: Number(doc.vehicle_id),
+      field_key: `document:${doc.document_type}`,
+      source_type: "DOCUMENT",
+      source_id: documentId,
+      value_json: JSON.stringify({ documentRef: doc.document_ref, issuer: doc.issuer ?? null }),
+      asserted_by: doc.uploaded_by,
+      verified_by: me.id,
+      verified_at: nowIso(),
+      created_at: nowIso(),
+    })
+  }
+  await audit(me.id, "vehicle:document:review", "vehicle_documents", documentId, "trade-engine", {
+    status,
+    reason: action === "REJECT" ? clean(reason, 240) : null,
+  })
+  return { ok: true, document: await store.get("vehicle_documents", documentId) }
+}
+
+export async function startVehicleInspection(
+  store: VehicleStore,
+  audit: VehicleAudit,
+  me: VehicleIdentity,
+  vehicleId: number,
+) {
+  const permissions = await vehiclePermissions(store, me)
+  if (!permissions.inspect) return { ok: false, error: "Inspector permission is required." }
+  const vehicle = await store.get("vehicles", vehicleId)
+  if (!vehicle) return { ok: false, error: "Vehicle not found." }
+  const existing = await store.list(
+    "vehicle_inspections",
+    params({ "filter[vehicle_id][$eq]": vehicleId, order: "-version", limit: 1 }),
+  )
+  if (existing[0] && ["DRAFT","SUBMITTED"].includes(String(existing[0].lifecycle))) {
+    return { ok: false, error: "An inspection is already in progress." }
+  }
+  const version = Number(existing[0]?.version ?? 0) + 1
+  const id = await store.create("vehicle_inspections", {
+    vehicle_id: vehicleId,
+    version,
+    inspector_user: me.id,
+    inspector_name: me.username,
+    reviewer_user: null,
+    reviewer_name: null,
+    lifecycle: "DRAFT",
+    odometer_km: Number(vehicle.odometer_km),
+    roadworthy: 1,
+    notes: "",
+    grade_score: null,
+    grade: null,
+    submitted_at: null,
+    reviewed_at: null,
+    created_at: nowIso(),
+    updated_at: nowIso(),
+  })
+  if (id == null) return { ok: false, error: "Inspection could not be started." }
+  await store.update("vehicles", vehicleId, { lifecycle: "INSPECTION", updated_at: nowIso() })
+  await audit(me.id, "vehicle:inspection:start", "vehicle_inspections", id, "trade-engine", {
+    vehicleId,
+    version,
+  })
+  return { ok: true, inspection: await store.get("vehicle_inspections", id) }
+}
+
+export async function addVehicleFinding(
+  store: VehicleStore,
+  audit: VehicleAudit,
+  me: VehicleIdentity,
+  inspectionId: number,
+  input: {
+    category: string
+    component: string
+    location?: string | null
+    severity: string
+    description: string
+    repairRecommended?: boolean
+    safetyCritical?: boolean
+    evidenceDocumentId?: number | null
+  },
+) {
+  const permissions = await vehiclePermissions(store, me)
+  if (!permissions.inspect) return { ok: false, error: "Inspector permission is required." }
+  const inspection = await store.get("vehicle_inspections", inspectionId)
+  if (!inspection) return { ok: false, error: "Inspection not found." }
+  if (inspection.lifecycle !== "DRAFT") return { ok: false, error: "Only a draft inspection can be edited." }
+  if (String(inspection.inspector_user) !== String(me.id) && !me.admin) {
+    return { ok: false, error: "Only the assigned inspector can add findings." }
+  }
+  const categories = new Set(["BODY","STRUCTURAL","MECHANICAL","INTERIOR","TYRES","ELECTRICAL","GLASS","UNDERBODY"])
+  const severities = new Set(["MINOR","MODERATE","MAJOR","CRITICAL"])
+  if (!categories.has(input.category) || !severities.has(input.severity)) {
+    return { ok: false, error: "Finding category or severity is invalid." }
+  }
+  const description = clean(input.description, 600)
+  if (description.length < 5) return { ok: false, error: "Describe the inspection finding." }
+  const id = await store.create("vehicle_inspection_findings", {
+    inspection_id: inspectionId,
+    category: input.category,
+    component: clean(input.component, 120),
+    location: nullable(input.location, 120),
+    severity: input.severity,
+    description,
+    repair_recommended: input.repairRecommended ? 1 : 0,
+    safety_critical: input.safetyCritical ? 1 : 0,
+    evidence_document_id: input.evidenceDocumentId ?? null,
+    created_by: me.id,
+    created_at: nowIso(),
+  })
+  if (id == null) return { ok: false, error: "Finding could not be recorded." }
+  await audit(me.id, "vehicle:inspection:finding", "vehicle_inspection_findings", id, "trade-engine", {
+    inspectionId,
+    severity: input.severity,
+    safetyCritical: !!input.safetyCritical,
+  })
+  return { ok: true, finding: await store.get("vehicle_inspection_findings", id) }
+}
+
+export async function submitVehicleInspection(
+  store: VehicleStore,
+  audit: VehicleAudit,
+  me: VehicleIdentity,
+  inspectionId: number,
+  input: { roadworthy: boolean; odometerKm: number; notes?: string | null },
+) {
+  const permissions = await vehiclePermissions(store, me)
+  if (!permissions.inspect) return { ok: false, error: "Inspector permission is required." }
+  const inspection = await store.get("vehicle_inspections", inspectionId)
+  if (!inspection) return { ok: false, error: "Inspection not found." }
+  if (inspection.lifecycle !== "DRAFT") return { ok: false, error: "Inspection is not editable." }
+  if (String(inspection.inspector_user) !== String(me.id) && !me.admin) {
+    return { ok: false, error: "Only the assigned inspector can submit this inspection." }
+  }
+  const odometerKm = Math.round(Number(input.odometerKm))
+  if (!Number.isInteger(odometerKm) || odometerKm < 0) {
+    return { ok: false, error: "Inspection odometer is invalid." }
+  }
+  const ok = await store.update("vehicle_inspections", inspectionId, {
+    roadworthy: input.roadworthy ? 1 : 0,
+    odometer_km: odometerKm,
+    notes: clean(input.notes, 1200),
+    lifecycle: "SUBMITTED",
+    submitted_at: nowIso(),
+    updated_at: nowIso(),
+  })
+  if (!ok) return { ok: false, error: "Inspection could not be submitted." }
+  await store.update("vehicles", Number(inspection.vehicle_id), {
+    lifecycle: "REVIEW",
+    updated_at: nowIso(),
+  })
+  await store.create("vehicle_evidence", {
+    vehicle_id: Number(inspection.vehicle_id),
+    field_key: "inspection",
+    source_type: "INSPECTION",
+    source_id: inspectionId,
+    value_json: JSON.stringify({ roadworthy: !!input.roadworthy, odometerKm }),
+    asserted_by: me.id,
+    verified_by: me.id,
+    verified_at: nowIso(),
+    created_at: nowIso(),
+  })
+  await audit(me.id, "vehicle:inspection:submit", "vehicle_inspections", inspectionId, "trade-engine", {
+    roadworthy: !!input.roadworthy,
+    odometerKm,
+  })
+  return { ok: true, inspection: await store.get("vehicle_inspections", inspectionId) }
+}
+
+export async function reviewVehicleInspection(
+  store: VehicleStore,
+  audit: VehicleAudit,
+  me: VehicleIdentity,
+  inspectionId: number,
+  commandKey: string,
+) {
+  const permissions = await vehiclePermissions(store, me)
+  if (!permissions.review) return { ok: false, error: "Reviewer permission is required." }
+  const inspection = await store.get("vehicle_inspections", inspectionId)
+  if (!inspection) return { ok: false, error: "Inspection not found." }
+  if (inspection.lifecycle !== "SUBMITTED") return { ok: false, error: "Only a submitted inspection can be reviewed." }
+
+  const key = clean(commandKey, 160)
+  if (!key) return { ok: false, error: "Review command id is required." }
+  let rows = await store.list(
+    "vehicle_review_commands",
+    params({ "filter[command_key][$eq]": key, limit: 1 }),
+  )
+  let command = rows[0]
+  if (command) {
+    if (
+      Number(command.inspection_id) !== inspectionId ||
+      String(command.reviewer_user) !== String(me.id)
+    ) {
+      return { ok: false, error: "Review command id was already used for a different request." }
+    }
+  } else {
+    const id = await store.create("vehicle_review_commands", {
+      command_key: key,
+      vehicle_id: Number(inspection.vehicle_id),
+      inspection_id: inspectionId,
+      reviewer_user: me.id,
+      reviewer_name: me.username,
+    })
+    command = id == null
+      ? (await store.list("vehicle_review_commands", params({ "filter[command_key][$eq]": key, limit: 1 })))[0]
+      : await store.get("vehicle_review_commands", id)
+  }
+  if (!command) return { ok: false, error: "Review command could not be persisted." }
+  if (command.status !== "accepted") {
+    return { ok: false, error: `Vehicle review rejected: ${command.error_code ?? "UNKNOWN"}`, command }
+  }
+  await audit(me.id, "vehicle:review:ack", "vehicle_review_commands", Number(command.id), "trade-engine", {
+    inspectionId,
+    resultGrade: command.result_grade,
+    eligibility: command.eligibility_status,
+  })
+  return {
+    ok: true,
+    command,
+    bundle: await vehicleBundle(store, Number((await store.get("vehicles", Number(inspection.vehicle_id)))?.auction_id), me),
+  }
+}
+
+export async function grantVehicleRole(
+  store: VehicleStore,
+  audit: VehicleAudit,
+  me: VehicleIdentity,
+  target: { user: string; username: string; role: "INSPECTOR" | "REVIEWER" },
+) {
+  if (!me.admin) return { ok: false, error: "Administrator permission is required." }
+  const existing = await store.list(
+    "vehicle_staff_roles",
+    params({ "filter[user][$eq]": target.user, "filter[role][$eq]": target.role, limit: 1 }),
+  )
+  if (existing[0]) {
+    await store.update("vehicle_staff_roles", `${target.user},${target.role}`, { active: 1 })
+  } else {
+    const id = await store.create("vehicle_staff_roles", {
+      user: target.user,
+      username: clean(target.username, 120),
+      role: target.role,
+      active: 1,
+      granted_by: me.id,
+      granted_at: nowIso(),
+    })
+    if (id == null) {
+      // Composite-key record APIs may not return a numeric id; confirm the row.
+      const confirmed = await store.list(
+        "vehicle_staff_roles",
+        params({ "filter[user][$eq]": target.user, "filter[role][$eq]": target.role, limit: 1 }),
+      )
+      if (!confirmed.length) return { ok: false, error: "Vehicle role could not be granted." }
+    }
+  }
+  await audit(me.id, "vehicle:role:grant", "vehicle_staff_roles", null, "trade-engine", target)
+  return { ok: true }
+}
