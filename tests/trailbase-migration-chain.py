@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATIONS = ROOT / "mini-services/trailbase-db/traildepot/migrations/main"
-EXPECTED = [f"U{1_000_000_000 + i}__" for i in range(1, 14)]
+EXPECTED = [f"U{1_000_000_000 + i}__" for i in range(1, 15)]
 
 def connection() -> sqlite3.Connection:
     db = sqlite3.connect(":memory:")
@@ -29,8 +29,8 @@ def connection() -> sqlite3.Connection:
 def migration_files() -> list[Path]:
     files = sorted(MIGRATIONS.glob("U*.sql"))
     names = [p.name for p in files]
-    if len(files) != 13:
-        raise AssertionError(f"expected 10 main migrations, found {names}")
+    if len(files) != 14:
+        raise AssertionError(f"expected 14 main migrations, found {names}")
     for prefix, name in zip(EXPECTED, names):
         if not name.startswith(prefix):
             raise AssertionError(f"migration sequence mismatch: expected {prefix}, got {name}")
@@ -59,10 +59,26 @@ def assert_tip(db: sqlite3.Connection) -> None:
         "auction_transport_bookings","auction_handovers","auction_settlement_events",
         "auction_operation_grants","auction_tasks","auction_task_commands",
         "auction_timeline_events","auction_operator_alerts",
+        "auction_policy_registry","auction_policy_commands","auction_service_health",
+        "auction_observability_events","auction_policy_retraction_requests",
     }
     missing = required - tables(db)
     if missing:
         raise AssertionError(f"missing tip tables: {sorted(missing)}")
+
+    public_cols = {row[1] for row in db.execute("PRAGMA table_info(auction_public)")}
+    if "reserve_price" in public_cols:
+        raise AssertionError("private reserve_price leaked into auction_public")
+    for required_col in ("id","reserve_disclosure","owner_bid_right_disclosure","policy_profile_key"):
+        if required_col not in public_cols:
+            raise AssertionError(f"auction_public missing {required_col}")
+
+    policy_missing = db.execute(
+        """SELECT COUNT(*) FROM auction_policy_registry
+           WHERE required_for_production=1 AND configured=0"""
+    ).fetchone()[0]
+    if policy_missing < 1:
+        raise AssertionError("pre-certification policy fixture no longer proves production fail-closed")
 
     order_columns = {row[1] for row in db.execute("PRAGMA table_info(orders)")}
     if "auction_outcome_key" not in order_columns:
@@ -145,12 +161,14 @@ def main() -> None:
     upgraded.close()
 
     print("TrailBase migration chain proof: PASS")
-    print("  blank fresh install U1 -> U13: PASS")
-    print("  U1-U6 parent -> U13 tip: PASS")
+    print("  blank fresh install U1 -> U14: PASS")
+    print("  U1-U6 parent -> U14 tip: PASS")
     print("  legacy duplicate orders preserved: PASS")
     print("  canonical outcome-key uniqueness: PASS")
-    print("  IMP-02/03/04/05/06/07/08 tables present: PASS")
+    print("  IMP-02/03/04/05/06/07/08/09 tables present: PASS")
     print("  AuctionEvent -> LiveSession trigger: PASS")
+    print("  redacted auction_public reserve privacy: PASS")
+    print("  unconfigured Production policy remains fail-closed: PASS")
 
 if __name__ == "__main__":
     main()
