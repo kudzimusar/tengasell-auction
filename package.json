@@ -18,6 +18,7 @@
     "auction:inventory": "node scripts/inventory-prisma-auction-consumers.mjs",
     "test:vehicle-intelligence": "python3 tests/vehicle-intelligence.py",
     "test:auction-events": "python3 tests/event-run-list.py",
+    "test:bidder-qualification": "python3 tests/bidder-qualification-capacity.py",
     "test:trailbase-migrations": "python3 tests/trailbase-migration-chain.py"
   },
   "dependencies": {
