@@ -1,33 +1,18 @@
 // ── Background jobs (scheduler) — runs inside the Next.js server via instrumentation ──
 import { db } from "@/lib/db"
+import { CANONICAL_AUCTION_AUTHORITY } from "@/lib/auction-authority"
 
 const g = globalThis as unknown as { __tgsScheduler?: NodeJS.Timeout; __tgsLastBackup?: number; __tgsLastMetrics?: string }
 
 export async function endExpiredAuctions() {
-  const now = new Date()
-  const expiring = await db.listing.findMany({
-    where: { status: "ACTIVE", type: "AUCTION", endsAt: { lte: now } },
-    take: 50,
-  })
-  for (const l of expiring) {
-    const winner = await db.bid.findFirst({ where: { listingId: l.id, isActive: true }, orderBy: { amount: "desc" } })
-    if (winner && winner.amount >= l.startingPrice) {
-      const order = await db.order.create({
-        data: {
-          listingId: l.id, buyerId: winner.bidderId, sellerId: l.sellerId, type: "AUCTION",
-          amount: winner.amount, totalCharged: winner.amount, status: "PENDING_PAYMENT",
-        },
-      })
-      await db.listing.update({ where: { id: l.id }, data: { status: "SOLD", endedAt: now, currentPrice: winner.amount } })
-      await db.bid.updateMany({ where: { listingId: l.id }, data: { isActive: false } })
-      await db.orderEvent.create({ data: { orderId: order.id, type: "AUCTION_WON", actorId: winner.bidderId, data: JSON.stringify({ amount: winner.amount }) } })
-      await db.notification.create({ data: { userId: winner.bidderId, type: "WIN", params: JSON.stringify({ listingId: l.id, title: l.title, orderId: order.id, amount: winner.amount }) } })
-      await db.notification.create({ data: { userId: l.sellerId, type: "AUCTION_SOLD", params: JSON.stringify({ listingId: l.id, title: l.title, orderId: order.id }) } })
-      await db.emailOutbox.create({ data: { toEmail: "winner@mock.local", userId: winner.bidderId, subject: `You won: ${l.title}`, body: `Congratulations! You won "${l.title}". Pay within 48h to complete the order. Order ${order.id}`, templateKey: "auction_won", kind: "TRANSACTIONAL" } }).catch(() => undefined)
-    } else {
-      await db.listing.update({ where: { id: l.id }, data: { status: "ENDED", endedAt: now } })
-      await db.notification.create({ data: { userId: l.sellerId, type: "AUCTION_ENDED_NO_BID", params: JSON.stringify({ listingId: l.id, title: l.title }) } })
-    }
+  // TENGASELL-AUCTION-IMP-01:
+  // Legacy Prisma AUCTION rows are retained for read/reconciliation only.
+  // Winner selection, SOLD transitions and auction-order creation are owned
+  // by the canonical TrailBase + trade-engine authority.
+  return {
+    suppressed: true as const,
+    code: "CANONICAL_AUCTION_REQUIRED" as const,
+    authority: CANONICAL_AUCTION_AUTHORITY,
   }
 }
 

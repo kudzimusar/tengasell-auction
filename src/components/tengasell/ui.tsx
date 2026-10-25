@@ -234,18 +234,29 @@ export function VerifiedBadge({ className }: { className?: string }) {
 /** Small status pill (consoles/lists). tone overrides status mapping. */
 export function StatusPill({ status, size = "sm", tone, children, mode, engineConnected }: {
   status?: string; size?: "xs" | "sm"; tone?: "good" | "gold" | "danger" | "warn" | "info" | "muted"; children?: ReactNode
-  mode?: "live" | "demo"; engineConnected?: boolean
+  mode?: "live" | "demo" | "degraded"; engineConnected?: boolean
 }) {
-  // Header engine-status variant: live (teal) / demo (gold)
+  // Header engine-status variant: canonical live / explicit demo / degraded.
   if (mode) {
     const live = mode === "live" && !!engineConnected
+    const degraded = mode === "degraded"
+    const reconnecting = mode === "live" && !engineConnected
+    const tone = live
+      ? "border-teal/25 bg-teal/10 text-teal"
+      : degraded
+        ? "border-danger/30 bg-danger/10 text-danger"
+        : reconnecting
+          ? "border-warn/30 bg-warn/10 text-warn"
+          : "border-gold/30 bg-gold/15 text-ochre"
+    const dot = live ? "bg-teal" : degraded ? "bg-danger" : reconnecting ? "bg-warn" : "bg-gold"
+    const label = live ? "Live engine" : degraded ? "Auction service unavailable" : reconnecting ? "Engine reconnecting" : "Demo mode"
     return (
       <span className={cn(
         "inline-flex items-center gap-1.5 rounded-pill border px-2.5 py-1 text-[11px] font-bold",
-        live ? "border-teal/25 bg-teal/10 text-teal" : "border-gold/30 bg-gold/15 text-ochre",
+        tone,
       )}>
-        <span className={cn("size-1.5 rounded-full", live ? "bg-teal" : "bg-gold")} aria-hidden />
-        {live ? "Live engine" : "Demo mode"}
+        <span className={cn("size-1.5 rounded-full", dot)} aria-hidden />
+        {label}
       </span>
     )
   }

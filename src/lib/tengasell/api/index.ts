@@ -6,9 +6,10 @@
 
 import { LocalStore } from "./local";
 import { RemoteApi } from "./remote";
+import { AuctionAuthorityError, DEGRADED_COMMERCIAL_MUTATIONS, isExplicitDemoIntent } from "@/lib/auction-authority";
 import type { Auction, AuctionQuery, Bid, BidResult, Category, CurrentUser, LiveSession, Message, Notification, Offer, Order, Paginated, Payment, Profile, Question, Rating, SavedSearch, SaveSearchInput, Thread } from "../types";
 
-export type ApiMode = "live" | "demo";
+export type ApiMode = "live" | "demo" | "degraded";
 
 export interface TengasellApi {
   register(username: string, password: string): Promise<{ ok: boolean; error?: string }>;
@@ -81,7 +82,8 @@ export interface TengasellApi {
   roomLots(sessionId: number): Promise<Auction[]>;
 }
 
-let mode: ApiMode = "demo";
+const explicitDemoIntent = isExplicitDemoIntent(process.env.NEXT_PUBLIC_TENGASELL_EXPLICIT_DEMO);
+let mode: ApiMode = explicitDemoIntent ? "demo" : "degraded";
 let impl: TengasellApi = new LocalStore() as unknown as TengasellApi;
 let initialized = false;
 const modeListeners = new Set<(m: ApiMode) => void>();
@@ -119,7 +121,7 @@ export async function initApi(): Promise<ApiMode> {
     mode = "live";
     impl = new RemoteApi() as unknown as TengasellApi;
   } else {
-    mode = "demo";
+    mode = explicitDemoIntent ? "demo" : "degraded";
     impl = new LocalStore() as unknown as TengasellApi;
   }
   modeListeners.forEach((fn) => fn(mode));
@@ -141,6 +143,9 @@ export const api: TengasellApi = new Proxy({} as TengasellApi, {
     const anyImpl = impl as unknown as Record<string, unknown>;
     const value = anyImpl[prop];
     if (typeof value === "function") {
+      if (mode === "degraded" && DEGRADED_COMMERCIAL_MUTATIONS.has(prop)) {
+        return (..._args: unknown[]) => Promise.reject(new AuctionAuthorityError("AUCTION_SERVICE_UNAVAILABLE"));
+      }
       return (...args: unknown[]) => (value as (...a: unknown[]) => unknown).apply(impl, args);
     }
     return value;
@@ -149,7 +154,7 @@ export const api: TengasellApi = new Proxy({} as TengasellApi, {
 
 /** Demo-mode housekeeping (auction ending sweep in the local store). */
 export function demoSweep() {
-  if (mode === "demo" && impl instanceof LocalStore === false) return;
+  if (mode !== "demo" || !(impl instanceof LocalStore)) return;
   const store = impl as unknown as LocalStore;
   if (typeof store.sweep === "function") store.sweep();
 }

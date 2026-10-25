@@ -5,6 +5,7 @@ import { db } from "@/lib/db"
 import { ok, fail, ctxFrom, parseBody, audit, json } from "@/lib/server/api"
 import { requireUser, rateLimit, STAFF_ROLES } from "@/lib/server/auth-core"
 import { PUBLIC_LISTING_STATUSES, getSettings, flagEnabled, notify, round2 } from "@/app/api/listings/shared/mkt"
+import { AUCTION_AUTHORITY_ERRORS, authorityDetails, isLegacyPrismaAuction } from "@/lib/auction-authority"
 
 export const runtime = "nodejs"
 
@@ -139,11 +140,26 @@ export async function POST(req: NextRequest) {
   if (user.role !== "SELLER" && !user.isSeller && !STAFF_ROLES.includes(user.role as never)) {
     return fail("A seller account is required to list items", 403, requestId)
   }
+  const { data, error: bodyErr } = await parseBody(req, createSchema)
+  if (bodyErr) return bodyErr
+
+  if (isLegacyPrismaAuction(data.type)) {
+    const policy = AUCTION_AUTHORITY_ERRORS.AUCTION_AUTHORITY_MOVED
+    await audit({
+      actorId: user.id,
+      actorRole: user.role,
+      action: "auction.authority.blocked.prisma_create",
+      targetType: "LISTING",
+      after: { requestedType: data.type, ...authorityDetails("AUCTION_AUTHORITY_MOVED") },
+      requestId,
+      ip,
+    })
+    return fail(policy.message, policy.status, requestId, authorityDetails("AUCTION_AUTHORITY_MOVED"))
+  }
+
   if (!rateLimit(`listing_create:${user.id}`, 10, 3600_000)) {
     return fail("Too many listings created — try again later", 429, requestId)
   }
-  const { data, error: bodyErr } = await parseBody(req, createSchema)
-  if (bodyErr) return bodyErr
 
   const cat = await db.category.findUnique({ where: { id: data.categoryId } })
   if (!cat || !cat.active) return fail("Category not found", 404, requestId)

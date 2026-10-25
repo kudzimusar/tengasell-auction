@@ -61,6 +61,7 @@ try {
         ...process.env,
         STATIC_DEMO: "1",
         STATIC_DEMO_BASE_PATH: BASE_PATH,
+        NEXT_PUBLIC_TENGASELL_EXPLICIT_DEMO: "1",
         NEXT_TELEMETRY_DISABLED: "1",
       },
     },

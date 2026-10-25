@@ -639,6 +639,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <CategoryBar />
       </header>
 
+      {mode === "degraded" && (
+        <div role="status" className="border-b border-danger/30 bg-danger/10 px-4 py-2 text-center text-caption font-semibold text-danger">
+          Auction service unavailable — browsing is read-only. Bids, listings, offers, checkout and live-room controls are disabled until the canonical service reconnects.
+        </div>
+      )}
+
       <main id="main-content" className="flex-1 pb-20 md:pb-0">
         {children}
       </main>
