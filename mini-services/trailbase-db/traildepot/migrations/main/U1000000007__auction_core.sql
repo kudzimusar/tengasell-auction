@@ -620,4 +620,112 @@ BEGIN
          CASE
            WHEN NEW.requested_outcome='UNSOLD' THEN 'unsold'
            WHEN NEW.requested_outcome='SOLD' THEN 'sold'
-           WHEN leader.user
+           WHEN leader.user IS NOT NULL
+             AND (a.reserve_price IS NULL OR a.current_price>=a.reserve_price)
+             THEN 'sold'
+           ELSE 'unsold'
+         END,
+         CASE
+           WHEN NEW.requested_outcome='SOLD' THEN NEW.buyer_user
+           WHEN NEW.requested_outcome='AUTO'
+             AND leader.user IS NOT NULL
+             AND (a.reserve_price IS NULL OR a.current_price>=a.reserve_price)
+             THEN leader.user
+           ELSE NULL
+         END,
+         CASE
+           WHEN NEW.requested_outcome='SOLD' THEN NEW.buyer_username
+           WHEN NEW.requested_outcome='AUTO'
+             AND leader.user IS NOT NULL
+             AND (a.reserve_price IS NULL OR a.current_price>=a.reserve_price)
+             THEN leader.bidder_username
+           ELSE NULL
+         END,
+         CASE
+           WHEN NEW.requested_outcome='SOLD' THEN NEW.final_price
+           WHEN NEW.requested_outcome='AUTO'
+             AND leader.user IS NOT NULL
+             AND (a.reserve_price IS NULL OR a.current_price>=a.reserve_price)
+             THEN a.current_price
+           ELSE NULL
+         END,
+         NEW.id,
+         strftime('%Y-%m-%dT%H:%M:%SZ','now')
+    FROM auctions a
+    LEFT JOIN auction_standing_bids leader
+      ON leader.auction_id=a.id
+     AND leader.first_sequence=(
+       SELECT first_sequence FROM auction_standing_bids
+        WHERE auction_id=a.id
+        ORDER BY max_amount DESC, first_sequence ASC LIMIT 1
+     )
+   WHERE a.id=NEW.auction_id
+     AND (SELECT status FROM auction_finalization_commands WHERE id=NEW.id)='pending';
+
+  INSERT OR IGNORE INTO orders
+    (auction_id,auction_title,buyer_user,seller_user,buyer_username,seller_username,
+     final_price,status,pay_by,address,created_at,updated_at)
+  SELECT a.id,a.title,o.winner_user,a.user,o.winner_username,a.seller_username,
+         o.final_price,'pending_payment',
+         strftime('%Y-%m-%dT%H:%M:%SZ','now','+48 hours'),
+         CASE WHEN NEW.address IS NULL THEN NULL ELSE substr(NEW.address,1,200) END,
+         strftime('%Y-%m-%dT%H:%M:%SZ','now'),
+         strftime('%Y-%m-%dT%H:%M:%SZ','now')
+    FROM auction_outcomes o
+    JOIN auctions a ON a.id=o.auction_id
+   WHERE o.auction_id=NEW.auction_id
+     AND o.outcome='sold'
+     AND o.command_id=NEW.id;
+
+  UPDATE auction_outcomes
+     SET order_id=(SELECT id FROM orders WHERE auction_id=NEW.auction_id)
+   WHERE auction_id=NEW.auction_id
+     AND command_id=NEW.id;
+
+  UPDATE auctions
+     SET status=CASE
+           WHEN (SELECT outcome FROM auction_outcomes WHERE auction_id=NEW.auction_id)='sold'
+             THEN 'sold'
+           ELSE 'ended'
+         END,
+         outcome=(SELECT outcome FROM auction_outcomes WHERE auction_id=NEW.auction_id),
+         final_order_id=(SELECT order_id FROM auction_outcomes WHERE auction_id=NEW.auction_id),
+         finalized_at=strftime('%Y-%m-%dT%H:%M:%SZ','now'),
+         version=version+1,
+         updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE id=NEW.auction_id
+     AND (SELECT status FROM auction_finalization_commands WHERE id=NEW.id)='pending';
+
+  INSERT OR IGNORE INTO auction_outbox
+    (event_key,auction_id,command_id,event_type,payload,occurred_at)
+  SELECT 'final:'||NEW.auction_id,
+         NEW.auction_id,
+         NEW.id,
+         CASE WHEN o.outcome='sold' THEN 'AUCTION_SOLD' ELSE 'AUCTION_ENDED_UNSOLD' END,
+         printf('{"auctionId":%d,"outcome":"%s","orderId":%s,"price":%s}',
+           NEW.auction_id,
+           o.outcome,
+           COALESCE(CAST(o.order_id AS TEXT),'null'),
+           COALESCE(printf('%.2f',o.final_price),'null')),
+         strftime('%Y-%m-%dT%H:%M:%SZ','now')
+    FROM auction_outcomes o
+   WHERE o.auction_id=NEW.auction_id
+     AND o.command_id=NEW.id;
+
+  UPDATE auction_finalization_commands
+     SET status='accepted',
+         result_outcome=(SELECT outcome FROM auction_outcomes WHERE auction_id=NEW.auction_id),
+         result_order_id=(SELECT order_id FROM auction_outcomes WHERE auction_id=NEW.auction_id),
+         result_price=(SELECT final_price FROM auction_outcomes WHERE auction_id=NEW.auction_id),
+         version_after=(SELECT version FROM auctions WHERE id=NEW.auction_id),
+         completed_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE id=NEW.id AND status='pending';
+
+  UPDATE auction_finalization_commands
+     SET result_outcome=COALESCE(result_outcome,(SELECT outcome FROM auction_outcomes WHERE auction_id=NEW.auction_id)),
+         result_order_id=COALESCE(result_order_id,(SELECT order_id FROM auction_outcomes WHERE auction_id=NEW.auction_id)),
+         result_price=COALESCE(result_price,(SELECT final_price FROM auction_outcomes WHERE auction_id=NEW.auction_id)),
+         version_after=COALESCE(version_after,(SELECT version FROM auctions WHERE id=NEW.auction_id),version_before),
+         completed_at=COALESCE(completed_at,strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+   WHERE id=NEW.id;
+END;
