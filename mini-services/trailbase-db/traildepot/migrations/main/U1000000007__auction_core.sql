@@ -258,4 +258,129 @@ BEGIN
           WHERE auction_id=NEW.auction_id
          ),
          bid_count = bid_count + 1,
-         ve
+         version = version + 1,
+         ends_at = CASE
+           WHEN unixepoch(ends_at)-unixepoch('now') < 300
+                AND unixepoch(ends_at) > unixepoch('now')
+                AND extension_count < 15
+             THEN strftime('%Y-%m-%dT%H:%M:%SZ', datetime(ends_at,'+5 minutes'))
+           ELSE ends_at
+         END,
+         extension_count = CASE
+           WHEN unixepoch(ends_at)-unixepoch('now') < 300
+                AND unixepoch(ends_at) > unixepoch('now')
+                AND extension_count < 15
+             THEN extension_count + 1
+           ELSE extension_count
+         END,
+         updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE id=NEW.auction_id
+     AND (SELECT status FROM auction_commands WHERE id=NEW.id)='pending';
+
+  INSERT INTO bids
+    (auction_id,user,bidder_username,amount,max_amount,is_auto,status,created_at,command_key,sequence_no)
+  SELECT NEW.auction_id,
+         s.user,
+         s.bidder_username,
+         a.current_price,
+         s.max_amount,
+         1,
+         'active',
+         strftime('%Y-%m-%dT%H:%M:%SZ','now'),
+         NEW.command_key,
+         NEW.id
+    FROM auctions a
+    JOIN auction_standing_bids s
+      ON s.auction_id=a.id
+   WHERE a.id=NEW.auction_id
+     AND (SELECT status FROM auction_commands WHERE id=NEW.id)='pending'
+     AND s.first_sequence=(
+       SELECT first_sequence
+         FROM auction_standing_bids
+        WHERE auction_id=NEW.auction_id
+        ORDER BY max_amount DESC, first_sequence ASC
+        LIMIT 1
+     );
+
+  UPDATE live_sessions
+     SET close_at=strftime('%Y-%m-%dT%H:%M:%SZ','now','+20 seconds'),
+         updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE id=(SELECT live_session_id FROM auctions WHERE id=NEW.auction_id)
+     AND status='live'
+     AND current_lot_id=NEW.auction_id
+     AND (SELECT status FROM auction_commands WHERE id=NEW.id)='pending';
+
+  UPDATE auction_commands
+     SET status='accepted',
+         result_price=(SELECT current_price FROM auctions WHERE id=NEW.auction_id),
+         result_winner_user=(
+           SELECT user FROM auction_standing_bids
+            WHERE auction_id=NEW.auction_id
+            ORDER BY max_amount DESC, first_sequence ASC LIMIT 1
+         ),
+         result_winner_username=(
+           SELECT bidder_username FROM auction_standing_bids
+            WHERE auction_id=NEW.auction_id
+            ORDER BY max_amount DESC, first_sequence ASC LIMIT 1
+         ),
+         version_after=(SELECT version FROM auctions WHERE id=NEW.auction_id),
+         completed_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE id=NEW.id AND status='pending';
+
+  INSERT OR IGNORE INTO auction_outbox
+    (event_key,auction_id,command_id,event_type,payload,occurred_at)
+  SELECT 'bid:'||NEW.command_key,
+         NEW.auction_id,
+         NEW.id,
+         'AUCTION_BID_ACCEPTED',
+         printf('{"auctionId":%d,"price":%.2f,"version":%d}',
+           NEW.auction_id,
+           (SELECT result_price FROM auction_commands WHERE id=NEW.id),
+           (SELECT version_after FROM auction_commands WHERE id=NEW.id)),
+         strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE (SELECT status FROM auction_commands WHERE id=NEW.id)='accepted';
+
+  UPDATE auction_commands
+     SET completed_at=COALESCE(completed_at,strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+         version_after=COALESCE(version_after,version_before)
+   WHERE id=NEW.id;
+END;
+
+
+CREATE TRIGGER IF NOT EXISTS trg_auction_retract_bid_process
+AFTER INSERT ON auction_commands
+WHEN NEW.command_type='RETRACT_BID'
+BEGIN
+  UPDATE auction_commands
+     SET received_at=strftime('%Y-%m-%dT%H:%M:%SZ','now'),
+         version_before=(SELECT version FROM auctions WHERE id=NEW.auction_id),
+         previous_winner_user=(
+           SELECT user FROM auction_standing_bids
+            WHERE auction_id=NEW.auction_id
+            ORDER BY max_amount DESC, first_sequence ASC LIMIT 1
+         ),
+         previous_winner_username=(
+           SELECT bidder_username FROM auction_standing_bids
+            WHERE auction_id=NEW.auction_id
+            ORDER BY max_amount DESC, first_sequence ASC LIMIT 1
+         )
+   WHERE id=NEW.id;
+
+  UPDATE auction_commands SET status='rejected', error_code='AUCTION_NOT_FOUND'
+   WHERE id=NEW.id AND status='pending'
+     AND NOT EXISTS (SELECT 1 FROM auctions WHERE id=NEW.auction_id);
+
+  UPDATE auction_commands SET status='rejected', error_code='AUCTION_NOT_LIVE'
+   WHERE id=NEW.id AND status='pending'
+     AND EXISTS (SELECT 1 FROM auctions WHERE id=NEW.auction_id AND status<>'live');
+
+  UPDATE auction_commands SET status='rejected', error_code='STALE_AUCTION_VERSION'
+   WHERE id=NEW.id AND status='pending'
+     AND NEW.expected_version IS NOT NULL
+     AND EXISTS (SELECT 1 FROM auctions WHERE id=NEW.auction_id AND version<>NEW.expected_version);
+
+  UPDATE auction_commands SET status='rejected', error_code='RETRACTION_REASON_REQUIRED'
+   WHERE id=NEW.id AND status='pending'
+     AND (NEW.reason IS NULL OR length(trim(NEW.reason)) < 10);
+
+  UPDATE auction_com
