@@ -299,19 +299,25 @@ function EventDetail({ eventId }: { eventId: number }) {
   useEffect(() => {
     let active = true;
     if (!user) return () => { active = false; };
-    setQualificationLoading(true);
-    setQualificationError(null);
-    rpc<{ ok: boolean; bundle?: any }>("qualification:bundle", { eventId })
-      .then((response) => {
-        if (active) setQualification(response.bundle ?? null);
-      })
-      .catch((cause) => {
-        if (active) setQualificationError(cause instanceof Error ? cause.message : "Qualification status unavailable.");
-      })
-      .finally(() => {
-        if (active) setQualificationLoading(false);
-      });
-    return () => { active = false; };
+    const timer = window.setTimeout(() => {
+      if (!active) return;
+      setQualificationLoading(true);
+      setQualificationError(null);
+      rpc<{ ok: boolean; bundle?: any }>("qualification:bundle", { eventId })
+        .then((response) => {
+          if (active) setQualification(response.bundle ?? null);
+        })
+        .catch((cause) => {
+          if (active) setQualificationError(cause instanceof Error ? cause.message : "Qualification status unavailable.");
+        })
+        .finally(() => {
+          if (active) setQualificationLoading(false);
+        });
+    }, 0);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
   }, [eventId, user?.id]);
 
   const reload = async () => {
