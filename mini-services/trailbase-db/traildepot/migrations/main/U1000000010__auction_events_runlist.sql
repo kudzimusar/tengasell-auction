@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS auction_runlist_commands (
   auction_id        INTEGER,
   lot_id            INTEGER,
   target_sequence   INTEGER,
+  source_sequence   INTEGER,
   expected_version  INTEGER NOT NULL,
   reason            TEXT,
   status            TEXT NOT NULL DEFAULT 'pending'
@@ -168,7 +169,8 @@ AFTER INSERT ON auction_runlist_commands
 BEGIN
   UPDATE auction_runlist_commands
      SET received_at=strftime('%Y-%m-%dT%H:%M:%SZ','now'),
-         version_before=(SELECT run_list_version FROM live_sessions WHERE id=NEW.session_id)
+         version_before=(SELECT run_list_version FROM live_sessions WHERE id=NEW.session_id),
+         source_sequence=(SELECT sequence_no FROM auction_lots WHERE id=NEW.lot_id AND session_id=NEW.session_id)
    WHERE id=NEW.id;
 
   UPDATE auction_runlist_commands SET status='rejected', error_code='SESSION_NOT_FOUND'
@@ -220,7 +222,7 @@ BEGIN
           AND (s.status='live' OR s.current_auction_lot_id IS NOT NULL)
      );
 
-  -- ADD preconditions
+  -- ADD preconditions.
   UPDATE auction_runlist_commands SET status='rejected', error_code='AUCTION_NOT_FOUND'
    WHERE id=NEW.id AND status='pending' AND NEW.command_type='ADD'
      AND NOT EXISTS (SELECT 1 FROM auctions a WHERE a.id=NEW.auction_id);
@@ -253,9 +255,7 @@ BEGIN
          FROM vehicles v
          JOIN vehicle_eligibility e ON e.vehicle_id=v.id
         WHERE v.auction_id=NEW.auction_id
-          AND e.version=(
-            SELECT MAX(e2.version) FROM vehicle_eligibility e2 WHERE e2.vehicle_id=v.id
-          )
+          AND e.version=(SELECT MAX(e2.version) FROM vehicle_eligibility e2 WHERE e2.vehicle_id=v.id)
           AND e.status='ELIGIBLE'
      );
 
@@ -271,9 +271,9 @@ BEGIN
        )
      );
 
-  -- MOVE / WITHDRAW preconditions
+  -- MOVE / WITHDRAW preconditions.
   UPDATE auction_runlist_commands SET status='rejected', error_code='LOT_NOT_FOUND'
-   WHERE id=NEW.id AND status='pending' AND NEW.command_type IN ('MOVE','WITHDRAW')
+   WHERE id=NEW.id AND status='pending' AND NEW.command_type IN ('MOVE','WITHDRAW','OPEN','CLOSE')
      AND NOT EXISTS (
        SELECT 1 FROM auction_lots l
         WHERE l.id=NEW.lot_id AND l.session_id=NEW.session_id
@@ -283,8 +283,7 @@ BEGIN
    WHERE id=NEW.id AND status='pending' AND NEW.command_type='MOVE'
      AND EXISTS (
        SELECT 1 FROM auction_lots l
-        WHERE l.id=NEW.lot_id
-          AND (l.session_id<>NEW.session_id OR l.status<>'READY')
+        WHERE l.id=NEW.lot_id AND l.status<>'READY'
      );
 
   UPDATE auction_runlist_commands SET status='rejected', error_code='INVALID_SEQUENCE'
@@ -301,17 +300,76 @@ BEGIN
 
   UPDATE auction_runlist_commands SET status='rejected', error_code='LOT_NOT_WITHDRAWABLE'
    WHERE id=NEW.id AND status='pending' AND NEW.command_type='WITHDRAW'
-     AND EXISTS (
-       SELECT 1 FROM auction_lots l
-        WHERE l.id=NEW.lot_id
-          AND (l.session_id<>NEW.session_id OR l.status<>'READY')
-     );
+     AND EXISTS (SELECT 1 FROM auction_lots l WHERE l.id=NEW.lot_id AND l.status<>'READY');
 
   UPDATE auction_runlist_commands SET status='rejected', error_code='WITHDRAW_REASON_REQUIRED'
    WHERE id=NEW.id AND status='pending' AND NEW.command_type='WITHDRAW'
      AND (NEW.reason IS NULL OR length(trim(NEW.reason))<5);
 
-  -- ADD: shift later lots, then materialize the explicit lot.
+  -- OPEN preconditions.
+  UPDATE auction_runlist_commands SET status='rejected', error_code='RUN_LIST_MUST_BE_LOCKED'
+   WHERE id=NEW.id AND status='pending' AND NEW.command_type='OPEN'
+     AND EXISTS (SELECT 1 FROM live_sessions s WHERE s.id=NEW.session_id AND s.run_list_locked=0);
+
+  UPDATE auction_runlist_commands SET status='rejected', error_code='CURRENT_LOT_ACTIVE'
+   WHERE id=NEW.id AND status='pending' AND NEW.command_type='OPEN'
+     AND EXISTS (
+       SELECT 1 FROM live_sessions s
+        WHERE s.id=NEW.session_id AND s.current_auction_lot_id IS NOT NULL
+     );
+
+  UPDATE auction_runlist_commands SET status='rejected', error_code='LOT_NOT_READY'
+   WHERE id=NEW.id AND status='pending' AND NEW.command_type='OPEN'
+     AND EXISTS (SELECT 1 FROM auction_lots l WHERE l.id=NEW.lot_id AND l.status<>'READY');
+
+  UPDATE auction_runlist_commands SET status='rejected', error_code='OUT_OF_SEQUENCE'
+   WHERE id=NEW.id AND status='pending' AND NEW.command_type='OPEN'
+     AND NEW.lot_id<>(
+       SELECT l.id FROM auction_lots l
+        WHERE l.session_id=NEW.session_id AND l.status='READY'
+        ORDER BY l.sequence_no,l.id LIMIT 1
+     );
+
+  UPDATE auction_runlist_commands SET status='rejected', error_code='VEHICLE_NOT_ELIGIBLE'
+   WHERE id=NEW.id AND status='pending' AND NEW.command_type='OPEN'
+     AND EXISTS (
+       SELECT 1 FROM auction_lots l
+       JOIN auctions a ON a.id=l.auction_id
+       WHERE l.id=NEW.lot_id AND a.asset_kind='vehicle'
+     )
+     AND NOT EXISTS (
+       SELECT 1
+         FROM auction_lots l
+         JOIN vehicles v ON v.auction_id=l.auction_id
+         JOIN vehicle_eligibility e ON e.vehicle_id=v.id
+        WHERE l.id=NEW.lot_id
+          AND e.version=(SELECT MAX(e2.version) FROM vehicle_eligibility e2 WHERE e2.vehicle_id=v.id)
+          AND e.status='ELIGIBLE'
+     );
+
+  -- CLOSE / END preconditions.
+  UPDATE auction_runlist_commands SET status='rejected', error_code='CURRENT_LOT_MISMATCH'
+   WHERE id=NEW.id AND status='pending' AND NEW.command_type='CLOSE'
+     AND NOT EXISTS (
+       SELECT 1 FROM live_sessions s
+        WHERE s.id=NEW.session_id AND s.current_auction_lot_id=NEW.lot_id
+     );
+
+  UPDATE auction_runlist_commands SET status='rejected', error_code='AUCTION_NOT_FINALIZED'
+   WHERE id=NEW.id AND status='pending' AND NEW.command_type='CLOSE'
+     AND EXISTS (
+       SELECT 1 FROM auction_lots l JOIN auctions a ON a.id=l.auction_id
+        WHERE l.id=NEW.lot_id AND a.status NOT IN ('sold','ended')
+     );
+
+  UPDATE auction_runlist_commands SET status='rejected', error_code='CURRENT_LOT_ACTIVE'
+   WHERE id=NEW.id AND status='pending' AND NEW.command_type='END'
+     AND EXISTS (
+       SELECT 1 FROM live_sessions s
+        WHERE s.id=NEW.session_id AND s.current_auction_lot_id IS NOT NULL
+     );
+
+  -- ADD.
   UPDATE auction_lots
      SET sequence_no=sequence_no+1,
          updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
@@ -331,16 +389,13 @@ BEGIN
            NEW.target_sequence,
            (SELECT COALESCE(MAX(sequence_no),0)+1 FROM auction_lots WHERE session_id=NEW.session_id AND status<>'WITHDRAWN')
          ),
-         'READY',
-         strftime('%Y-%m-%dT%H:%M:%SZ','now'),
-         strftime('%Y-%m-%dT%H:%M:%SZ','now')
+         'READY',strftime('%Y-%m-%dT%H:%M:%SZ','now'),strftime('%Y-%m-%dT%H:%M:%SZ','now')
     FROM live_sessions s
    WHERE s.id=NEW.session_id
      AND NEW.command_type='ADD'
      AND (SELECT status FROM auction_runlist_commands WHERE id=NEW.id)='pending';
 
-  UPDATE auction_runlist_commands
-     SET result_lot_id=last_insert_rowid()
+  UPDATE auction_runlist_commands SET result_lot_id=last_insert_rowid()
    WHERE id=NEW.id AND NEW.command_type='ADD' AND status='pending';
 
   UPDATE auctions
@@ -350,42 +405,221 @@ BEGIN
      AND NEW.command_type='ADD'
      AND (SELECT status FROM auction_runlist_commands WHERE id=NEW.id)='pending';
 
-  -- MOVE uses a temporary sequence zero; no client can observe intermediate
-  -- values because the trigger runs in the command INSERT transaction.
-  UPDATE auction_lots
-     SET sequence_no=0,
-         updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+  -- MOVE: source_sequence was captured before any mutation.
+  UPDATE auction_lots SET sequence_no=0,updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
    WHERE id=NEW.lot_id
      AND NEW.command_type='MOVE'
      AND (SELECT status FROM auction_runlist_commands WHERE id=NEW.id)='pending'
-     AND sequence_no<>NEW.target_sequence;
+     AND (SELECT source_sequence FROM auction_runlist_commands WHERE id=NEW.id)<>NEW.target_sequence;
 
   UPDATE auction_lots
-     SET sequence_no=sequence_no+1,
-         updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
-   WHERE session_id=NEW.session_id
+     SET sequence_no=sequence_no+1,updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE session_id=NEW.session_id AND id<>NEW.lot_id
      AND NEW.command_type='MOVE'
      AND (SELECT status FROM auction_runlist_commands WHERE id=NEW.id)='pending'
-     AND (SELECT sequence_no FROM auction_lots WHERE id=NEW.lot_id)=0
+     AND NEW.target_sequence<(SELECT source_sequence FROM auction_runlist_commands WHERE id=NEW.id)
      AND sequence_no>=NEW.target_sequence
-     AND sequence_no<(
-       SELECT version_before FROM auction_runlist_commands WHERE id=NEW.id
-     )
-     AND 0; -- no-op placeholder; direction-specific moves follow below
+     AND sequence_no<(SELECT source_sequence FROM auction_runlist_commands WHERE id=NEW.id);
 
-  -- Moving earlier: shift the target..old-1 range down one slot.
   UPDATE auction_lots
-     SET sequence_no=sequence_no+1,
-         updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
-   WHERE session_id=NEW.session_id
-     AND id<>NEW.lot_id
+     SET sequence_no=sequence_no-1,updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE session_id=NEW.session_id AND id<>NEW.lot_id
      AND NEW.command_type='MOVE'
      AND (SELECT status FROM auction_runlist_commands WHERE id=NEW.id)='pending'
-     AND NEW.target_sequence<(
-       SELECT COALESCE(CAST(json_extract(payload,'$.oldSequence') AS INTEGER),0)
-         FROM auction_event_audit WHERE 0
-     )
-     AND 0;
+     AND NEW.target_sequence>(SELECT source_sequence FROM auction_runlist_commands WHERE id=NEW.id)
+     AND sequence_no>(SELECT source_sequence FROM auction_runlist_commands WHERE id=NEW.id)
+     AND sequence_no<=NEW.target_sequence;
 
-  -- Actual old sequence is captured into result_lot_id temporarily before MOVE.
+  UPDATE auction_lots SET sequence_no=NEW.target_sequence,updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE id=NEW.lot_id
+     AND NEW.command_type='MOVE'
+     AND (SELECT status FROM auction_runlist_commands WHERE id=NEW.id)='pending';
+
+  -- WITHDRAW.
+  UPDATE auction_lots
+     SET status='WITHDRAWN',
+         withdrawn_at=strftime('%Y-%m-%dT%H:%M:%SZ','now'),
+         withdrawn_by=NEW.actor_user,
+         withdraw_reason=substr(trim(NEW.reason),1,240),
+         updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE id=NEW.lot_id
+     AND NEW.command_type='WITHDRAW'
+     AND (SELECT status FROM auction_runlist_commands WHERE id=NEW.id)='pending';
+
+  UPDATE auctions
+     SET live_session_id=NULL,updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE id=(SELECT auction_id FROM auction_lots WHERE id=NEW.lot_id)
+     AND NEW.command_type='WITHDRAW'
+     AND (SELECT status FROM auction_runlist_commands WHERE id=NEW.id)='pending';
+
+  -- LOCK / UNLOCK.
+  UPDATE live_sessions
+     SET run_list_locked=1,updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE id=NEW.session_id AND NEW.command_type='LOCK'
+     AND (SELECT status FROM auction_runlist_commands WHERE id=NEW.id)='pending';
+
+  UPDATE live_sessions
+     SET run_list_locked=0,updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE id=NEW.session_id AND NEW.command_type='UNLOCK'
+     AND (SELECT status FROM auction_runlist_commands WHERE id=NEW.id)='pending';
+
+  -- OPEN first ready lot.
+  UPDATE auction_lots
+     SET status='LIVE',opened_at=strftime('%Y-%m-%dT%H:%M:%SZ','now'),
+         updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE id=NEW.lot_id AND NEW.command_type='OPEN'
+     AND (SELECT status FROM auction_runlist_commands WHERE id=NEW.id)='pending';
+
+  UPDATE live_sessions
+     SET status='live',
+         current_auction_lot_id=NEW.lot_id,
+         current_lot_id=(SELECT auction_id FROM auction_lots WHERE id=NEW.lot_id),
+         lot_index=(SELECT sequence_no FROM auction_lots WHERE id=NEW.lot_id),
+         next_auction_lot_id=(
+           SELECT l.id FROM auction_lots l
+            WHERE l.session_id=NEW.session_id AND l.status='READY'
+            ORDER BY l.sequence_no,l.id LIMIT 1
+         ),
+         close_at=strftime('%Y-%m-%dT%H:%M:%SZ','now','+20 seconds'),
+         updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE id=NEW.session_id AND NEW.command_type='OPEN'
+     AND (SELECT status FROM auction_runlist_commands WHERE id=NEW.id)='pending';
+
+  UPDATE auction_events
+     SET status='LIVE',updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE id=(SELECT event_id FROM live_sessions WHERE id=NEW.session_id)
+     AND NEW.command_type='OPEN'
+     AND (SELECT status FROM auction_runlist_commands WHERE id=NEW.id)='pending';
+
+  -- CLOSE finalized current lot, then atomically promote the next READY lot.
+  UPDATE auction_lots
+     SET status=CASE
+           WHEN (SELECT status FROM auctions WHERE id=auction_lots.auction_id)='sold' THEN 'SOLD'
+           ELSE 'UNSOLD'
+         END,
+         closed_at=strftime('%Y-%m-%dT%H:%M:%SZ','now'),
+         updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE id=NEW.lot_id AND NEW.command_type='CLOSE'
+     AND (SELECT status FROM auction_runlist_commands WHERE id=NEW.id)='pending';
+
+  UPDATE auction_lots
+     SET status='LIVE',opened_at=strftime('%Y-%m-%dT%H:%M:%SZ','now'),
+         updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE id=(
+       SELECT l.id FROM auction_lots l
+        WHERE l.session_id=NEW.session_id AND l.status='READY'
+        ORDER BY l.sequence_no,l.id LIMIT 1
+     )
+     AND NEW.command_type='CLOSE'
+     AND (SELECT status FROM auction_runlist_commands WHERE id=NEW.id)='pending';
+
+  UPDATE live_sessions
+     SET current_auction_lot_id=(
+           SELECT l.id FROM auction_lots l
+            WHERE l.session_id=NEW.session_id AND l.status='LIVE'
+            ORDER BY l.sequence_no,l.id LIMIT 1
+         ),
+         current_lot_id=(
+           SELECT l.auction_id FROM auction_lots l
+            WHERE l.session_id=NEW.session_id AND l.status='LIVE'
+            ORDER BY l.sequence_no,l.id LIMIT 1
+         ),
+         lot_index=COALESCE((
+           SELECT l.sequence_no FROM auction_lots l
+            WHERE l.session_id=NEW.session_id AND l.status='LIVE'
+            ORDER BY l.sequence_no,l.id LIMIT 1
+         ),lot_index),
+         next_auction_lot_id=(
+           SELECT l.id FROM auction_lots l
+            WHERE l.session_id=NEW.session_id AND l.status='READY'
+            ORDER BY l.sequence_no,l.id LIMIT 1
+         ),
+         status=CASE
+           WHEN EXISTS (SELECT 1 FROM auction_lots l WHERE l.session_id=NEW.session_id AND l.status='LIVE')
+             THEN 'live'
+           ELSE 'closed'
+         END,
+         close_at=CASE
+           WHEN EXISTS (SELECT 1 FROM auction_lots l WHERE l.session_id=NEW.session_id AND l.status='LIVE')
+             THEN strftime('%Y-%m-%dT%H:%M:%SZ','now','+20 seconds')
+           ELSE NULL
+         END,
+         updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE id=NEW.session_id AND NEW.command_type='CLOSE'
+     AND (SELECT status FROM auction_runlist_commands WHERE id=NEW.id)='pending';
+
+  -- END may only occur with no active lot.
+  UPDATE auction_lots
+     SET status='WITHDRAWN',
+         withdrawn_at=strftime('%Y-%m-%dT%H:%M:%SZ','now'),
+         withdrawn_by=NEW.actor_user,
+         withdraw_reason='Session ended by operator',
+         updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE session_id=NEW.session_id AND status='READY'
+     AND NEW.command_type='END'
+     AND (SELECT status FROM auction_runlist_commands WHERE id=NEW.id)='pending';
+
+  UPDATE auctions
+     SET live_session_id=NULL,updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE id IN (
+       SELECT l.auction_id FROM auction_lots l
+        WHERE l.session_id=NEW.session_id AND l.status='WITHDRAWN'
+     )
+     AND NEW.command_type='END'
+     AND (SELECT status FROM auction_runlist_commands WHERE id=NEW.id)='pending';
+
+  UPDATE live_sessions
+     SET status='closed',current_lot_id=NULL,current_auction_lot_id=NULL,
+         next_auction_lot_id=NULL,close_at=NULL,
+         updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE id=NEW.session_id AND NEW.command_type='END'
+     AND (SELECT status FROM auction_runlist_commands WHERE id=NEW.id)='pending';
+
+  -- Every accepted operator mutation advances the run-list version exactly once.
+  UPDATE live_sessions
+     SET run_list_version=run_list_version+1,
+         updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE id=NEW.session_id
+     AND (SELECT status FROM auction_runlist_commands WHERE id=NEW.id)='pending';
+
+  UPDATE auction_runlist_commands
+     SET status='accepted',
+         version_after=(SELECT run_list_version FROM live_sessions WHERE id=NEW.session_id),
+         completed_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE id=NEW.id AND status='pending';
+
+  -- Close the event when its last session is closed.
+  UPDATE auction_events
+     SET status='CLOSED',updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')
+   WHERE id=(SELECT event_id FROM live_sessions WHERE id=NEW.session_id)
+     AND NEW.command_type IN ('CLOSE','END')
+     AND (SELECT status FROM auction_runlist_commands WHERE id=NEW.id)='accepted'
+     AND NOT EXISTS (
+       SELECT 1 FROM live_sessions s
+        WHERE s.event_id=auction_events.id AND s.status<>'closed'
+     );
+
+  INSERT INTO auction_event_audit
+    (event_id,session_id,lot_id,actor_user,action,payload,created_at)
+  SELECT s.event_id,NEW.session_id,
+         COALESCE(NEW.lot_id,(SELECT result_lot_id FROM auction_runlist_commands WHERE id=NEW.id)),
+         NEW.actor_user,
+         'runlist:'||lower(NEW.command_type),
+         json_object(
+           'commandKey',NEW.command_key,
+           'auctionId',NEW.auction_id,
+           'targetSequence',NEW.target_sequence,
+           'sourceSequence',(SELECT source_sequence FROM auction_runlist_commands WHERE id=NEW.id),
+           'versionBefore',(SELECT version_before FROM auction_runlist_commands WHERE id=NEW.id),
+           'versionAfter',(SELECT version_after FROM auction_runlist_commands WHERE id=NEW.id)
+         ),
+         strftime('%Y-%m-%dT%H:%M:%SZ','now')
+    FROM live_sessions s
+   WHERE s.id=NEW.session_id
+     AND (SELECT status FROM auction_runlist_commands WHERE id=NEW.id)='accepted';
+
+  UPDATE auction_runlist_commands
+     SET completed_at=COALESCE(completed_at,strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+         version_after=COALESCE(version_after,version_before)
+   WHERE id=NEW.id;
 END;
