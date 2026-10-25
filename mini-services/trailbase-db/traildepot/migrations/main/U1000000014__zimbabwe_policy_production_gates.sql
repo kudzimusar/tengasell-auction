@@ -10,7 +10,8 @@ ALTER TABLE auctions ADD COLUMN policy_profile_key TEXT NOT NULL DEFAULT 'ZW_VEH
 ALTER TABLE auctions ADD COLUMN commercial_policy_ready INTEGER NOT NULL DEFAULT 0 CHECK(commercial_policy_ready IN (0,1));
 
 CREATE TABLE IF NOT EXISTS auction_policy_registry (
-  policy_key             TEXT PRIMARY KEY,
+  id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+  policy_key             TEXT NOT NULL UNIQUE,
   value_json             TEXT,
   classification         TEXT NOT NULL CHECK(classification IN (
     'LEGALLY_REQUIRED','BUSINESS_POLICY','CONFIGURABLE','PENDING_LEGAL_REVIEW','UNKNOWN'
@@ -44,7 +45,8 @@ CREATE TABLE IF NOT EXISTS auction_policy_commands (
 ) STRICT;
 
 CREATE TABLE IF NOT EXISTS auction_service_health (
-  service_key      TEXT PRIMARY KEY,
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  service_key      TEXT NOT NULL UNIQUE,
   status           TEXT NOT NULL DEFAULT 'UNKNOWN'
                    CHECK(status IN ('HEALTHY','DEGRADED','UNAVAILABLE','UNKNOWN','DISABLED')),
   critical         INTEGER NOT NULL DEFAULT 1 CHECK(critical IN (0,1)),
@@ -101,7 +103,10 @@ CREATE TABLE IF NOT EXISTS auction_policy_retraction_requests (
 
 -- Current legal/policy source registry. Legal-source rows describe requirements;
 -- they do not invent rates, fees, deposit amounts or commercial credit.
-INSERT OR IGNORE INTO auction_policy_registry VALUES
+INSERT OR IGNORE INTO auction_policy_registry(
+ policy_key,value_json,classification,configured,required_for_production,
+ source_title,source_url,source_checked_at,notes,updated_by,updated_by_username,updated_at
+) VALUES
 (
  'legal.auction.completion_retraction',
  '{"completion":"HAMMER_OR_CUSTOMARY","retractionBeforeCompletion":"ALLOWED"}',
@@ -230,7 +235,9 @@ INSERT OR IGNORE INTO auction_policy_registry VALUES
  NULL,NULL,strftime('%Y-%m-%dT%H:%M:%SZ','now')
 );
 
-INSERT OR IGNORE INTO auction_service_health VALUES
+INSERT OR IGNORE INTO auction_service_health(
+ service_key,status,critical,detail,checked_by,checked_by_username,checked_at
+) VALUES
  ('FINANCE','UNKNOWN',1,'Finance bridge not yet certified for Production',NULL,NULL,strftime('%Y-%m-%dT%H:%M:%SZ','now')),
  ('TRUST','UNKNOWN',1,'Trust/qualification dependency not yet certified for Production',NULL,NULL,strftime('%Y-%m-%dT%H:%M:%SZ','now')),
  ('COMMS','UNKNOWN',1,'Communications availability not yet certified for Production',NULL,NULL,strftime('%Y-%m-%dT%H:%M:%SZ','now')),
