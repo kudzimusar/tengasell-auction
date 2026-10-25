@@ -1,0 +1,227 @@
+name: LR01-R1 Exact-Head Visual UAT
+
+on:
+  pull_request:
+    branches:
+      - feat/tengasell-auction-imp-lr01-core-vehicle-events
+  workflow_dispatch:
+
+concurrency:
+  group: lr01-r1-visual-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  visual-uat:
+    name: Real-stack Chromium UAT
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      DATABASE_URL: file:${{ github.workspace }}/lr01-r1-uat.db
+      NEXT_TELEMETRY_DISABLED: "1"
+      CI: "true"
+      LR01_R1_BASE_URL: http://127.0.0.1:8080
+      LR01_R1_EVIDENCE_DIR: artifacts/lr01-r1-visual-uat
+      LR01_R1_FIXTURE_JSON: /tmp/lr01-r1-fixture.json
+
+    steps:
+      - name: Checkout exact PR source head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.EXPECTED_HEAD_SHA }}
+
+      - name: Exact-head custody
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          echo "expected=${EXPECTED_HEAD_SHA}"
+          echo "actual=${actual}"
+          test "$actual" = "$EXPECTED_HEAD_SHA"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install application dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Generate Prisma client and disposable app database
+        run: |
+          npx prisma generate
+          npx prisma db push --skip-generate
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install canonical trade-engine dependencies
+        working-directory: mini-services/trade-engine
+        run: bun install
+
+      - name: Read existing repository demo credential without duplicating it
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, re
+          from pathlib import Path
+          source = Path("src/components/tengasell/pages/account/signin.tsx").read_text()
+          match = re.search(r'const DEMO_PASSWORD = "([^"]+)"', source)
+          if not match:
+              raise SystemExit("existing demo credential fixture not found")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as fh:
+              fh.write("LR01_R1_DEMO_PASSWORD=" + match.group(1) + "\n")
+          PY
+
+      - name: Boot disposable TrailBase and apply U1-U10
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/lr01-r1-traildepot
+          cp -R mini-services/trailbase-db/traildepot /tmp/lr01-r1-traildepot
+          chmod -R a+rwX /tmp/lr01-r1-traildepot
+          docker run -d --name trailbase-lr01-r1             -p 3001:4000             -v /tmp/lr01-r1-traildepot:/app/traildepot             trailbase/trailbase:0.35.1
+          ready=0
+          for i in $(seq 1 90); do
+            if curl -fsS "http://127.0.0.1:3001/api/records/v1/categories?limit=1" >/dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            if ! docker inspect -f '{{.State.Running}}' trailbase-lr01-r1 2>/dev/null | grep -q true; then
+              docker logs trailbase-lr01-r1 || true
+              exit 1
+            fi
+            sleep 1
+          done
+          test "$ready" = 1
+          test -f /tmp/lr01-r1-traildepot/data/main.db
+          docker stop trailbase-lr01-r1 >/dev/null
+
+      - name: Install synthetic disposable vehicle fixture
+        run: |
+          set -euo pipefail
+          python3 tests/lr01-r1-visual-fixtures.py             /tmp/lr01-r1-traildepot/data/main.db             | tee /tmp/lr01-r1-fixture.json
+          python3 -m json.tool /tmp/lr01-r1-fixture.json >/dev/null
+          docker start trailbase-lr01-r1 >/dev/null
+          ready=0
+          for i in $(seq 1 60); do
+            if curl -fsS "http://127.0.0.1:3001/api/records/v1/categories?limit=1" >/dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          test "$ready" = 1
+
+      - name: Verify disposable auth personas
+        shell: bash
+        run: |
+          set -euo pipefail
+          login() {
+            local username="$1"
+            curl -fsS               -X POST "http://127.0.0.1:3001/api/auth/v1/login"               -H "content-type: application/json"               --data-binary "$(python3 - "$username" "$LR01_R1_DEMO_PASSWORD" <<'PY'
+          import json,sys
+          print(json.dumps({"username":sys.argv[1],"password":sys.argv[2]}))
+          PY
+          )" >/dev/null
+          }
+          login admin
+          login simba
+          login rufaro
+
+      - name: Boot exact-head canonical trade engine
+        shell: bash
+        run: |
+          set -euo pipefail
+          (
+            cd mini-services/trade-engine
+            ADMIN_USERNAME=admin ADMIN_PASSWORD="$LR01_R1_DEMO_PASSWORD"               nohup bun index.ts >/tmp/lr01-r1-trade-engine.log 2>&1 &
+            echo $! >/tmp/lr01-r1-trade-engine.pid
+          )
+          ready=0
+          for i in $(seq 1 60); do
+            if curl -fsS "http://127.0.0.1:3002/socket.io/?EIO=4&transport=polling" >/dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            if test -f /tmp/lr01-r1-trade-engine.pid && ! kill -0 "$(cat /tmp/lr01-r1-trade-engine.pid)" 2>/dev/null; then
+              cat /tmp/lr01-r1-trade-engine.log || true
+              exit 1
+            fi
+            sleep 1
+          done
+          test "$ready" = 1
+
+      - name: Production build
+        run: npm run build
+
+      - name: Boot production Next application and repository gateway
+        shell: bash
+        run: |
+          set -euo pipefail
+          PORT=3000 nohup node .next/standalone/server.js >/tmp/lr01-r1-next.log 2>&1 &
+          echo $! >/tmp/lr01-r1-next.pid
+          for i in $(seq 1 60); do
+            curl -fsS "http://127.0.0.1:3000/api/public/status" >/dev/null 2>&1 && break
+            sleep 1
+          done
+          nohup node scripts/gateway.mjs --port 8080 --app 3000 >/tmp/lr01-r1-gateway.log 2>&1 &
+          echo $! >/tmp/lr01-r1-gateway.pid
+          ready=0
+          for i in $(seq 1 60); do
+            if curl -fsS "http://127.0.0.1:8080/api/records/v1/categories?limit=1&XTransformPort=3001" >/dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          test "$ready" = 1
+          curl -fsS "http://127.0.0.1:8080/api/public/status" >/dev/null
+
+      - name: Install pinned Chromium UAT runner
+        run: |
+          npm install --no-save --no-package-lock @playwright/test@1.56.1
+          npx playwright install --with-deps chromium
+
+      - name: Run exact-head real-stack browser UAT
+        run: node tests/lr01-r1-visual-uat.mjs
+
+      - name: Copy runtime logs into evidence packet
+        if: always()
+        run: |
+          mkdir -p artifacts/lr01-r1-visual-uat
+          cp /tmp/lr01-r1-fixture.json artifacts/lr01-r1-visual-uat/fixture.json 2>/dev/null || true
+          cp /tmp/lr01-r1-trade-engine.log artifacts/lr01-r1-visual-uat/trade-engine.log 2>/dev/null || true
+          cp /tmp/lr01-r1-next.log artifacts/lr01-r1-visual-uat/next.log 2>/dev/null || true
+          cp /tmp/lr01-r1-gateway.log artifacts/lr01-r1-visual-uat/gateway.log 2>/dev/null || true
+          docker logs trailbase-lr01-r1 >artifacts/lr01-r1-visual-uat/trailbase.log 2>&1 || true
+          {
+            echo "expected_head=$EXPECTED_HEAD_SHA"
+            echo "actual_head=$(git rev-parse HEAD)"
+            echo "trailbase_image=trailbase/trailbase:0.35.1"
+            echo "next_runtime=.next/standalone/server.js"
+            echo "trade_engine=mini-services/trade-engine/index.ts"
+            echo "gateway=scripts/gateway.mjs"
+          } >artifacts/lr01-r1-visual-uat/runtime.txt
+
+      - name: Upload exact-head visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lr01-r1-visual-uat-${{ env.EXPECTED_HEAD_SHA }}
+          path: artifacts/lr01-r1-visual-uat
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Stop disposable processes
+        if: always()
+        run: |
+          for file in /tmp/lr01-r1-gateway.pid /tmp/lr01-r1-next.pid /tmp/lr01-r1-trade-engine.pid; do
+            if test -f "$file"; then kill "$(cat "$file")" 2>/dev/null || true; fi
+          done
+          docker rm -f trailbase-lr01-r1 >/dev/null 2>&1 || true
