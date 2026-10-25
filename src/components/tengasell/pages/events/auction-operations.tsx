@@ -40,6 +40,14 @@ type CalendarItem = {
   entityId: number;
 };
 
+type ProductionGateReport = {
+  ready: boolean;
+  productionMode: boolean;
+  missingPolicies: string[];
+  gates: Array<{ key: string; passed: boolean; detail?: string | null; critical: boolean }>;
+  observability: { auctionOutboxBacklog: number; financeBridgeBacklog: number };
+};
+
 function countLabel(count: number, singular: string) {
   return `${count} ${count === 1 ? singular : `${singular}s`}`;
 }
@@ -48,6 +56,9 @@ export default function AuctionOperationsPage() {
   const { user, loading: authLoading } = useAuth();
   const [workbench, setWorkbench] = useState<Workbench | null>(null);
   const [calendar, setCalendar] = useState<CalendarItem[]>([]);
+  const [production, setProduction] = useState<ProductionGateReport | null>(null);
+  const [policies, setPolicies] = useState<any[]>([]);
+  const [observability, setObservability] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,6 +73,20 @@ export default function AuctionOperationsPage() {
       ]);
       setWorkbench(work);
       setCalendar(cal.items ?? []);
+      if (user.admin) {
+        const [gateResponse, policyResponse, observabilityResponse] = await Promise.all([
+          rpc<{ ok: boolean; report: ProductionGateReport }>("production:gates", {}),
+          rpc<{ ok: boolean; policies: any[] }>("policy:snapshot", {}),
+          rpc<any>("operations:observability", {}),
+        ]);
+        setProduction(gateResponse.report);
+        setPolicies(policyResponse.policies ?? []);
+        setObservability(observabilityResponse);
+      } else {
+        setProduction(null);
+        setPolicies([]);
+        setObservability(null);
+      }
     } catch (cause) {
       setWorkbench(null);
       setError(cause instanceof Error ? cause.message : "Auction operations could not be loaded.");
@@ -86,6 +111,82 @@ export default function AuctionOperationsPage() {
       await load();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Task could not be completed.");
+    }
+  };
+
+  const reviewQualification = async (
+    qualification: any,
+    commandType: "APPROVE" | "HOLD" | "SUSPEND" | "REJECT" | "ADJUST_LIMIT",
+  ) => {
+    let approvedLimit: number | null = null;
+    if (commandType === "APPROVE" || commandType === "ADJUST_LIMIT") {
+      const raw = window.prompt("Approved bidding capacity (USD):", String(qualification.approved_limit ?? 0));
+      if (raw == null) return;
+      approvedLimit = Number(raw);
+      if (!Number.isFinite(approvedLimit) || approvedLimit < 0) {
+        setError("Approved bidding capacity must be zero or greater.");
+        return;
+      }
+    }
+    const reason = window.prompt("Reason code / review note:", qualification.reason_code ?? "OPERATOR_REVIEW");
+    if (!reason) return;
+    setLoading(true);
+    setError(null);
+    try {
+      await rpc("qualification:command", {
+        commandId: globalThis.crypto.randomUUID(),
+        eventId: Number(qualification.event_id),
+        targetUser: String(qualification.user),
+        targetUsername: String(qualification.username),
+        commandType,
+        qualificationBasis: qualification.qualification_basis ?? "MANUAL_REVIEW",
+        approvedLimit,
+        lotLimit: qualification.lot_limit ?? null,
+        accountState: qualification.account_state ?? "ELIGIBLE",
+        riskState: qualification.risk_state ?? "CLEAR",
+        depositState: qualification.deposit_state ?? "NOT_REQUIRED",
+        depositReference: qualification.deposit_reference ?? null,
+        depositAmount: qualification.deposit_amount ?? 0,
+        creditState: qualification.credit_state ?? "NONE",
+        creditLimit: qualification.credit_limit ?? 0,
+        reasonCode: reason,
+        expiresAt: qualification.expires_at ?? null,
+      });
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Qualification review failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const operateRelease = async (settlement: any) => {
+    setError(null);
+    try {
+      if (settlement.release_state === "AUTHORIZED") {
+        const evidence = window.prompt("Handover evidence/reference:", "");
+        if (!evidence) return;
+        await rpc("settlement:handover-command", {
+          commandId: globalThis.crypto.randomUUID(),
+          settlementId: Number(settlement.id),
+          evidenceReference: evidence,
+        });
+      } else {
+        const collectorName = window.prompt("Collector / transporter name:", "");
+        if (!collectorName) return;
+        const collectorReference = window.prompt("Collector identity/reference:", "");
+        if (!collectorReference) return;
+        await rpc("settlement:release-command", {
+          commandId: globalThis.crypto.randomUUID(),
+          settlementId: Number(settlement.id),
+          collectorType: "BUYER",
+          collectorName,
+          collectorReference,
+        });
+      }
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Release operation failed.");
     }
   };
 
@@ -176,6 +277,96 @@ export default function AuctionOperationsPage() {
           </article>
         ))}
       </section>
+
+      {work.qualificationQueue.length ? (
+        <section aria-labelledby="qualification-queue" className="rounded-card border border-border bg-raised p-4">
+          <h2 id="qualification-queue" className="text-lg font-bold text-foreground">Qualification review queue</h2>
+          <p className="mt-1 text-caption text-muted-foreground">Review event-scoped participation and financial capacity. Internal risk scoring is not exposed here.</p>
+          <div className="mt-4 space-y-3">
+            {work.qualificationQueue.slice(0, 20).map((qualification) => (
+              <article key={qualification.id} className="rounded-control border border-border bg-background p-3">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <p className="font-bold text-foreground">@{qualification.username} · event #{qualification.event_id}</p>
+                    <p className="mt-1 text-caption text-muted-foreground">
+                      {qualification.status} · deposit {qualification.deposit_state} · credit {qualification.credit_state} · current limit US$\{Number(qualification.approved_limit ?? 0).toLocaleString()}
+                    </p>
+                    {qualification.reason_code ? <p className="mt-1 text-caption text-muted-foreground">Reason: {qualification.reason_code}</p> : null}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button className="min-h-11" size="sm" onClick={() => void reviewQualification(qualification, "APPROVE")}>Approve</Button>
+                    <Button className="min-h-11" variant="outline" size="sm" onClick={() => void reviewQualification(qualification, "HOLD")}>Hold</Button>
+                    <Button className="min-h-11" variant="outline" size="sm" onClick={() => void reviewQualification(qualification, "SUSPEND")}>Suspend</Button>
+                    <Button className="min-h-11" variant="outline" size="sm" onClick={() => void reviewQualification(qualification, "REJECT")}>Reject</Button>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {work.releaseQueue.length ? (
+        <section aria-labelledby="release-queue" className="rounded-card border border-border bg-raised p-4">
+          <h2 id="release-queue" className="text-lg font-bold text-foreground">Release &amp; handover queue</h2>
+          <p className="mt-1 text-caption text-muted-foreground">Physical release is separate from Finance payout and remains fail-closed until settlement prerequisites are satisfied.</p>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {work.releaseQueue.slice(0, 20).map((settlement) => (
+              <article key={settlement.id} className="rounded-control border border-border bg-background p-3">
+                <p className="font-bold text-foreground">Settlement #{settlement.id} · auction #{settlement.auction_id}</p>
+                <p className="mt-1 text-caption text-muted-foreground">
+                  Payment {settlement.payment_state} · transfer {settlement.transfer_state} · release {settlement.release_state}
+                </p>
+                <Button className="mt-3 min-h-11" variant="outline" onClick={() => void operateRelease(settlement)}>
+                  {settlement.release_state === "AUTHORIZED" ? "Record handover" : "Authorize release"}
+                </Button>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {user.admin && production ? (
+        <section aria-labelledby="production-readiness" className="rounded-card border border-border bg-raised p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 id="production-readiness" className="text-lg font-bold text-foreground">Zimbabwe Production readiness</h2>
+              <p className="mt-1 text-caption text-muted-foreground">Policy and dependency gates fail closed for commercial mutation in Production.</p>
+            </div>
+            <StatusPill tone={production.ready ? "good" : "danger"}>{production.ready ? "READY" : "BLOCKED"}</StatusPill>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {production.gates.map((gate) => (
+              <article key={gate.key} className="rounded-control border border-border bg-background p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-bold text-foreground">{gate.key.replaceAll("_", " ")}</p>
+                  <StatusPill tone={gate.passed ? "good" : gate.critical ? "danger" : "warn"}>{gate.passed ? "PASS" : "FAIL"}</StatusPill>
+                </div>
+                {gate.detail ? <p className="mt-1 text-caption text-muted-foreground">{gate.detail}</p> : null}
+              </article>
+            ))}
+          </div>
+          {production.missingPolicies.length ? (
+            <div role="alert" className="mt-4 rounded-control border border-danger/30 bg-danger/10 p-3">
+              <p className="text-caption font-bold text-danger">Production policy still required</p>
+              <p className="mt-1 text-caption text-foreground">{production.missingPolicies.join(", ")}</p>
+            </div>
+          ) : null}
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-control border border-border bg-background p-3">
+              <p className="text-caption text-muted-foreground">Auction outbox backlog</p>
+              <p className="text-xl font-bold tabular-nums text-foreground">{observability?.auctionOutboxBacklog ?? production.observability.auctionOutboxBacklog}</p>
+            </div>
+            <div className="rounded-control border border-border bg-background p-3">
+              <p className="text-caption text-muted-foreground">Finance bridge backlog</p>
+              <p className="text-xl font-bold tabular-nums text-foreground">{observability?.financeBridgeBacklog ?? production.observability.financeBridgeBacklog}</p>
+            </div>
+          </div>
+          <p className="mt-4 text-caption text-muted-foreground">
+            Policy registry: {policies.length} entries. Legal requirements, business policy, configurable values and pending legal review remain explicitly classified.
+          </p>
+        </section>
+      ) : null}
 
       <div className="grid gap-5 xl:grid-cols-[1.4fr_1fr]">
         <section aria-labelledby="operations-tasks" className="rounded-card border border-border bg-raised p-4">
