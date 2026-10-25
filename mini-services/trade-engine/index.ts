@@ -4,12 +4,12 @@
 // the TrailBase (Rust) backend on port 3001 with an admin token:
 //   · Yahoo Auctions-style proxy (automatic) bidding
 //   · anti-snipe soft close (final 5 min → +5 min, max 15 extensions)
-//   · buy-now reservation + orders with 48h payment SLA
+//   · buy-now reservation + orders; vehicle Production deadlines are governed policy
 //   · Q&A, messaging, notifications, ratings, audit trail (web/agent/mcp)
 //
 // RPC events (client → server, with ack):
 //   bid:place {auctionId, maxAmount}
-//   bid:retract {bidId, reason}                    ← Gap-8: 60-min window, lead bid only
+//   bid:retract {bidId, reason}                    ← vehicle: IMP-09 pre-completion policy; general: legacy LR01 rule
 //   buynow:purchase {auctionId}
 //   offer:submit {auctionId, amount, message?}    ← Gap-8: Best-Offer/haggle
 //   offer:withdraw {offerId}
@@ -667,7 +667,7 @@ async function publishAuctionCoreEvent(event: AuctionOutboxEnvelope): Promise<vo
           order.buyer_user,
           "won",
           "You won — payment due",
-          `${auction.title} at US${Number(order.final_price).toFixed(2)}. Complete payment within 48h (SLA).`,
+          `${auction.title} at US${Number(order.final_price).toFixed(2)}. Payment deadline: ${order.pay_by ? new Date(order.pay_by).toISOString() : "see settlement"}.`,
           `#/orders/${order.id}`,
         );
         await notify(
@@ -1613,7 +1613,7 @@ io.on("connection", (socket: Socket) => {
     }
   });
 
-  // ── Gap-8: bid retraction (eBay-style, 60-minute window) ─────────────
+  // ── Bid retraction: vehicle IMP-09 policy / general LR01 legacy ─────
   socket.on("bid:retract", async (data: any, ack?: Ack) => {
     try {
       const user = await requireAuth();
