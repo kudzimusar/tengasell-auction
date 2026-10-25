@@ -214,3 +214,298 @@ export async function submitQualifiedBidCommand(
     capacity: capacity.capacity,
   };
 }
+
+
+export async function settlementBundle(
+  store: AuctionCoreStore,
+  viewer: CommercialIdentity,
+  settlementId: number,
+) {
+  const settlement = await store.get("auction_settlements", settlementId);
+  if (!settlement) return { ok: false, code: "SETTLEMENT_NOT_FOUND", error: "Auction settlement not found." };
+  const participant =
+    String(settlement.buyer_user) === String(viewer.id) ||
+    String(settlement.seller_user) === String(viewer.id);
+  if (!viewer.admin && !participant) {
+    return { ok: false, code: "SETTLEMENT_FORBIDDEN", error: "You cannot view this settlement." };
+  }
+  const [lines, documents, releaseRows, transport, handovers, events] = await Promise.all([
+    store.list("auction_invoice_lines", `filter[settlement_id][$eq]=${settlementId}&order=id&limit=100`),
+    store.list("auction_transfer_documents", `filter[settlement_id][$eq]=${settlementId}&order=id&limit=100`),
+    store.list("auction_release_authorizations", `filter[settlement_id][$eq]=${settlementId}&order=-id&limit=10`),
+    store.list("auction_transport_bookings", `filter[settlement_id][$eq]=${settlementId}&order=-id&limit=20`),
+    store.list("auction_handovers", `filter[settlement_id][$eq]=${settlementId}&order=-id&limit=10`),
+    store.list("auction_settlement_events", `filter[settlement_id][$eq]=${settlementId}&order=id&limit=500`),
+  ]);
+  return {
+    ok: true,
+    settlement,
+    invoiceLines: lines,
+    transferDocuments: documents,
+    releaseAuthorization: releaseRows[0] ?? null,
+    transport,
+    handover: handovers[0] ?? null,
+    events,
+  };
+}
+
+export async function settlementForOrder(
+  store: AuctionCoreStore,
+  viewer: CommercialIdentity,
+  orderId: number,
+) {
+  const settlement = await first(
+    store,
+    "auction_settlements",
+    `filter[order_id][$eq]=${orderId}&limit=1`,
+  );
+  if (!settlement) return { ok: false, code: "SETTLEMENT_NOT_FOUND", error: "Auction settlement not found." };
+  return settlementBundle(store, viewer, Number(settlement.id));
+}
+
+export async function submitFinanceCallback(
+  store: AuctionCoreStore,
+  actor: CommercialIdentity,
+  input: {
+    idempotencyKey?: string | null;
+    settlementId: number;
+    orderId: number;
+    eventType:
+      | "INVOICE_ACKNOWLEDGED"
+      | "PAYMENT_CAPTURED"
+      | "PAYMENT_FAILED"
+      | "PAYMENT_REFUNDED"
+      | "DISPUTE_OPENED"
+      | "DISPUTE_RESOLVED"
+      | "SELLER_PAYOUT_STATUS";
+    amount?: number | null;
+    currency?: string | null;
+    sourceReference?: string | null;
+    payoutState?: string | null;
+  },
+) {
+  const key = commandKey(input.idempotencyKey, `finance:${input.settlementId}:${input.eventType}`);
+  let row = await first(
+    store,
+    "auction_finance_callbacks",
+    `filter[idempotency_key][$eq]=${encodeURIComponent(key)}&limit=1`,
+  );
+  const replayed = !!row;
+  if (!row) {
+    const id = await store.create("auction_finance_callbacks", {
+      idempotency_key: key,
+      settlement_id: input.settlementId,
+      order_id: input.orderId,
+      event_type: input.eventType,
+      amount: input.amount ?? null,
+      currency: input.currency ?? "USD",
+      source_reference: input.sourceReference ?? null,
+      payout_state: input.payoutState ?? null,
+      actor_user: actor.id,
+      actor_username: actor.username,
+      actor_admin: actor.admin ? 1 : 0,
+    });
+    row = id == null ? null : await store.get("auction_finance_callbacks", id);
+  }
+  if (!row) return { ok: false, code: "COMMAND_PERSIST_FAILED", error: "Finance callback could not be persisted.", replayed };
+  if (row.status !== "accepted") {
+    const code = String(row.error_code ?? "FINANCE_CALLBACK_REJECTED");
+    return {
+      ok: false,
+      code,
+      error: code === "FINANCE_AUTHORITY_REQUIRED"
+        ? "Finance authority is required for settlement accounting updates."
+        : "Finance callback was rejected.",
+      replayed,
+      command: row,
+    };
+  }
+  return {
+    ok: true,
+    replayed,
+    command: row,
+    bundle: await settlementBundle(store, actor, input.settlementId),
+  };
+}
+
+export async function submitTransferCommand(
+  store: AuctionCoreStore,
+  actor: CommercialIdentity,
+  input: {
+    commandId?: string | null;
+    settlementId: number;
+    commandType:
+      | "START"
+      | "REQUIRE_DOCUMENT"
+      | "SUBMIT_DOCUMENT"
+      | "ACCEPT_DOCUMENT"
+      | "REJECT_DOCUMENT"
+      | "MARK_READY"
+      | "MARK_EXTERNAL_PENDING"
+      | "EVIDENCE_RECEIVED"
+      | "COMPLETE"
+      | "HOLD";
+    documentType?: string | null;
+    documentRef?: string | null;
+    externalProcess?: boolean;
+    reason?: string | null;
+  },
+) {
+  const key = commandKey(input.commandId, `transfer:${input.settlementId}:${input.commandType}`);
+  let row = await first(store, "auction_transfer_commands", `filter[command_key][$eq]=${encodeURIComponent(key)}&limit=1`);
+  const replayed = !!row;
+  if (!row) {
+    const id = await store.create("auction_transfer_commands", {
+      command_key: key,
+      settlement_id: input.settlementId,
+      actor_user: actor.id,
+      actor_username: actor.username,
+      actor_admin: actor.admin ? 1 : 0,
+      command_type: input.commandType,
+      document_type: input.documentType ?? null,
+      document_ref: input.documentRef ?? null,
+      external_process: input.externalProcess ? 1 : 0,
+      reason: input.reason ?? null,
+    });
+    row = id == null ? null : await store.get("auction_transfer_commands", id);
+  }
+  if (!row) return { ok: false, code: "COMMAND_PERSIST_FAILED", error: "Transfer command could not be persisted.", replayed };
+  if (row.status !== "accepted") {
+    const code = String(row.error_code ?? "TRANSFER_COMMAND_REJECTED");
+    return {
+      ok: false,
+      code,
+      error: code === "TRANSFER_AUTHORITY_REQUIRED"
+        ? "Transfer review authority is required."
+        : "Transfer command was rejected.",
+      replayed,
+      command: row,
+    };
+  }
+  return { ok: true, replayed, command: row, bundle: await settlementBundle(store, actor, input.settlementId) };
+}
+
+export async function submitReleaseCommand(
+  store: AuctionCoreStore,
+  actor: CommercialIdentity,
+  input: {
+    commandId?: string | null;
+    settlementId: number;
+    collectorType: "BUYER" | "REPRESENTATIVE" | "TRANSPORTER";
+    collectorUser?: string | null;
+    collectorName: string;
+    collectorReference?: string | null;
+    conditions?: string | null;
+  },
+) {
+  const key = commandKey(input.commandId, `release:${input.settlementId}`);
+  let row = await first(store, "auction_release_commands", `filter[command_key][$eq]=${encodeURIComponent(key)}&limit=1`);
+  const replayed = !!row;
+  if (!row) {
+    const id = await store.create("auction_release_commands", {
+      command_key: key,
+      settlement_id: input.settlementId,
+      actor_user: actor.id,
+      actor_username: actor.username,
+      actor_admin: actor.admin ? 1 : 0,
+      collector_type: input.collectorType,
+      collector_user: input.collectorUser ?? null,
+      collector_name: input.collectorName.trim().slice(0, 120),
+      collector_reference: input.collectorReference ?? null,
+      conditions: input.conditions ?? "",
+    });
+    row = id == null ? null : await store.get("auction_release_commands", id);
+  }
+  if (!row) return { ok: false, code: "COMMAND_PERSIST_FAILED", error: "Release command could not be persisted.", replayed };
+  if (row.status !== "accepted") {
+    const code = String(row.error_code ?? "RELEASE_COMMAND_REJECTED");
+    const messages: Record<string, string> = {
+      RELEASE_AUTHORITY_REQUIRED: "Release authority is required.",
+      PAYMENT_NOT_SETTLED: "Vehicle release is blocked until Finance confirms payment settlement.",
+      TRANSFER_NOT_COMPLETE: "Vehicle release is blocked until required transfer evidence is complete.",
+      ACTIVE_DISPUTE: "Vehicle release is blocked while a dispute is open.",
+      COLLECTOR_REQUIRED: "Identify the buyer, authorized representative, or transporter collecting the vehicle.",
+    };
+    return { ok: false, code, error: messages[code] ?? "Release command was rejected.", replayed, command: row };
+  }
+  return { ok: true, replayed, command: row, bundle: await settlementBundle(store, actor, input.settlementId) };
+}
+
+export async function requestTransport(
+  store: AuctionCoreStore,
+  actor: CommercialIdentity,
+  input: {
+    requestId?: string | null;
+    settlementId: number;
+    transporter: string;
+    transporterReference?: string | null;
+    pickupLocation: string;
+    destination: string;
+    scheduledAt?: string | null;
+  },
+) {
+  const settlement = await store.get("auction_settlements", input.settlementId);
+  if (!settlement) return { ok: false, code: "SETTLEMENT_NOT_FOUND", error: "Auction settlement not found." };
+  const buyer = String(settlement.buyer_user) === String(actor.id);
+  if (!actor.admin && !buyer)
+    return { ok: false, code: "TRANSPORT_FORBIDDEN", error: "Only the buyer or an authorized operator can request transport." };
+  const key = commandKey(input.requestId, `transport:${input.settlementId}`);
+  let row = await first(store, "auction_transport_bookings", `filter[request_key][$eq]=${encodeURIComponent(key)}&limit=1`);
+  const replayed = !!row;
+  if (!row) {
+    const id = await store.create("auction_transport_bookings", {
+      request_key: key,
+      settlement_id: input.settlementId,
+      requested_by: actor.id,
+      requested_by_username: actor.username,
+      transporter: input.transporter.trim().slice(0, 120),
+      transporter_reference: input.transporterReference ?? null,
+      pickup_location: input.pickupLocation.trim().slice(0, 200),
+      destination: input.destination.trim().slice(0, 200),
+      scheduled_at: input.scheduledAt ?? null,
+      status: input.scheduledAt ? "SCHEDULED" : "REQUESTED",
+      created_at: new Date().toISOString().replace(/\.\d+Z$/, "Z"),
+      updated_at: new Date().toISOString().replace(/\.\d+Z$/, "Z"),
+    });
+    row = id == null ? null : await store.get("auction_transport_bookings", id);
+  }
+  if (!row) return { ok: false, code: "COMMAND_PERSIST_FAILED", error: "Transport request could not be persisted.", replayed };
+  return { ok: true, replayed, transport: row, bundle: await settlementBundle(store, actor, input.settlementId) };
+}
+
+export async function submitHandoverCommand(
+  store: AuctionCoreStore,
+  actor: CommercialIdentity,
+  input: { commandId?: string | null; settlementId: number; evidenceReference: string },
+) {
+  const key = commandKey(input.commandId, `handover:${input.settlementId}`);
+  let row = await first(store, "auction_handover_commands", `filter[command_key][$eq]=${encodeURIComponent(key)}&limit=1`);
+  const replayed = !!row;
+  if (!row) {
+    const id = await store.create("auction_handover_commands", {
+      command_key: key,
+      settlement_id: input.settlementId,
+      actor_user: actor.id,
+      actor_username: actor.username,
+      actor_admin: actor.admin ? 1 : 0,
+      evidence_reference: input.evidenceReference.trim().slice(0, 160),
+    });
+    row = id == null ? null : await store.get("auction_handover_commands", id);
+  }
+  if (!row) return { ok: false, code: "COMMAND_PERSIST_FAILED", error: "Handover command could not be persisted.", replayed };
+  if (row.status !== "accepted") {
+    const code = String(row.error_code ?? "HANDOVER_COMMAND_REJECTED");
+    return {
+      ok: false,
+      code,
+      error: code === "HANDOVER_AUTHORITY_REQUIRED"
+        ? "Release/Yard authority is required to record physical handover."
+        : code === "RELEASE_NOT_AUTHORIZED"
+          ? "Physical handover requires a valid unused release authorization."
+          : "Handover command was rejected.",
+      replayed,
+      command: row,
+    };
+  }
+  return { ok: true, replayed, command: row, bundle: await settlementBundle(store, actor, input.settlementId) };
+}
