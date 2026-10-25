@@ -4,6 +4,7 @@ import { z } from "zod"
 import { db } from "@/lib/db"
 import { ok, fail, ctxFrom, parseBody, audit } from "@/lib/server/api"
 import { guard, MOD_PLUS, notify, listingSnapshot } from "../../../_lib/ctl"
+import { AUCTION_AUTHORITY_ERRORS, authorityDetails, isLegacyPrismaAuction } from "@/lib/auction-authority"
 
 export const runtime = "nodejs"
 
@@ -25,6 +26,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   try {
     const listing = await db.listing.findUnique({ where: { id } })
     if (!listing) return fail("Listing not found", 404, requestId)
+
+    if (isLegacyPrismaAuction(listing.type)) {
+      const policy = AUCTION_AUTHORITY_ERRORS.CANONICAL_AUCTION_REQUIRED
+      await audit({
+        actorId: user.id,
+        actorRole: user.role,
+        action: "auction.authority.blocked.prisma_admin_action",
+        targetType: "LISTING",
+        targetId: listing.id,
+        after: { requestedAction: data.action, ...authorityDetails("CANONICAL_AUCTION_REQUIRED") },
+        requestId,
+        ip,
+      })
+      return fail(policy.message, policy.status, requestId, authorityDetails("CANONICAL_AUCTION_REQUIRED"))
+    }
 
     const reason = `${data.reasonCode}${data.note ? ` — ${data.note}` : ""}`
     const now = new Date()

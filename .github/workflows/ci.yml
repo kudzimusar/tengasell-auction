@@ -45,6 +45,9 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
+      - name: Auction authority barrier contract
+        run: npm run test:auction-authority
+
       - name: Create CI database
         run: npx prisma db push --skip-generate
 
@@ -132,4 +135,5 @@ jobs:
         run: npm run lint
 
       - name: TypeScript
+        if: always()
         run: npx tsc --noEmit
