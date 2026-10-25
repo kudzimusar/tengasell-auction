@@ -580,7 +580,7 @@ export async function grantVehicleRole(
     params({ "filter[user][$eq]": target.user, "filter[role][$eq]": target.role, limit: 1 }),
   )
   if (existing[0]) {
-    await store.update("vehicle_staff_roles", `${target.user},${target.role}`, { active: 1 })
+    await store.update("vehicle_staff_roles", Number(existing[0].id), { active: 1 })
   } else {
     const id = await store.create("vehicle_staff_roles", {
       user: target.user,
