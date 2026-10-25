@@ -195,10 +195,18 @@ function LiveBoard() {
           title={t("live.title")}
           subtitle={t("live.subtitle")}
           action={
-            <Button onClick={openHostDialog} className="min-h-11">
-              <ListPlus className="size-4" aria-hidden="true" />
-              {t("live.board.host")}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild variant="outline" className="min-h-11">
+                <a href="#/events">
+                  <CalendarClock className="size-4" aria-hidden="true" />
+                  Auction Hub
+                </a>
+              </Button>
+              <Button onClick={openHostDialog} className="min-h-11">
+                <ListPlus className="size-4" aria-hidden="true" />
+                {t("live.board.host")}
+              </Button>
+            </div>
           }
         />
         {res.loading && !res.data ? (
@@ -526,9 +534,12 @@ function LiveRoom({ sessionId }: { sessionId: number }) {
   });
 
   const session = sessionRes.data ?? null;
+  const eventBacked = session?.event_id != null;
   const lots = useMemo(
-    () => [...(lotsRes.data ?? [])].sort((a, b) => a.id - b.id),
-    [lotsRes.data],
+    () => eventBacked
+      ? [...(lotsRes.data ?? [])]
+      : [...(lotsRes.data ?? [])].sort((a, b) => a.id - b.id),
+    [lotsRes.data, eventBacked],
   );
   const currentLotId = session?.current_lot_id ?? null;
   const currentLot = currentLotId != null ? lots.find((l) => l.id === currentLotId) ?? null : null;
@@ -654,6 +665,14 @@ function LiveRoom({ sessionId }: { sessionId: number }) {
           {t("room.backBoard")}
         </a>
         <RoomStatusPill session={session} />
+        {session.event_id != null ? (
+          <Button asChild variant="outline" size="sm" className="min-h-10">
+            <a href={`#/events/${session.event_id}`}>
+              <ListPlus className="size-4" aria-hidden="true" />
+              Run List
+            </a>
+          </Button>
+        ) : null}
         {session.status === "live" && (
           <span className="inline-flex items-center gap-1.5 text-caption font-bold text-urgent">
             <span className="size-2 rounded-full bg-urgent animate-pulse" aria-hidden="true" />

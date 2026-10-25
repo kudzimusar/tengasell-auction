@@ -3,6 +3,7 @@ import { NextRequest } from "next/server"
 import { db } from "@/lib/db"
 import { json } from "@/lib/server/api"
 import { v1Auth, v1Json, v1Error, logV1Call, V1_PUBLIC_STATUSES } from "../../_shared"
+import { auctionAuthorityPayload, canonicalBidHistory, resolveLegacyAuction } from "@/lib/server/legacy-auction-convergence"
 
 export const runtime = "nodejs"
 
@@ -19,7 +20,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const listing = await db.listing.findUnique({ where: { id } })
 
-    if (!listing || !(V1_PUBLIC_STATUSES as readonly string[]).includes(listing.status)) {
+    if (!listing) {
+      const status = 404
+      await logV1Call({ route, method: "GET", status, startedAt, requestId, ip, apiKeyId: key.id })
+      return v1Error("Listing not found or not publicly visible", status, requestId)
+    }
+
+    const auctionResolution = await resolveLegacyAuction(listing)
+    if (!(V1_PUBLIC_STATUSES as readonly string[]).includes(auctionResolution.effective.status)) {
       const status = 404
       await logV1Call({ route, method: "GET", status, startedAt, requestId, ip, apiKeyId: key.id })
       return v1Error("Listing not found or not publicly visible", status, requestId)
@@ -31,6 +39,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       db.category.findUnique({ where: { id: listing.categoryId } }),
       db.sellerProfile.findUnique({ where: { userId: listing.sellerId } }),
     ])
+    const canonicalBids = listing.type === "AUCTION"
+      ? await canonicalBidHistory(auctionResolution, 10)
+      : []
     const bidders = await db.user.findMany({
       where: { id: { in: [...new Set(bids.map((b) => b.bidderId))] } },
       select: { id: true, handle: true },
@@ -45,12 +56,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       condition: listing.condition,
       type: listing.type,
       startingPrice: listing.startingPrice,
-      currentPrice: listing.currentPrice,
+      currentPrice: auctionResolution.effective.currentPrice,
       buyNowPrice: listing.buyNowPrice,
       stock: listing.stock,
-      status: listing.status,
-      endsAt: listing.endsAt,
-      bidCount: listing.bidCount,
+      status: auctionResolution.effective.status,
+      endsAt: auctionResolution.effective.endsAt,
+      bidCount: auctionResolution.effective.bidCount,
       watchCount: listing.watchCount,
       viewCount: listing.viewCount,
       images: json<string[]>(listing.images, []),
@@ -60,11 +71,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         : null,
       publishedAt: listing.publishedAt,
       createdAt: listing.createdAt,
-      bids: bids.map((b) => ({
-        amount: b.amount,
-        createdAt: b.createdAt,
-        bidder: maskBidder(bidderMap.get(b.bidderId)),
-      })),
+      bids: canonicalBids.length
+        ? canonicalBids.map((b) => ({
+            amount: Number(b.amount ?? 0),
+            createdAt: b.created_at,
+            bidder: maskBidder(String(b.bidder_username ?? "")),
+          }))
+        : bids.map((b) => ({
+            amount: b.amount,
+            createdAt: b.createdAt,
+            bidder: maskBidder(bidderMap.get(b.bidderId)),
+          })),
+      auctionAuthority: listing.type === "AUCTION" ? auctionAuthorityPayload(auctionResolution) : undefined,
     }
 
     await logV1Call({ route, method: "GET", status: 200, startedAt, requestId, ip, apiKeyId: key.id })

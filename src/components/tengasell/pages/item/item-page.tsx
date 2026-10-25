@@ -104,6 +104,7 @@ import { SimilarItems } from "./similar-items";
 import { SellerFeedback } from "./seller-feedback";
 import { ShareMenu } from "./share-menu";
 import { ReportItemButton } from "./report-item-button";
+import { VehicleDetails } from "./vehicle-details";
 
 // ── Gap-8 F2 helpers ─────────────────────────────────────────────────
 /** Engine offer-broadcast payload (trade-engine emits { auctionId, offer }).
@@ -406,6 +407,12 @@ export default function ItemPage({ id }: { id: number }) {
                   {questionCount}
                 </span>
               </TabsTrigger>
+              {auction.asset_kind === "vehicle" && (
+                <TabsTrigger value="vehicle" className="min-h-11 flex-1 px-2 text-label rounded-control gap-1.5">
+                  Vehicle
+                  <span className="hidden sm:inline"> / inspection</span>
+                </TabsTrigger>
+              )}
               <TabsTrigger value="shipping" className="min-h-11 flex-1 px-2 text-label rounded-control">
                 <span className="hidden sm:inline">Shipping &amp; payments</span>
                 <span className="sm:hidden">Shipping</span>
@@ -475,6 +482,12 @@ export default function ItemPage({ id }: { id: number }) {
                 reload={questionsRes.reload}
               />
             </TabsContent>
+
+            {auction.asset_kind === "vehicle" && (
+              <TabsContent value="vehicle" className="pt-4">
+                <VehicleDetails auctionId={auction.id} />
+              </TabsContent>
+            )}
 
             <TabsContent value="shipping" className="pt-4">
               <ShippingPayments auction={auction} />

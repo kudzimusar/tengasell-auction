@@ -10,6 +10,8 @@ import { slugify } from "@/lib/tengasell/format";
 import { rpc } from "../socket";
 import type {
   Auction,
+  AuctionEvent,
+  AuctionEventBundle,
   AuctionQuery,
   Bid,
   Category,
@@ -24,9 +26,15 @@ import type {
   Profile,
   Question,
   Rating,
+  RunListCommandInput,
   SavedSearch,
   SaveSearchInput,
   Thread,
+  VehicleBundle,
+  VehicleIntakeInput,
+  VehicleInspection,
+  VehicleFinding,
+  VehicleDocument,
 } from "../types";
 
 const TB = 3001;
@@ -451,14 +459,14 @@ export class RemoteApi {
   async placeBid(auctionId: number, maxAmount: number) {
     return rpc<{ ok: boolean; error?: string; auction?: Auction; amount?: number; winning?: boolean; outbid?: boolean }>(
       "bid:place",
-      { auctionId, maxAmount },
+      { auctionId, maxAmount, commandId: globalThis.crypto.randomUUID() },
     );
   }
 
   async buyNow(auctionId: number, address?: string | null): Promise<{ orderId: number }> {
     const res = await rpc<{ ok: boolean; error?: string; orderId?: number; order?: Order }>(
       "buynow:purchase",
-      { auctionId, address: address ?? null },
+      { auctionId, address: address ?? null, commandId: globalThis.crypto.randomUUID() },
     );
     return { orderId: res.orderId ?? res.order?.id ?? 0 };
   }
@@ -510,6 +518,8 @@ export class RemoteApi {
     durationHours: number;
     images: string[];
     featured?: number;
+    /** IMP-04: category vehicles must explicitly be a whole vehicle or a part. */
+    assetKind?: "general" | "vehicle" | "part";
     /** Gap-8: accept Best-Offer on this listing. */
     allowOffers?: boolean;
     /** Gap-8: auto-decline offers below this minimum (US$). */
@@ -540,8 +550,9 @@ export class RemoteApi {
         .toISOString()
         .replace(/\.\d+Z$/, "Z"),
       started_at: now,
-      status: "live",
+      status: input.assetKind === "vehicle" ? "draft" : "live",
       extension_count: 0,
+      asset_kind: input.assetKind ?? "general",
       featured: input.featured ?? 0,
       allow_offers: input.allowOffers ? 1 : 0,
       offer_min: input.offerMin ?? null,
@@ -560,6 +571,78 @@ export class RemoteApi {
     const created = await this.auction(id);
     if (!created) throw new Error("Listing created but could not be read back.");
     return created;
+  }
+
+  // ── IMP-04 Vehicle / Tengasell Inspection ───────────────────────
+  async vehicleForAuction(auctionId: number): Promise<VehicleBundle> {
+    const res = await rpc<{ ok: boolean; bundle?: VehicleBundle }>("vehicle:get", { auctionId });
+    return res.bundle ?? { vehicle: null, permissions: { inspect: false, review: false, administer: false } };
+  }
+
+  async saveVehicleIntake(auctionId: number, vehicle: VehicleIntakeInput): Promise<VehicleBundle> {
+    await rpc("vehicle:intake", { auctionId, vehicle });
+    return this.vehicleForAuction(auctionId);
+  }
+
+  async addVehicleDocument(
+    vehicleId: number,
+    document: {
+      documentType: string; documentRef: string; issuer?: string | null;
+      issuedAt?: string | null; expiresAt?: string | null; storageRef?: string | null;
+    },
+  ): Promise<VehicleDocument> {
+    const res = await rpc<{ ok: boolean; document?: VehicleDocument }>("vehicle:document:add", { vehicleId, document });
+    if (!res.document) throw new Error("Vehicle document could not be read back.");
+    return res.document;
+  }
+
+  async reviewVehicleDocument(documentId: number, action: "VERIFY" | "REJECT", reason?: string): Promise<VehicleDocument> {
+    const res = await rpc<{ ok: boolean; document?: VehicleDocument }>(
+      "vehicle:document:review", { documentId, action, reason: reason ?? null },
+    );
+    if (!res.document) throw new Error("Vehicle document review could not be read back.");
+    return res.document;
+  }
+
+  async startVehicleInspection(vehicleId: number): Promise<VehicleInspection> {
+    const res = await rpc<{ ok: boolean; inspection?: VehicleInspection }>("vehicle:inspection:start", { vehicleId });
+    if (!res.inspection) throw new Error("Inspection could not be read back.");
+    return res.inspection;
+  }
+
+  async addVehicleFinding(
+    inspectionId: number,
+    finding: {
+      category: string; component: string; location?: string | null; severity: string;
+      description: string; repairRecommended?: boolean; safetyCritical?: boolean;
+      evidenceDocumentId?: number | null;
+    },
+  ): Promise<VehicleFinding> {
+    const res = await rpc<{ ok: boolean; finding?: VehicleFinding }>(
+      "vehicle:inspection:finding", { inspectionId, finding },
+    );
+    if (!res.finding) throw new Error("Finding could not be read back.");
+    return res.finding;
+  }
+
+  async submitVehicleInspection(
+    inspectionId: number,
+    inspection: { roadworthy: boolean; odometerKm: number; notes?: string | null },
+  ): Promise<VehicleInspection> {
+    const res = await rpc<{ ok: boolean; inspection?: VehicleInspection }>(
+      "vehicle:inspection:submit", { inspectionId, inspection },
+    );
+    if (!res.inspection) throw new Error("Inspection could not be read back.");
+    return res.inspection;
+  }
+
+  async reviewVehicleInspection(inspectionId: number): Promise<VehicleBundle> {
+    const res = await rpc<{ ok: boolean; bundle?: VehicleBundle }>(
+      "vehicle:inspection:review",
+      { inspectionId, commandId: globalThis.crypto.randomUUID() },
+    );
+    if (!res.bundle) throw new Error("Vehicle review could not be read back.");
+    return res.bundle;
   }
 
   async mySelling(): Promise<Auction[]> {
@@ -900,6 +983,7 @@ export class RemoteApi {
     const res = await rpc<{ ok: boolean; error?: string; auction?: Auction }>("bid:retract", {
       bidId,
       reason,
+      commandId: globalThis.crypto.randomUUID(),
     });
     if (!res.ok) throw new Error(res.error || "Could not retract the bid.");
     return { auction: res.auction ?? null };
@@ -945,6 +1029,7 @@ export class RemoteApi {
     const res = await rpc<{ ok: boolean; error?: string }>("room:add-lot", {
       sessionId,
       auctionId,
+      commandId: globalThis.crypto.randomUUID(),
     });
     if (!res.ok) throw new Error(res.error || "Could not add the lot.");
   }
@@ -953,6 +1038,7 @@ export class RemoteApi {
     const res = await rpc<{ ok: boolean; error?: string }>("room:remove-lot", {
       sessionId,
       auctionId,
+      commandId: globalThis.crypto.randomUUID(),
     });
     if (!res.ok) throw new Error(res.error || "Could not remove the lot.");
   }
@@ -960,7 +1046,7 @@ export class RemoteApi {
   async openRoomLot(sessionId: number, auctionId?: number): Promise<LiveSession> {
     const res = await rpc<{ ok: boolean; error?: string; session?: LiveSession }>(
       "host:open-lot",
-      { sessionId, auctionId: auctionId ?? null },
+      { sessionId, auctionId: auctionId ?? null, commandId: globalThis.crypto.randomUUID() },
     );
     if (!res.session) throw new Error(res.error || "Could not open the lot.");
     return res.session;
@@ -969,7 +1055,7 @@ export class RemoteApi {
   async closeRoomLot(sessionId: number, sold: boolean): Promise<LiveSession> {
     const res = await rpc<{ ok: boolean; error?: string; session?: LiveSession }>(
       "host:close-lot",
-      { sessionId, sold },
+      { sessionId, sold, commandId: globalThis.crypto.randomUUID() },
     );
     if (!res.session) throw new Error(res.error || "Could not close the lot.");
     return res.session;
@@ -978,13 +1064,22 @@ export class RemoteApi {
   async endLiveRoom(sessionId: number): Promise<LiveSession> {
     const res = await rpc<{ ok: boolean; error?: string; session?: LiveSession }>(
       "host:end-session",
-      { sessionId },
+      { sessionId, commandId: globalThis.crypto.randomUUID() },
     );
     if (!res.session) throw new Error(res.error || "Could not end the room.");
     return res.session;
   }
 
   async roomLots(sessionId: number): Promise<Auction[]> {
+    const session = await this.liveSession(sessionId);
+    if (session?.event_id != null) {
+      const bundle = await this.auctionEventBundle(Number(session.event_id));
+      return (bundle.lots ?? [])
+        .filter((lot) => lot.status !== "WITHDRAWN")
+        .sort((a, b) => a.sequence_no - b.sequence_no || a.id - b.id)
+        .map((lot) => lot.auction)
+        .filter((auction): auction is Auction => !!auction);
+    }
     const res = await tbFetch("/api/records/v1/auctions", {
       params: {
         [`filter[live_session_id][$eq]`]: sessionId,
@@ -995,5 +1090,72 @@ export class RemoteApi {
     if (!res.ok) return [];
     const data = await res.json();
     return data.records ?? [];
+  }
+
+  // ── IMP-05: AuctionEvent / production run-list authority ──────────
+  async auctionEvents(): Promise<AuctionEvent[]> {
+    const res = await tbFetch("/api/records/v1/auction_events", {
+      params: { order: "starts_at", limit: 200 },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.records ?? [];
+  }
+
+  async auctionEventBundle(id: number): Promise<AuctionEventBundle> {
+    const res = await rpc<{ ok: boolean; error?: string; bundle?: AuctionEventBundle }>(
+      "event:bundle",
+      { eventId: id },
+    );
+    if (!res.bundle) throw new Error(res.error || "Could not load the auction event.");
+    return res.bundle;
+  }
+
+  async createAuctionEvent(input: {
+    title: string;
+    description?: string | null;
+    startsAt?: string | null;
+    endsAt?: string | null;
+    timezone?: string | null;
+    venue?: {
+      name: string;
+      address?: string | null;
+      city?: string | null;
+      country?: string | null;
+      timezone?: string | null;
+      venueType?: "PHYSICAL" | "HYBRID" | "ONLINE";
+    } | null;
+  }): Promise<AuctionEventBundle> {
+    const res = await rpc<{ ok: boolean; error?: string; bundle?: AuctionEventBundle }>(
+      "event:create",
+      { event: input },
+    );
+    if (!res.bundle) throw new Error(res.error || "Could not create the auction event.");
+    return res.bundle;
+  }
+
+  async grantEventOperator(
+    eventId: number,
+    username: string,
+    role: "AUCTIONEER" | "CLERK",
+  ): Promise<AuctionEventBundle> {
+    const res = await rpc<{ ok: boolean; error?: string; bundle?: AuctionEventBundle }>(
+      "event:operator:grant",
+      { eventId, username, role },
+    );
+    if (!res.bundle) throw new Error(res.error || "Could not assign the event operator.");
+    return res.bundle;
+  }
+
+  async runListCommand(input: RunListCommandInput): Promise<AuctionEventBundle> {
+    const res = await rpc<{ ok: boolean; error?: string; bundle?: AuctionEventBundle }>(
+      "run-list:command",
+      {
+        ...input,
+        commandId: input.commandId ?? globalThis.crypto.randomUUID(),
+      },
+    );
+    if (!res.bundle) throw new Error(res.error || "Run-list command failed.");
+    return res.bundle;
   }
 }

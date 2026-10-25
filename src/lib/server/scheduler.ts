@@ -4,6 +4,8 @@ import { CANONICAL_AUCTION_AUTHORITY } from "@/lib/auction-authority"
 
 const g = globalThis as unknown as { __tgsScheduler?: NodeJS.Timeout; __tgsLastBackup?: number; __tgsLastMetrics?: string }
 
+export const PRISMA_AUCTION_SCHEDULER_PERMANENTLY_DISABLED = true as const
+
 export async function endExpiredAuctions() {
   // TENGASELL-AUCTION-IMP-01:
   // Legacy Prisma AUCTION rows are retained for read/reconciliation only.
@@ -185,7 +187,7 @@ export async function runBackup(kind: "SCHEDULED" | "MANUAL" = "SCHEDULED") {
 
 export async function tick() {
   try {
-    await endExpiredAuctions()
+    // Prisma AUCTION expiration is permanently absent here; TrailBase + trade-engine own closure.
     await dispatchOutbox()
     await sendDueCampaigns()
     await publishScheduledArticles()
