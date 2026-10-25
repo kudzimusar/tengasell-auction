@@ -6,6 +6,7 @@ import { ok, fail, ctxFrom, parseBody, audit, json } from "@/lib/server/api"
 import { requireUser, rateLimit, STAFF_ROLES } from "@/lib/server/auth-core"
 import { PUBLIC_LISTING_STATUSES, getSettings, flagEnabled, notify, round2 } from "@/app/api/listings/shared/mkt"
 import { AUCTION_AUTHORITY_ERRORS, authorityDetails, isLegacyPrismaAuction } from "@/lib/auction-authority"
+import { auctionAuthorityPayload, resolveLegacyAuctionBatch } from "@/lib/server/legacy-auction-convergence"
 
 export const runtime = "nodejs"
 
@@ -80,10 +81,18 @@ export async function GET(req: NextRequest) {
     const profMap = new Map(profiles.map(p => [p.userId, p]))
     const catMap = new Map(cats.map(c => [c.id, c]))
 
+    const auctionResolution = await resolveLegacyAuctionBatch(rows)
     const items = rows.map(l => {
       const u = userMap.get(l.sellerId)
       const p = profMap.get(l.sellerId)
       const c = catMap.get(l.categoryId)
+      const resolution = auctionResolution.get(l.id)
+      const effective = resolution?.effective ?? {
+        currentPrice: l.currentPrice,
+        status: effective.status,
+        endsAt: effective.endsAt,
+        bidCount: effective.bidCount,
+      }
       return {
         id: l.id,
         title: l.title,
@@ -92,7 +101,7 @@ export async function GET(req: NextRequest) {
         type: l.type,
         startingPrice: round2(l.startingPrice),
         buyNowPrice: l.buyNowPrice === null ? null : round2(l.buyNowPrice),
-        currentPrice: round2(l.currentPrice),
+        currentPrice: round2(effective.currentPrice),
         stock: l.stock,
         images: json(l.images, [] as string[]).slice(0, 4),
         status: l.status,
@@ -110,6 +119,7 @@ export async function GET(req: NextRequest) {
           ratingAvg: p?.ratingAvg ?? 0,
         },
         category: c ? { id: c.id, slug: c.slug, name: c.name, nameJa: c.nameJa, icon: c.icon } : null,
+        auctionAuthority: l.type === "AUCTION" && resolution ? auctionAuthorityPayload(resolution) : undefined,
       }
     })
     return ok({ items, total, page, limit }, requestId)

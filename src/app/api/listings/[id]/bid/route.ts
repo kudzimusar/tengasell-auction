@@ -5,6 +5,7 @@ import { db } from "@/lib/db"
 import { fail, ctxFrom, audit } from "@/lib/server/api"
 import { requireUser } from "@/lib/server/auth-core"
 import { AUCTION_AUTHORITY_ERRORS, authorityDetails, isLegacyPrismaAuction } from "@/lib/auction-authority"
+import { auctionAuthorityPayload, resolveLegacyAuction } from "@/lib/server/legacy-auction-convergence"
 
 export const runtime = "nodejs"
 
@@ -19,6 +20,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!listing) return fail("Listing not found", 404, requestId)
 
   if (isLegacyPrismaAuction(listing.type)) {
+    const resolution = await resolveLegacyAuction(listing)
     const policy = AUCTION_AUTHORITY_ERRORS.CANONICAL_AUCTION_REQUIRED
     await audit({
       actorId: user.id,
@@ -30,7 +32,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       requestId,
       ip,
     })
-    return fail(policy.message, policy.status, requestId, authorityDetails("CANONICAL_AUCTION_REQUIRED"))
+    return fail(
+      policy.message,
+      policy.status,
+      requestId,
+      {
+        ...authorityDetails("CANONICAL_AUCTION_REQUIRED"),
+        ...auctionAuthorityPayload(resolution),
+        canonicalRpcEvent: resolution.state === "VERIFIED_CANONICAL" ? "bid:place" : null,
+      },
+    )
   }
 
   return fail("This listing is not an auction", 409, requestId)
