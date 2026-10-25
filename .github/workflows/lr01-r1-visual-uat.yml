@@ -15,6 +15,7 @@ concurrency:
 
 permissions:
   contents: read
+  statuses: write
 
 jobs:
   visual-uat:
@@ -220,6 +221,22 @@ jobs:
           path: artifacts/lr01-r1-visual-uat
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish LR01-R1 visual UAT status
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          state=failure
+          if [ "$JOB_STATUS" = "success" ]; then state=success; fi
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/statuses/${EXPECTED_HEAD_SHA}" \
+            -f state="$state" \
+            -f context="tengasell/lr01-r1-visual-uat" \
+            -f description="Real-stack Chromium visual UAT: $JOB_STATUS" \
+            -f target_url="$RUN_URL" >/dev/null
 
       - name: Stop disposable processes
         if: always()
