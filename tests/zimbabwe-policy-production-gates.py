@@ -81,10 +81,14 @@ def main() -> None:
     # happens while the seed remains general; then the fixture switches to vehicle
     # to exercise the vehicle-specific policy without fabricating inspection data.
     auction = db.execute(
-        """SELECT id,user,seller_username,version,current_price
-             FROM auctions
-            WHERE status='live'
-            ORDER BY id LIMIT 1"""
+        """SELECT a.id,a.user,a.seller_username,a.version,a.current_price
+             FROM auctions a
+            WHERE a.status='live'
+              AND NOT EXISTS(
+                SELECT 1 FROM bids b
+                 WHERE b.auction_id=a.id AND b.status='active'
+              )
+            ORDER BY a.id LIMIT 1"""
     ).fetchone()
     assert auction, "seed live auction missing"
     auction_id,seller_user,seller_username,version,current_price = auction
