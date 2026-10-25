@@ -112,6 +112,9 @@ BEGIN
      AND EXISTS(
        SELECT 1 FROM auction_settlements s
         WHERE s.id=NEW.settlement_id AND s.vehicle_id IS NOT NULL
-          AND s.completion_state='COMPLETE'
+     )
+     AND EXISTS(
+       SELECT 1 FROM auction_release_authorizations r
+        WHERE r.id=NEW.release_authorization_id AND r.settlement_id=NEW.settlement_id
      );
 END;
