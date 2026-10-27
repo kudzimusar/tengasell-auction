@@ -4,9 +4,9 @@
     "slug": "tengasell",
     "version": "0.1.0",
     "scheme": "tengasell",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "backgroundColor": "#19717B",
     "ios": {
       "supportsTablet": true,
@@ -28,7 +28,7 @@
       "expo-secure-store"
     ],
     "extra": {
-      "tengasellNote": "EXPO_PUBLIC_TENGASELL_API is required for canonical gateway access; no permanent or authenticated demo fallback is embedded."
+      "tengasellNote": "EXPO_PUBLIC_TENGASELL_API is required for canonical gateway access; NXS 1.0 governs the native experience layer."
     }
   }
 }

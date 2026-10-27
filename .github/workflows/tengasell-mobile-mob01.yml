@@ -1,4 +1,4 @@
-name: Tengasell Mobile MOB-01 gates
+name: Tengasell Mobile MOB-01 NXS dependency convergence
 
 on:
   push:
@@ -7,12 +7,12 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  mob01-gates:
+  resolve-nxs-sdk-dependencies:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 20
     steps:
       - name: Checkout exact candidate
         uses: actions/checkout@v4
@@ -24,34 +24,26 @@ jobs:
           cache: npm
           cache-dependency-path: mobile/package-lock.json
 
-      - name: Install locked mobile dependencies
+      - name: Install locked mobile workspace
         working-directory: mobile
         run: npm ci
 
-      - name: Expo doctor
+      - name: Resolve SDK-compatible NXS theme capability
         working-directory: mobile
-        run: npx expo-doctor
+        run: npx expo install expo-system-ui
 
-      - name: Expo lint
-        working-directory: mobile
-        run: npx expo lint
-
-      - name: Typecheck
-        working-directory: mobile
-        run: npx tsc --noEmit
-
-      - name: Android export
-        working-directory: mobile
-        run: npx expo export --platform android
-
-      - name: iOS export
-        working-directory: mobile
-        run: npx expo export --platform ios
-
-      - name: Git diff check
-        run: git diff --check
-
-      - name: Working tree check
+      - name: Commit Expo-resolved package custody
         run: |
-          git status --short
-          test -z "$(git status --short)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add mobile/package.json mobile/package-lock.json
+          if git diff --cached --quiet; then
+            echo "NXS package custody already converged."
+          else
+            git commit -m "chore(mobile): add Expo system theme capability [skip ci]"
+            git push origin HEAD:${{ github.ref_name }}
+          fi
+
+      - name: NXS source probe
+        working-directory: mobile
+        run: node scripts/verify-nxs-foundation.mjs

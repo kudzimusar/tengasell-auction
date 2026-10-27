@@ -1,10 +1,10 @@
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -14,13 +14,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useSession } from "../../auth/session-context";
 import { TrailBaseError } from "../../lib/trailbase";
-
-const TEAL = "#19717B";
-const INK = "#0A0D10";
-const MUTED = "#5C6B72";
-const LINE = "#DDE5E9";
-const DANGER = "#8F2D2D";
-const MIN_TOUCH = 48;
+import { NxsButton } from "../../nxs/components/NxsButton";
+import { useNxs } from "../../nxs/context/NxsProvider";
+import type { NxsTheme } from "../../nxs/tokens";
 
 function loginErrorMessage(error: unknown): string {
   if (error instanceof TrailBaseError) {
@@ -34,8 +30,15 @@ function loginErrorMessage(error: unknown): string {
 
 export default function LoginScreen() {
   const session = useSession();
+  const { theme, tokens, screenPadding, windowClass } = useNxs();
+  const styles = useMemo(
+    () => createStyles(theme, screenPadding, windowClass),
+    [screenPadding, theme, windowClass],
+  );
+  const passwordRef = useRef<TextInput>(null);
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -66,8 +69,8 @@ export default function LoginScreen() {
     return (
       <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
         <View style={styles.center} accessible accessibilityLiveRegion="polite">
-          <ActivityIndicator color={TEAL} size="large" />
-          <Text style={styles.muted}>Restoring your secure session…</Text>
+          <ActivityIndicator color={theme.state.loading} size="large" />
+          <Text style={styles.secondaryText}>Restoring your secure session…</Text>
         </View>
       </SafeAreaView>
     );
@@ -76,27 +79,25 @@ export default function LoginScreen() {
   if (session.phase === "network-degraded") {
     return (
       <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
-        <View style={styles.panel}>
-          <Text style={styles.title} accessibilityRole="header">Session recovery unavailable</Text>
-          <Text style={styles.muted} accessibilityRole="alert">
-            {session.message ?? "The canonical TrailBase authority cannot be reached."}
+        <View style={styles.center}>
+          <Text style={styles.title} accessibilityRole="header">
+            Session recovery unavailable
           </Text>
-          <Pressable
-            style={styles.primaryButton}
-            onPress={() => void session.retrySessionRecovery()}
-            accessibilityRole="button"
-            accessibilityLabel="Retry secure session recovery"
-          >
-            <Text style={styles.primaryButtonText}>Retry session recovery</Text>
-          </Pressable>
-          <Pressable
-            style={styles.secondaryButton}
-            onPress={() => void session.logout()}
-            accessibilityRole="button"
-            accessibilityLabel="Clear saved session on this device"
-          >
-            <Text style={styles.secondaryButtonText}>Clear saved session</Text>
-          </Pressable>
+          <Text style={styles.secondaryText} accessibilityRole="alert">
+            ⚠ {session.message ?? "The canonical TrailBase authority cannot be reached."}
+          </Text>
+          <View style={styles.actionGroup}>
+            <NxsButton
+              label="Retry session recovery"
+              onPress={() => void session.retrySessionRecovery()}
+            />
+            <NxsButton
+              label="Clear saved session"
+              variant="secondary"
+              onPress={() => void session.logout()}
+              accessibilityHint="Removes the locally stored TrailBase session from this device"
+            />
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -108,129 +109,163 @@ export default function LoginScreen() {
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <View style={styles.panel}>
-          <Text style={styles.title} accessibilityRole="header">Sign in to TengaSell</Text>
-          <Text style={styles.muted}>
-            Credentials are sent only to the canonical TrailBase authentication authority.
-          </Text>
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.scrollContent}
+        >
+          <View style={styles.panel}>
+            <Text style={styles.title} accessibilityRole="header">
+              Sign in to TengaSell
+            </Text>
+            <Text style={styles.secondaryText}>
+              Credentials are sent only to the canonical TrailBase authentication authority.
+            </Text>
 
-          {session.phase === "session-invalid" && session.message && (
-            <View style={styles.warning} accessibilityRole="alert">
-              <Text style={styles.warningText}>{session.message}</Text>
-            </View>
-          )}
-
-          {error && (
-            <View style={styles.errorBox} accessibilityRole="alert">
-              <Text style={styles.errorText}>{error}</Text>
-            </View>
-          )}
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Email or username</Text>
-            <TextInput
-              value={identifier}
-              onChangeText={setIdentifier}
-              style={styles.input}
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoComplete="username"
-              textContentType="username"
-              accessibilityLabel="Email or username"
-              returnKeyType="next"
-            />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Password</Text>
-            <TextInput
-              value={password}
-              onChangeText={setPassword}
-              style={styles.input}
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoComplete="current-password"
-              textContentType="password"
-              accessibilityLabel="Password"
-              onSubmitEditing={() => void submit()}
-              returnKeyType="go"
-            />
-          </View>
-
-          <Pressable
-            style={[styles.primaryButton, submitting && styles.disabledButton]}
-            onPress={() => void submit()}
-            disabled={submitting}
-            accessibilityRole="button"
-            accessibilityLabel="Sign in"
-            accessibilityState={{ disabled: submitting, busy: submitting }}
-          >
-            {submitting ? (
-              <ActivityIndicator color="#FFFFFF" accessibilityLabel="Signing in" />
-            ) : (
-              <Text style={styles.primaryButtonText}>Sign in</Text>
+            {session.phase === "session-invalid" && session.message && (
+              <View style={styles.warningBox} accessibilityRole="alert">
+                <Text style={styles.warningText}>⚠ {session.message}</Text>
+              </View>
             )}
-          </Pressable>
-        </View>
+
+            {error && (
+              <View style={styles.errorBox} accessibilityRole="alert">
+                <Text style={styles.errorText}>Error: {error}</Text>
+              </View>
+            )}
+
+            <View style={styles.field}>
+              <Text style={styles.label}>Email or username</Text>
+              <TextInput
+                value={identifier}
+                onChangeText={setIdentifier}
+                style={styles.input}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="username"
+                textContentType="username"
+                accessibilityLabel="Email or username"
+                returnKeyType="next"
+                onSubmitEditing={() => passwordRef.current?.focus()}
+                blurOnSubmit={false}
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>Password</Text>
+              <TextInput
+                ref={passwordRef}
+                value={password}
+                onChangeText={setPassword}
+                style={styles.input}
+                secureTextEntry={!passwordVisible}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="current-password"
+                textContentType="password"
+                accessibilityLabel="Password"
+                onSubmitEditing={() => void submit()}
+                returnKeyType="go"
+              />
+              <NxsButton
+                label={passwordVisible ? "Hide password" : "Show password"}
+                variant="quiet"
+                onPress={() => setPasswordVisible((visible) => !visible)}
+                accessibilityHint="Changes whether the password characters are visible on screen"
+                accessibilityState={{ expanded: passwordVisible }}
+              />
+            </View>
+
+            <NxsButton
+              label="Sign in"
+              loading={submitting}
+              disabled={submitting}
+              onPress={() => void submit()}
+            />
+          </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#F6F9FA" },
-  flex: { flex: 1 },
-  center: { flex: 1, justifyContent: "center", alignItems: "center", gap: 12, padding: 24 },
-  panel: { flex: 1, padding: 20, gap: 16, justifyContent: "center" },
-  title: { color: INK, fontSize: 24, lineHeight: 30, fontWeight: "800" },
-  muted: { color: MUTED, fontSize: 14, lineHeight: 21 },
-  field: { gap: 7 },
-  label: { color: INK, fontSize: 14, fontWeight: "700" },
-  input: {
-    minHeight: MIN_TOUCH,
-    borderWidth: 1,
-    borderColor: LINE,
-    borderRadius: 10,
-    backgroundColor: "#FFFFFF",
-    paddingHorizontal: 12,
-    fontSize: 16,
-    color: INK,
-  },
-  warning: {
-    padding: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#C6A652",
-    backgroundColor: "#FFF9E8",
-  },
-  warningText: { color: "#5F4A17", lineHeight: 20 },
-  errorBox: {
-    padding: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#E1A9A9",
-    backgroundColor: "#FFF1F1",
-  },
-  errorText: { color: DANGER, lineHeight: 20 },
-  primaryButton: {
-    minHeight: MIN_TOUCH,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    backgroundColor: TEAL,
-  },
-  primaryButtonText: { color: "#FFFFFF", fontSize: 16, fontWeight: "800" },
-  secondaryButton: {
-    minHeight: MIN_TOUCH,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: TEAL,
-  },
-  secondaryButtonText: { color: TEAL, fontSize: 15, fontWeight: "700" },
-  disabledButton: { opacity: 0.6 },
-});
+function createStyles(
+  theme: NxsTheme,
+  screenPadding: number,
+  windowClass: "compact" | "regular" | "wide",
+) {
+  const maxWidth = windowClass === "compact" ? undefined : 560;
+
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: theme.surface.canvas },
+    flex: { flex: 1 },
+    scrollContent: {
+      flexGrow: 1,
+      justifyContent: "center",
+      paddingHorizontal: screenPadding,
+      paddingVertical: 24,
+    },
+    center: {
+      flex: 1,
+      width: "100%",
+      maxWidth: 560,
+      alignSelf: "center",
+      justifyContent: "center",
+      gap: 16,
+      paddingHorizontal: screenPadding,
+      paddingVertical: 24,
+    },
+    panel: {
+      width: "100%",
+      maxWidth,
+      alignSelf: "center",
+      gap: 16,
+    },
+    title: {
+      color: theme.text.primary,
+      fontSize: 26,
+      lineHeight: 34,
+      fontWeight: "800",
+    },
+    secondaryText: {
+      color: theme.text.secondary,
+      fontSize: 16,
+      lineHeight: 24,
+    },
+    field: { gap: 8 },
+    label: {
+      color: theme.text.primary,
+      fontSize: 15,
+      lineHeight: 20,
+      fontWeight: "700",
+    },
+    input: {
+      minHeight: 48,
+      borderWidth: 1,
+      borderColor: theme.border.strong,
+      borderRadius: 10,
+      backgroundColor: theme.surface.raised,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      fontSize: 16,
+      lineHeight: 24,
+      color: theme.text.primary,
+    },
+    warningBox: {
+      padding: 12,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.border.warning,
+      backgroundColor: theme.surface.raised,
+    },
+    warningText: { color: theme.state.warning, fontSize: 14, lineHeight: 21 },
+    errorBox: {
+      padding: 12,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.border.error,
+      backgroundColor: theme.surface.raised,
+    },
+    errorText: { color: theme.state.error, fontSize: 14, lineHeight: 21 },
+    actionGroup: { gap: 12 },
+  });
+}

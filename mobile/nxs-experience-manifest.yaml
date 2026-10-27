@@ -1,0 +1,48 @@
+nxs:
+  version: "1.0"
+  release: "Pilot Release"
+  authority: "11-11 Tech NXS Framework 1.0"
+product:
+  name: "TengaSell"
+  type: "marketplace"
+  personality:
+    - "premium"
+    - "calm"
+    - "confident"
+platforms:
+  ios: true
+  android: true
+implementation:
+  primary: "react-native-expo"
+experience:
+  density: "comfortable"
+  motion: "restrained"
+  haptics: "off"
+  voice: "off"
+navigation:
+  model: "adaptive"
+  compact: "stack"
+  expanded: "stack"
+internationalization:
+  default: "en"
+  launch:
+    - "en"
+  rtl_ready: true
+  pseudolocalization: "required"
+accessibility:
+  large_text: "required"
+  screen_reader: "required"
+  reduced_motion: "required"
+  high_contrast: "required"
+visual:
+  surface_style: "calm"
+  expressive_energy_layer: "disabled"
+performance:
+  profile: "balanced"
+certification:
+  level: "strict"
+  hard_block_accessibility: true
+scope:
+  programme: "TENGASELL-MOBILE-01"
+  work_unit: "MOB-01-R1"
+  note: "NXS governs the native presentation and interaction layer only; canonical product, auth, security, data and commercial authority remain unchanged."

@@ -1,5 +1,5 @@
 import { Link } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -16,16 +16,9 @@ import { useSession } from "../auth/session-context";
 import { formatRemaining, formatUSD, remainingSeverity } from "../lib/format";
 import { fetchAuctions, fetchCategories, probeCanonical } from "../lib/trailbase";
 import { toAuctionView, type AuctionView, type Category } from "../lib/types";
-
-const TEAL = "#19717B";
-const TEAL_DEEP = "#0F5A62";
-const GOLD = "#DFAE2E";
-const OCHRE = "#7A5B13";
-const INK = "#0A0D10";
-const MUTED = "#5C6B72";
-const LINE = "#DDE5E9";
-const DANGER = "#8F2D2D";
-const MIN_TOUCH = 44;
+import { NxsButton } from "../nxs/components/NxsButton";
+import { useNxs } from "../nxs/context/NxsProvider";
+import type { NxsTheme } from "../nxs/tokens";
 
 type AuthorityState = "checking" | "live" | "unavailable";
 
@@ -37,6 +30,11 @@ function errorMessage(error: unknown): string {
 
 export default function HomeScreen() {
   const session = useSession();
+  const { theme, tokens, screenPadding, windowClass } = useNxs();
+  const styles = useMemo(
+    () => createStyles(theme, screenPadding, windowClass),
+    [screenPadding, theme, windowClass],
+  );
   const [authorityState, setAuthorityState] = useState<AuthorityState>("checking");
   const [categories, setCategories] = useState<Category[]>([]);
   const [auctions, setAuctions] = useState<AuctionView[]>([]);
@@ -64,6 +62,7 @@ export default function HomeScreen() {
       setCategories(nextCategories);
       setAuctions(nextAuctions.map(toAuctionView));
       setAuthorityState("live");
+      setError(null);
     } catch (bootError) {
       setCategories([]);
       setAuctions([]);
@@ -100,35 +99,45 @@ export default function HomeScreen() {
     }
   }, []);
 
+  const emptyAction = category ? (
+    <NxsButton
+      label="Show featured auctions"
+      variant="secondary"
+      onPress={() => void loadCategory(undefined)}
+    />
+  ) : (
+    <NxsButton label="Refresh auctions" variant="secondary" onPress={retryCanonical} />
+  );
+
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
+    <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>
       <View style={styles.header}>
         <Text style={styles.wordmark} accessibilityRole="header">
-          Tenga<Text style={styles.gold}>Sell</Text>
+          Tenga<Text style={styles.brandAccent}>Sell</Text>
         </Text>
-        <View style={styles.headerActions}>
-          {session.phase === "authenticated" ? (
-            <Link href="/account" asChild>
-              <Pressable
-                style={styles.headerButton}
-                accessibilityRole="button"
-                accessibilityLabel="Open account"
-              >
-                <Text style={styles.headerButtonText}>Account</Text>
-              </Pressable>
-            </Link>
-          ) : (
-            <Link href="/auth/login" asChild>
-              <Pressable
-                style={styles.headerButton}
-                accessibilityRole="button"
-                accessibilityLabel="Sign in to TengaSell"
-              >
-                <Text style={styles.headerButtonText}>Sign in</Text>
-              </Pressable>
-            </Link>
-          )}
-        </View>
+        {session.phase === "authenticated" ? (
+          <Link href="/account" asChild>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Open account"
+              hitSlop={4}
+              style={({ pressed }) => [styles.headerButton, pressed && styles.pressed]}
+            >
+              <Text style={styles.headerButtonText}>Account</Text>
+            </Pressable>
+          </Link>
+        ) : (
+          <Link href="/auth/login" asChild>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Sign in to TengaSell"
+              hitSlop={4}
+              style={({ pressed }) => [styles.headerButton, pressed && styles.pressed]}
+            >
+              <Text style={styles.headerButtonText}>Sign in</Text>
+            </Pressable>
+          </Link>
+        )}
       </View>
 
       <View
@@ -143,82 +152,90 @@ export default function HomeScreen() {
               : "Canonical auction authority unavailable"
         }
       >
-        <View
-          style={[
-            styles.dot,
-            authorityState === "live" ? styles.dotLive : styles.dotAttention,
-          ]}
-        />
         <Text style={styles.authorityText}>
           {authorityState === "checking"
-            ? "Checking canonical authority"
+            ? "● Checking canonical authority"
             : authorityState === "live"
-              ? "Canonical authority connected"
-              : "Canonical authority unavailable"}
+              ? "● Canonical authority connected"
+              : "⚠ Canonical authority unavailable"}
         </Text>
       </View>
 
       {session.phase === "session-invalid" && (
-        <View style={styles.notice} accessibilityRole="alert">
-          <Text style={styles.noticeText}>
-            {session.message ?? "Your saved session is no longer valid. Sign in again."}
+        <View style={styles.warningBox} accessibilityRole="alert">
+          <Text style={styles.warningText}>
+            ⚠ {session.message ?? "Your saved session is no longer valid. Sign in again."}
           </Text>
         </View>
       )}
 
       {session.phase === "network-degraded" && (
-        <View style={styles.notice} accessibilityRole="alert">
-          <Text style={styles.noticeText}>
+        <View style={styles.warningBox} accessibilityRole="alert">
+          <Text style={styles.warningText}>
+            ⚠{" "}
             {session.message ??
               "Session recovery is unavailable while the authority cannot be reached."}
           </Text>
-          <Pressable
-            style={styles.inlineButton}
+          <NxsButton
+            label="Retry session"
+            variant="secondary"
             onPress={() => void session.retrySessionRecovery()}
-            accessibilityRole="button"
-            accessibilityLabel="Retry session recovery"
-          >
-            <Text style={styles.inlineButtonText}>Retry session</Text>
-          </Pressable>
+          />
         </View>
       )}
 
-      {error && (
-        <View style={styles.errorBar} accessibilityRole="alert">
-          <Text style={styles.errorText}>{error}</Text>
-          <Pressable
-            style={styles.retryButton}
-            onPress={retryCanonical}
-            accessibilityRole="button"
-            accessibilityLabel="Retry canonical authority connection"
-          >
-            <Text style={styles.retryButtonText}>Retry</Text>
-          </Pressable>
+      {error && authorityState === "live" && (
+        <View style={styles.errorBox} accessibilityRole="alert">
+          <Text style={styles.errorText}>Error: {error}</Text>
+          <NxsButton
+            label="Retry auction request"
+            variant="secondary"
+            onPress={() => void loadCategory(category)}
+          />
         </View>
       )}
 
       {authorityState === "checking" ? (
         <View style={styles.center} accessible accessibilityLiveRegion="polite">
-          <ActivityIndicator color={TEAL} size="large" accessibilityLabel="Loading auctions" />
-          <Text style={styles.mutedText}>Loading live auction data…</Text>
+          <ActivityIndicator
+            color={theme.state.loading}
+            size="large"
+            accessibilityLabel="Loading auctions"
+          />
+          <Text style={styles.secondaryText}>Loading live auction data…</Text>
         </View>
       ) : authorityState === "unavailable" ? (
         <View style={styles.center}>
-          <Text style={styles.emptyTitle}>Live auctions are temporarily unavailable.</Text>
-          <Text style={styles.mutedText}>
+          <Text style={styles.title} accessibilityRole="header">
+            Live auctions are temporarily unavailable
+          </Text>
+          <Text style={styles.secondaryText}>
+            {error ?? "The canonical authority cannot be reached."}
+          </Text>
+          <Text style={styles.secondaryText}>
             TengaSell has not substituted demo or cached commercial authority.
           </Text>
+          <NxsButton label="Retry canonical authority" onPress={retryCanonical} />
         </View>
       ) : (
         <>
           <View style={styles.chipsWrap}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.chipsContent}
+            >
               <Pressable
-                style={[styles.chip, !category && styles.chipActive]}
                 onPress={() => void loadCategory(undefined)}
                 accessibilityRole="button"
                 accessibilityState={{ selected: !category }}
                 accessibilityLabel="Show featured auctions"
+                hitSlop={4}
+                style={({ pressed }) => [
+                  styles.chip,
+                  !category && styles.chipActive,
+                  pressed && styles.pressed,
+                ]}
               >
                 <Text style={[styles.chipText, !category && styles.chipTextActive]}>
                   Featured
@@ -227,11 +244,16 @@ export default function HomeScreen() {
               {categories.map((item) => (
                 <Pressable
                   key={item.id}
-                  style={[styles.chip, category === item.slug && styles.chipActive]}
                   onPress={() => void loadCategory(item.slug)}
                   accessibilityRole="button"
                   accessibilityState={{ selected: category === item.slug }}
                   accessibilityLabel={`Show ${item.name} auctions`}
+                  hitSlop={4}
+                  style={({ pressed }) => [
+                    styles.chip,
+                    category === item.slug && styles.chipActive,
+                    pressed && styles.pressed,
+                  ]}
                 >
                   <Text
                     style={[
@@ -248,8 +270,8 @@ export default function HomeScreen() {
 
           {listLoading && (
             <View style={styles.listLoading} accessible accessibilityLiveRegion="polite">
-              <ActivityIndicator color={TEAL} />
-              <Text style={styles.mutedText}>Updating auctions…</Text>
+              <ActivityIndicator color={theme.state.loading} />
+              <Text style={styles.secondaryText}>Refreshing auctions…</Text>
             </View>
           )}
 
@@ -258,7 +280,15 @@ export default function HomeScreen() {
             keyExtractor={(item) => String(item.id)}
             contentContainerStyle={styles.list}
             ListEmptyComponent={
-              <Text style={styles.mutedText}>No live auctions in this category.</Text>
+              <View style={styles.emptyState}>
+                <Text style={styles.title} accessibilityRole="header">
+                  No live auctions here
+                </Text>
+                <Text style={styles.secondaryText}>
+                  Try another category or refresh the live authority.
+                </Text>
+                {emptyAction}
+              </View>
             }
             renderItem={({ item }) => {
               const remainingMs = now === null ? null : Date.parse(item.ends_at) - now;
@@ -276,15 +306,14 @@ export default function HomeScreen() {
                     <Image
                       source={{ uri: item.imageList[0] }}
                       style={styles.cardImg}
-                      accessibilityLabel={`${item.title} auction image`}
+                      resizeMode="cover"
+                      accessible={false}
                     />
                   ) : (
                     <View style={[styles.cardImg, styles.cardImgFallback]} />
                   )}
                   <View style={styles.cardBody}>
-                    <Text numberOfLines={2} style={styles.cardTitle}>
-                      {item.title}
-                    </Text>
+                    <Text style={styles.cardTitle}>{item.title}</Text>
                     <Text style={styles.cardMeta}>
                       {formatUSD(item.current_price)} · {item.bid_count} bids · @
                       {item.seller_username}
@@ -309,133 +338,185 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#F6F9FA" },
-  header: {
-    minHeight: 60,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: LINE,
-    backgroundColor: "#FFFFFF",
-  },
-  wordmark: { fontSize: 22, fontWeight: "800", color: TEAL, letterSpacing: -0.5 },
-  gold: { color: GOLD },
-  headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
-  headerButton: {
-    minHeight: MIN_TOUCH,
-    minWidth: MIN_TOUCH,
-    justifyContent: "center",
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: TEAL,
-  },
-  headerButtonText: { color: TEAL, fontWeight: "700" },
-  authorityRow: {
-    minHeight: MIN_TOUCH,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: LINE,
-    backgroundColor: "#FFFFFF",
-  },
-  dot: { width: 8, height: 8, borderRadius: 4 },
-  dotLive: { backgroundColor: TEAL },
-  dotAttention: { backgroundColor: GOLD },
-  authorityText: { color: MUTED, fontSize: 12, fontWeight: "700" },
-  notice: {
-    marginHorizontal: 12,
-    marginTop: 10,
-    padding: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#C6A652",
-    backgroundColor: "#FFF9E8",
-    gap: 8,
-  },
-  noticeText: { color: "#5F4A17", fontSize: 13 },
-  inlineButton: {
-    minHeight: MIN_TOUCH,
-    alignSelf: "flex-start",
-    justifyContent: "center",
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: OCHRE,
-  },
-  inlineButtonText: { color: OCHRE, fontWeight: "700" },
-  errorBar: {
-    margin: 12,
-    padding: 12,
-    borderRadius: 10,
-    backgroundColor: "#FFF1F1",
-    borderWidth: 1,
-    borderColor: "#E1A9A9",
-    gap: 8,
-  },
-  errorText: { color: DANGER, fontSize: 13 },
-  retryButton: {
-    minHeight: MIN_TOUCH,
-    alignSelf: "flex-start",
-    justifyContent: "center",
-    paddingHorizontal: 14,
-    borderRadius: 8,
-    backgroundColor: DANGER,
-  },
-  retryButtonText: { color: "#FFFFFF", fontWeight: "700" },
-  center: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-    padding: 24,
-  },
-  emptyTitle: { color: INK, fontSize: 17, fontWeight: "700", textAlign: "center" },
-  mutedText: { color: MUTED, fontSize: 13, padding: 12, textAlign: "center" },
-  chipsWrap: {
-    borderBottomWidth: 1,
-    borderBottomColor: LINE,
-    backgroundColor: "#FFFFFF",
-    paddingVertical: 6,
-  },
-  chip: {
-    minHeight: MIN_TOUCH,
-    justifyContent: "center",
-    marginLeft: 10,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: LINE,
-    backgroundColor: "#FFFFFF",
-  },
-  chipActive: { backgroundColor: TEAL, borderColor: TEAL },
-  chipText: { fontSize: 13, fontWeight: "600", color: MUTED },
-  chipTextActive: { color: "#FFFFFF" },
-  listLoading: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  list: { padding: 12, gap: 12, flexGrow: 1 },
-  card: {
-    flexDirection: "row",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: LINE,
-    overflow: "hidden",
-  },
-  cardImg: { width: 104, height: 104 },
-  cardImgFallback: { backgroundColor: TEAL_DEEP },
-  cardBody: { flex: 1, padding: 12, justifyContent: "center", gap: 4 },
-  cardTitle: { fontSize: 15, fontWeight: "700", color: INK },
-  cardMeta: { fontSize: 13, color: MUTED },
-  cardTimer: { fontSize: 12, color: OCHRE, fontWeight: "600" },
-  urgentTimer: { color: DANGER, fontWeight: "800" },
-});
+function createStyles(
+  theme: NxsTheme,
+  screenPadding: number,
+  windowClass: "compact" | "regular" | "wide",
+) {
+  const imageSize = windowClass === "compact" ? 104 : 120;
+
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: theme.surface.canvas },
+    header: {
+      minHeight: 64,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: screenPadding,
+      paddingVertical: 8,
+      backgroundColor: theme.surface.section,
+    },
+    wordmark: {
+      fontSize: 22,
+      lineHeight: 29,
+      fontWeight: "800",
+      color: theme.action.primary,
+      letterSpacing: -0.5,
+    },
+    brandAccent: { color: theme.brand.accent },
+    headerButton: {
+      minHeight: 48,
+      minWidth: 48,
+      justifyContent: "center",
+      paddingHorizontal: 14,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.action.secondary,
+    },
+    headerButtonText: {
+      color: theme.action.secondary,
+      fontSize: 15,
+      lineHeight: 20,
+      fontWeight: "700",
+    },
+    pressed: { opacity: 0.78 },
+    authorityRow: {
+      minHeight: 48,
+      justifyContent: "center",
+      paddingHorizontal: screenPadding,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.border.subtle,
+      backgroundColor: theme.surface.section,
+    },
+    authorityText: {
+      color: theme.text.secondary,
+      fontSize: 13,
+      lineHeight: 18,
+      fontWeight: "700",
+    },
+    warningBox: {
+      marginHorizontal: screenPadding,
+      marginTop: 12,
+      padding: 12,
+      gap: 12,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.border.warning,
+      backgroundColor: theme.surface.raised,
+    },
+    warningText: { color: theme.state.warning, fontSize: 14, lineHeight: 21 },
+    errorBox: {
+      marginHorizontal: screenPadding,
+      marginTop: 12,
+      padding: 12,
+      gap: 12,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.border.error,
+      backgroundColor: theme.surface.raised,
+    },
+    errorText: { color: theme.state.error, fontSize: 14, lineHeight: 21 },
+    center: {
+      flex: 1,
+      width: "100%",
+      maxWidth: 720,
+      alignSelf: "center",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 12,
+      padding: Math.max(screenPadding, 24),
+    },
+    title: {
+      color: theme.text.primary,
+      fontSize: 22,
+      lineHeight: 29,
+      fontWeight: "800",
+      textAlign: "center",
+    },
+    secondaryText: {
+      color: theme.text.secondary,
+      fontSize: 16,
+      lineHeight: 24,
+      textAlign: "center",
+    },
+    chipsWrap: {
+      backgroundColor: theme.surface.section,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.border.subtle,
+    },
+    chipsContent: {
+      gap: 8,
+      paddingHorizontal: screenPadding,
+      paddingVertical: 8,
+    },
+    chip: {
+      minHeight: 48,
+      minWidth: 48,
+      justifyContent: "center",
+      paddingHorizontal: 14,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: theme.border.subtle,
+      backgroundColor: theme.surface.raised,
+    },
+    chipActive: {
+      backgroundColor: theme.action.primary,
+      borderColor: theme.action.primary,
+    },
+    chipText: {
+      color: theme.text.secondary,
+      fontSize: 15,
+      lineHeight: 20,
+      fontWeight: "700",
+      textAlign: "center",
+    },
+    chipTextActive: { color: theme.text.inverse },
+    listLoading: {
+      minHeight: 48,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      paddingHorizontal: screenPadding,
+    },
+    list: {
+      width: "100%",
+      maxWidth: 920,
+      alignSelf: "center",
+      flexGrow: 1,
+      padding: screenPadding,
+      gap: 12,
+    },
+    emptyState: {
+      flexGrow: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 12,
+      paddingVertical: 32,
+    },
+    card: {
+      flexDirection: "row",
+      backgroundColor: theme.surface.raised,
+      borderRadius: 14,
+      overflow: "hidden",
+    },
+    cardImg: { width: imageSize, height: imageSize },
+    cardImgFallback: { backgroundColor: theme.brand.deep },
+    cardBody: { flex: 1, padding: 12, justifyContent: "center", gap: 4 },
+    cardTitle: {
+      color: theme.text.primary,
+      fontSize: 16,
+      lineHeight: 24,
+      fontWeight: "700",
+    },
+    cardMeta: { color: theme.text.secondary, fontSize: 13, lineHeight: 18 },
+    cardTimer: {
+      color: theme.state.warning,
+      fontSize: 13,
+      lineHeight: 18,
+      fontWeight: "700",
+    },
+    urgentTimer: { color: theme.state.error, fontWeight: "800" },
+  });
+}
