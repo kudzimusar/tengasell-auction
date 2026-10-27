@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATIONS = ROOT / "mini-services/trailbase-db/traildepot/migrations/main"
-EXPECTED = [f"U{1_000_000_000 + i}__" for i in range(1, 17)]
+EXPECTED = [f"U{1_000_000_000 + i}__" for i in range(1, 24)]
 
 def connection() -> sqlite3.Connection:
     db = sqlite3.connect(":memory:")
@@ -29,8 +29,8 @@ def connection() -> sqlite3.Connection:
 def migration_files() -> list[Path]:
     files = sorted(MIGRATIONS.glob("U*.sql"))
     names = [p.name for p in files]
-    if len(files) != 16:
-        raise AssertionError(f"expected 16 main migrations, found {names}")
+    if len(files) != 23:
+        raise AssertionError(f"expected 23 main migrations, found {names}")
     for prefix, name in zip(EXPECTED, names):
         if not name.startswith(prefix):
             raise AssertionError(f"migration sequence mismatch: expected {prefix}, got {name}")
@@ -61,6 +61,17 @@ def assert_tip(db: sqlite3.Connection) -> None:
         "auction_timeline_events","auction_operator_alerts",
         "auction_policy_registry","auction_policy_commands","auction_service_health",
         "auction_observability_events","auction_policy_retraction_requests",
+        "pi_category_labels","pi_category_schema_versions",
+        "pi_attribute_definitions","pi_attribute_definition_versions","pi_attribute_labels",
+        "pi_attribute_options","pi_attribute_option_labels","pi_attribute_option_aliases",
+        "pi_category_attributes","pi_fact_assertions","pi_fact_links",
+        "pi_effective_source_policies","pi_effective_source_policy_entries","pi_effective_facts",
+        "pi_visibility_policies","pi_visibility_policy_rules",
+        "pi_vehicle_vocabulary_domains","pi_vehicle_vocabulary_values",
+        "vehicle_history_events","vehicle_modifications","vehicle_equipment",
+        "pi_document_fact_assertions","product_intake_sessions","product_intake_steps",
+        "product_intake_open_commands","product_intake_step_commands","product_intake_publish_commands",
+        "pi_projection_outbox",
     }
     missing = required - tables(db)
     if missing:
@@ -87,6 +98,50 @@ def assert_tip(db: sqlite3.Connection) -> None:
     ).fetchone()
     if legal_review != ("PENDING_LEGAL_REVIEW",0,1):
         raise AssertionError(f"electronic-auction cooling-off legal gate missing: {legal_review}")
+
+    migration_views = {
+        row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='view'")
+    }
+    for required_view in ("pi_vehicle_inspection_projection", "pi_vehicle_public", "pi_vehicle_document_public"):
+        if required_view not in migration_views:
+            raise AssertionError(f"PI projection view missing: {required_view}")
+
+    auction_columns = {row[1] for row in db.execute("PRAGMA table_info(auctions)")}
+    for required_col in ("product_category_id", "product_schema_version_id"):
+        if required_col not in auction_columns:
+            raise AssertionError(f"auctions.{required_col} missing")
+
+    vehicle_columns = {row[1] for row in db.execute("PRAGMA table_info(vehicles)")}
+    for required_col in (
+        "vehicle_class", "body_type", "trim", "manufacture_year", "first_registration_date",
+        "steering_side", "primary_exterior_colour", "engine_code", "power_kw", "torque_nm",
+        "owner_count", "service_history_class", "accident_history", "modification_status",
+        "number_of_keys", "spare_wheel", "tool_kit", "manuals", "service_book",
+    ):
+        if required_col not in vehicle_columns:
+            raise AssertionError(f"vehicles.{required_col} missing")
+
+    vehicle_leaf_keys = {
+        row[0] for row in db.execute(
+            "SELECT category_key FROM categories WHERE parent_id=(SELECT id FROM categories WHERE category_key='VEHICLES_MOBILITY')"
+        )
+    }
+    required_vehicle_leaves = {
+        "VEHICLE_PASSENGER_CAR", "VEHICLE_SUV_CROSSOVER", "VEHICLE_PICKUP", "VEHICLE_VAN_MINIBUS",
+        "VEHICLE_TRUCK", "VEHICLE_BUS", "VEHICLE_MOTORCYCLE", "VEHICLE_AGRICULTURAL",
+        "VEHICLE_SPECIAL_PURPOSE", "VEHICLE_WHOLE_UNCLASSIFIED", "VEHICLE_PARTS_GENERAL",
+    }
+    if not required_vehicle_leaves.issubset(vehicle_leaf_keys):
+        raise AssertionError(f"vehicle hierarchy incomplete: {sorted(required_vehicle_leaves - vehicle_leaf_keys)}")
+
+    public_vehicle_cols = {row[1] for row in db.execute("PRAGMA table_info(pi_vehicle_public)")}
+    forbidden_public_cols = {
+        "vin", "chassis_number", "registration_number", "engine_number", "storage_ref",
+        "document_ref", "user", "owner_user",
+    }
+    leaked = forbidden_public_cols & public_vehicle_cols
+    if leaked:
+        raise AssertionError(f"raw private vehicle fields leaked from pi_vehicle_public: {sorted(leaked)}")
 
     order_columns = {row[1] for row in db.execute("PRAGMA table_info(orders)")}
     if "auction_outcome_key" not in order_columns:
@@ -169,14 +224,15 @@ def main() -> None:
     upgraded.close()
 
     print("TrailBase migration chain proof: PASS")
-    print("  blank fresh install U1 -> U16: PASS")
-    print("  U1-U6 parent -> U16 tip: PASS")
+    print("  blank fresh install U1 -> U23: PASS")
+    print("  U1-U6 parent -> U23 tip: PASS")
     print("  legacy duplicate orders preserved: PASS")
     print("  canonical outcome-key uniqueness: PASS")
     print("  IMP-02/03/04/05/06/07/08/09 + CERT integrity present: PASS")
     print("  AuctionEvent -> LiveSession trigger: PASS")
     print("  redacted auction_public reserve privacy: PASS")
     print("  unconfigured Production policy remains fail-closed: PASS")
+    print("  PI-01D U17-U23 schema/category/privacy/intake projections: PASS")
 
 if __name__ == "__main__":
     main()

@@ -45,7 +45,10 @@ import {
 } from "./auction-core";
 import {
   addVehicleDocument,
+  addVehicleEquipment,
   addVehicleFinding,
+  addVehicleHistoryEvent,
+  addVehicleModification,
   grantVehicleRole,
   reviewVehicleDocument,
   reviewVehicleInspection,
@@ -54,6 +57,14 @@ import {
   submitVehicleInspection,
   vehicleBundle,
 } from "./vehicle-authority";
+import {
+  intakeSession,
+  openProductIntake,
+  productSchema,
+  publicProductBundle,
+  publishIntake,
+  saveIntakeStep,
+} from "./product-intelligence";
 import {
   createAuctionEvent,
   eventBundle,
@@ -1035,14 +1046,86 @@ io.on("connection", (socket: Socket) => {
   // ── IMP-04: Vehicle / Tengasell Inspection authority ───────────────
   socket.on("vehicle:get", async (data: any, ack?: Ack) => {
     try {
-      const viewer = await identityPromise;
+      const viewer = await requireAuth();
+      if (!viewer) return ack?.({ ok: false, code: "AUTH_REQUIRED", error: "Sign in to view internal vehicle records." });
       const auctionId = Number(data?.auctionId);
       if (!Number.isSafeInteger(auctionId) || auctionId <= 0)
         return ack?.({ ok: false, error: "Invalid auction id." });
-      ack?.({ ok: true, bundle: await vehicleBundle(auctionCoreStore, auctionId, viewer) });
+      const bundle = await vehicleBundle(auctionCoreStore, auctionId, viewer);
+      if ((bundle as any).errorCode) {
+        return ack?.({ ok: false, code: (bundle as any).errorCode, error: "This internal vehicle record requires seller or operational authority." });
+      }
+      ack?.({ ok: true, bundle });
     } catch (err) {
       console.error("[vehicle:get]", err);
       ack?.({ ok: false, error: "Vehicle details are temporarily unavailable." });
+    }
+  });
+
+  socket.on("product:public:get", async (data: any, ack?: Ack) => {
+    try {
+      const auctionId = Number(data?.auctionId);
+      if (!Number.isSafeInteger(auctionId) || auctionId <= 0)
+        return ack?.({ ok: false, error: "Invalid auction id." });
+      const bundle = await publicProductBundle(auctionCoreStore, auctionId);
+      if (!bundle.product) return ack?.({ ok: false, error: "Public product details are not available." });
+      ack?.({ ok: true, bundle });
+    } catch (err) {
+      console.error("[product:public:get]", err);
+      ack?.({ ok: false, error: "Public product details are temporarily unavailable." });
+    }
+  });
+
+  socket.on("product:schema:get", async (data: any, ack?: Ack) => {
+    try {
+      ack?.({ ok: true, schema: await productSchema(auctionCoreStore, data?.categoryKey) });
+    } catch (err) {
+      console.error("[product:schema:get]", err);
+      ack?.({ ok: false, error: "Product schema is temporarily unavailable." });
+    }
+  });
+
+  socket.on("product:intake:open", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, code: "AUTH_REQUIRED", error: "Sign in to start seller intake." });
+      ack?.(await openProductIntake(auctionCoreStore, user, data?.intake ?? {}));
+    } catch (err) {
+      console.error("[product:intake:open]", err);
+      ack?.({ ok: false, error: "Product intake could not be opened." });
+    }
+  });
+
+  socket.on("product:intake:get", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, code: "AUTH_REQUIRED", error: "Sign in to resume seller intake." });
+      ack?.(await intakeSession(auctionCoreStore, user, Number(data?.auctionId)));
+    } catch (err) {
+      console.error("[product:intake:get]", err);
+      ack?.({ ok: false, error: "Product intake could not be resumed." });
+    }
+  });
+
+  socket.on("product:intake:step", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, code: "AUTH_REQUIRED", error: "Sign in to save seller intake." });
+      ack?.(await saveIntakeStep(auctionCoreStore, user, data?.step ?? {}));
+    } catch (err) {
+      console.error("[product:intake:step]", err);
+      ack?.({ ok: false, error: "Product intake step could not be saved." });
+    }
+  });
+
+  socket.on("product:intake:publish", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, code: "AUTH_REQUIRED", error: "Sign in to publish seller intake." });
+      ack?.(await publishIntake(auctionCoreStore, user, data?.command ?? {}));
+    } catch (err) {
+      console.error("[product:intake:publish]", err);
+      ack?.({ ok: false, error: "Product publish readiness could not be checked." });
     }
   });
 
@@ -1068,13 +1151,46 @@ io.on("connection", (socket: Socket) => {
     }
   });
 
+  socket.on("vehicle:history:add", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      ack?.(await addVehicleHistoryEvent(auctionCoreStore, audit, user, Number(data?.vehicleId), data?.history ?? {}));
+    } catch (err) {
+      console.error("[vehicle:history:add]", err);
+      ack?.({ ok: false, error: "Vehicle history event could not be recorded." });
+    }
+  });
+
+  socket.on("vehicle:modification:add", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      ack?.(await addVehicleModification(auctionCoreStore, audit, user, Number(data?.vehicleId), data?.modification ?? {}));
+    } catch (err) {
+      console.error("[vehicle:modification:add]", err);
+      ack?.({ ok: false, error: "Vehicle modification could not be recorded." });
+    }
+  });
+
+  socket.on("vehicle:equipment:add", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      ack?.(await addVehicleEquipment(auctionCoreStore, audit, user, Number(data?.vehicleId), data?.equipment ?? {}));
+    } catch (err) {
+      console.error("[vehicle:equipment:add]", err);
+      ack?.({ ok: false, error: "Vehicle equipment could not be recorded." });
+    }
+  });
+
   socket.on("vehicle:document:review", async (data: any, ack?: Ack) => {
     try {
       const user = await requireAuth();
       if (!user) return ack?.({ ok: false, error: "Sign in first." });
       ack?.(await reviewVehicleDocument(
         auctionCoreStore, audit, user, Number(data?.documentId),
-        data?.action === "REJECT" ? "REJECT" : "VERIFY", data?.reason,
+        data?.action === "REJECT" ? "REJECT" : "VERIFY", data?.reason, data?.derivedFact ?? null,
       ));
     } catch (err) {
       console.error("[vehicle:document:review]", err);
