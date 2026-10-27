@@ -540,6 +540,12 @@ export class RemoteApi {
       current_price: input.start_price,
       buy_now_price: input.buy_now_price ?? null,
       reserve_price: input.reserve_price ?? null,
+      reserve_disclosure:
+        input.assetKind === "vehicle"
+          ? input.reserve_price == null
+            ? "NO_RESERVE"
+            : "RESERVE_APPLIES"
+          : undefined,
       bid_count: 0,
       watch_count: 0,
       views: 0,
