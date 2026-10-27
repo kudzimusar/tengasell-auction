@@ -16,24 +16,33 @@ import { useSession } from "../../auth/session-context";
 import { TrailBaseError } from "../../lib/trailbase";
 import { NxsButton } from "../../nxs/components/NxsButton";
 import { useNxs } from "../../nxs/context/NxsProvider";
+import {
+  type NxsTranslator,
+} from "../../nxs/localization/catalog";
+import { localizeKnownRuntimeMessage } from "../../nxs/localization/runtimeMessages";
+import { useNxsText } from "../../nxs/localization/useNxsText";
 import type { NxsTheme } from "../../nxs/tokens";
 
-function loginErrorMessage(error: unknown): string {
+const BRAND = "TengaSell";
+
+function loginErrorMessage(error: unknown, t: NxsTranslator): string {
   if (error instanceof TrailBaseError) {
-    if (error.kind === "mfa-required") {
-      return "This account requires MFA. MFA entry is outside MOB-01; use an account without MFA for this verification unit.";
-    }
-    return error.message;
+    if (error.kind === "mfa-required") return t("login.mfaRequired");
+    return localizeKnownRuntimeMessage(error.message, t, "login.signInFailed");
   }
-  return error instanceof Error ? error.message : "Sign in failed.";
+
+  return error instanceof Error
+    ? localizeKnownRuntimeMessage(error.message, t, "login.signInFailed")
+    : t("login.signInFailed");
 }
 
 export default function LoginScreen() {
   const session = useSession();
-  const { theme, screenPadding, windowClass } = useNxs();
+  const { theme, screenPadding, windowClass, writingDirection } = useNxs();
+  const t = useNxsText();
   const styles = useMemo(
-    () => createStyles(theme, screenPadding, windowClass),
-    [screenPadding, theme, windowClass],
+    () => createStyles(theme, screenPadding, windowClass, writingDirection),
+    [screenPadding, theme, windowClass, writingDirection],
   );
   const passwordRef = useRef<ElementRef<typeof TextInput>>(null);
   const [identifier, setIdentifier] = useState("");
@@ -48,7 +57,7 @@ export default function LoginScreen() {
 
   const submit = async () => {
     if (!identifier.trim() || !password) {
-      setError("Enter your email or username and password.");
+      setError(t("login.enterCredentials"));
       return;
     }
 
@@ -59,7 +68,7 @@ export default function LoginScreen() {
       setPassword("");
       router.replace("/account");
     } catch (submitError) {
-      setError(loginErrorMessage(submitError));
+      setError(loginErrorMessage(submitError, t));
     } finally {
       setSubmitting(false);
     }
@@ -70,38 +79,50 @@ export default function LoginScreen() {
       <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
         <View style={styles.center} accessible accessibilityLiveRegion="polite">
           <ActivityIndicator color={theme.state.loading} size="large" />
-          <Text style={styles.secondaryText}>Restoring your secure session…</Text>
+          <Text style={styles.secondaryText}>{t("login.restoringSession")}</Text>
         </View>
       </SafeAreaView>
     );
   }
 
   if (session.phase === "network-degraded") {
+    const recoveryMessage = localizeKnownRuntimeMessage(
+      session.message,
+      t,
+      "login.recoveryUnavailableFallback",
+    );
+
     return (
       <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
         <View style={styles.center}>
           <Text style={styles.title} accessibilityRole="header">
-            Session recovery unavailable
+            {t("login.recoveryUnavailableTitle")}
           </Text>
           <Text style={styles.secondaryText} accessibilityRole="alert">
-            ⚠ {session.message ?? "The canonical TrailBase authority cannot be reached."}
+            ⚠ {recoveryMessage}
           </Text>
           <View style={styles.actionGroup}>
             <NxsButton
-              label="Retry session recovery"
+              label={t("login.retryRecovery")}
               onPress={() => void session.retrySessionRecovery()}
             />
             <NxsButton
-              label="Clear saved session"
+              label={t("login.clearSavedSession")}
               variant="secondary"
               onPress={() => void session.logout()}
-              accessibilityHint="Removes the locally stored TrailBase session from this device"
+              accessibilityHint={t("login.clearSavedSessionHint")}
             />
           </View>
         </View>
       </SafeAreaView>
     );
   }
+
+  const sessionInvalidMessage = localizeKnownRuntimeMessage(
+    session.message,
+    t,
+    "home.sessionInvalidFallback",
+  );
 
   return (
     <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
@@ -115,26 +136,26 @@ export default function LoginScreen() {
         >
           <View style={styles.panel}>
             <Text style={styles.title} accessibilityRole="header">
-              Sign in to TengaSell
+              {t("login.title", { brand: BRAND })}
             </Text>
-            <Text style={styles.secondaryText}>
-              Credentials are sent only to the canonical TrailBase authentication authority.
-            </Text>
+            <Text style={styles.secondaryText}>{t("login.intro")}</Text>
 
-            {session.phase === "session-invalid" && session.message && (
+            {session.phase === "session-invalid" && (
               <View style={styles.warningBox} accessibilityRole="alert">
-                <Text style={styles.warningText}>⚠ {session.message}</Text>
+                <Text style={styles.warningText}>⚠ {sessionInvalidMessage}</Text>
               </View>
             )}
 
             {error && (
               <View style={styles.errorBox} accessibilityRole="alert">
-                <Text style={styles.errorText}>Error: {error}</Text>
+                <Text style={styles.errorText}>
+                  {t("common.errorWithMessage", { message: error })}
+                </Text>
               </View>
             )}
 
             <View style={styles.field}>
-              <Text style={styles.label}>Email or username</Text>
+              <Text style={styles.label}>{t("login.emailOrUsername")}</Text>
               <TextInput
                 value={identifier}
                 onChangeText={setIdentifier}
@@ -143,7 +164,7 @@ export default function LoginScreen() {
                 autoCorrect={false}
                 autoComplete="username"
                 textContentType="username"
-                accessibilityLabel="Email or username"
+                accessibilityLabel={t("login.emailOrUsername")}
                 returnKeyType="next"
                 onSubmitEditing={() => passwordRef.current?.focus()}
                 blurOnSubmit={false}
@@ -151,7 +172,7 @@ export default function LoginScreen() {
             </View>
 
             <View style={styles.field}>
-              <Text style={styles.label}>Password</Text>
+              <Text style={styles.label}>{t("login.password")}</Text>
               <TextInput
                 ref={passwordRef}
                 value={password}
@@ -162,21 +183,25 @@ export default function LoginScreen() {
                 autoCorrect={false}
                 autoComplete="current-password"
                 textContentType="password"
-                accessibilityLabel="Password"
+                accessibilityLabel={t("login.password")}
                 onSubmitEditing={() => void submit()}
                 returnKeyType="go"
               />
               <NxsButton
-                label={passwordVisible ? "Hide password" : "Show password"}
+                label={
+                  passwordVisible
+                    ? t("login.hidePassword")
+                    : t("login.showPassword")
+                }
                 variant="quiet"
                 onPress={() => setPasswordVisible((visible) => !visible)}
-                accessibilityHint="Changes whether the password characters are visible on screen"
+                accessibilityHint={t("login.passwordVisibilityHint")}
                 accessibilityState={{ expanded: passwordVisible }}
               />
             </View>
 
             <NxsButton
-              label="Sign in"
+              label={t("login.signIn")}
               loading={submitting}
               disabled={submitting}
               onPress={() => void submit()}
@@ -192,8 +217,10 @@ function createStyles(
   theme: NxsTheme,
   screenPadding: number,
   windowClass: "compact" | "regular" | "wide",
+  writingDirection: "ltr" | "rtl",
 ) {
   const maxWidth = windowClass === "compact" ? undefined : 560;
+  const textAlign = writingDirection === "rtl" ? "right" : "left";
 
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: theme.surface.canvas },
@@ -225,11 +252,13 @@ function createStyles(
       fontSize: 26,
       lineHeight: 34,
       fontWeight: "800",
+      textAlign,
     },
     secondaryText: {
       color: theme.text.secondary,
       fontSize: 16,
       lineHeight: 24,
+      textAlign,
     },
     field: { gap: 8 },
     label: {
@@ -237,6 +266,7 @@ function createStyles(
       fontSize: 15,
       lineHeight: 20,
       fontWeight: "700",
+      textAlign,
     },
     input: {
       minHeight: 48,
@@ -249,6 +279,7 @@ function createStyles(
       fontSize: 16,
       lineHeight: 24,
       color: theme.text.primary,
+      textAlign,
     },
     warningBox: {
       padding: 12,
@@ -257,7 +288,12 @@ function createStyles(
       borderColor: theme.border.warning,
       backgroundColor: theme.surface.raised,
     },
-    warningText: { color: theme.state.warning, fontSize: 14, lineHeight: 21 },
+    warningText: {
+      color: theme.state.warning,
+      fontSize: 14,
+      lineHeight: 21,
+      textAlign,
+    },
     errorBox: {
       padding: 12,
       borderRadius: 10,
@@ -265,7 +301,12 @@ function createStyles(
       borderColor: theme.border.error,
       backgroundColor: theme.surface.raised,
     },
-    errorText: { color: theme.state.error, fontSize: 14, lineHeight: 21 },
+    errorText: {
+      color: theme.state.error,
+      fontSize: 14,
+      lineHeight: 21,
+      textAlign,
+    },
     actionGroup: { gap: 12 },
   });
 }

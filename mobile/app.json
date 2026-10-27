@@ -25,10 +25,20 @@
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-localization",
+        {
+          "supportedLocales": {
+            "ios": ["en"],
+            "android": ["en"]
+          }
+        }
+      ]
     ],
     "extra": {
-      "tengasellNote": "EXPO_PUBLIC_TENGASELL_API is required for canonical gateway access; NXS 1.0 governs the native experience layer."
+      "tengasellNote": "EXPO_PUBLIC_TENGASELL_API is required for canonical gateway access; NXS 1.0 governs the native experience layer.",
+      "nxsPseudoLocale": "Set EXPO_PUBLIC_NXS_LOCALE=en-XA or ar-XB only for development/certification stress testing."
     }
   }
 }

@@ -7,6 +7,7 @@ import {
 } from "react-native";
 
 import { useNxs } from "../context/NxsProvider";
+import { useNxsText } from "../localization/useNxsText";
 
 export type NxsButtonVariant = "primary" | "secondary" | "destructive" | "quiet";
 
@@ -26,7 +27,10 @@ export function NxsButton({
   ...props
 }: NxsButtonProps) {
   const { theme, tokens } = useNxs();
+  const t = useNxsText();
   const blocked = Boolean(disabled || loading);
+  const spokenLabel = accessibilityLabel ?? label;
+
   const styles = StyleSheet.create({
     base: {
       minHeight: tokens.touch.minimum,
@@ -67,7 +71,7 @@ export function NxsButton({
       {...props}
       disabled={blocked}
       accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel ?? label}
+      accessibilityLabel={spokenLabel}
       accessibilityState={{
         ...accessibilityState,
         disabled: blocked,
@@ -83,7 +87,7 @@ export function NxsButton({
       {loading ? (
         <ActivityIndicator
           color={variant === "primary" ? theme.text.inverse : theme.action.primary}
-          accessibilityLabel={`${label} in progress`}
+          accessibilityLabel={t("common.inProgress", { action: spokenLabel })}
         />
       ) : (
         <Text style={styles.label}>{label}</Text>

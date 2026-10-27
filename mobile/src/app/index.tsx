@@ -18,22 +18,32 @@ import { fetchAuctions, fetchCategories, probeCanonical } from "../lib/trailbase
 import { toAuctionView, type AuctionView, type Category } from "../lib/types";
 import { NxsButton } from "../nxs/components/NxsButton";
 import { useNxs } from "../nxs/context/NxsProvider";
+import { localizeKnownRuntimeMessage } from "../nxs/localization/runtimeMessages";
+import {
+  type NxsTranslator,
+} from "../nxs/localization/catalog";
+import { useNxsText } from "../nxs/localization/useNxsText";
 import type { NxsTheme } from "../nxs/tokens";
+
+const BRAND = "TengaSell";
+const BRAND_PREFIX = "Tenga";
+const BRAND_SUFFIX = "Sell";
 
 type AuthorityState = "checking" | "live" | "unavailable";
 
-function errorMessage(error: unknown): string {
+function errorMessage(error: unknown, t: NxsTranslator): string {
   return error instanceof Error
-    ? error.message
-    : "Canonical auction authority is unavailable.";
+    ? localizeKnownRuntimeMessage(error.message, t, "common.genericUnavailable")
+    : t("common.genericUnavailable");
 }
 
 export default function HomeScreen() {
   const session = useSession();
-  const { theme, screenPadding, windowClass } = useNxs();
+  const { theme, screenPadding, windowClass, writingDirection } = useNxs();
+  const t = useNxsText();
   const styles = useMemo(
-    () => createStyles(theme, screenPadding, windowClass),
-    [screenPadding, theme, windowClass],
+    () => createStyles(theme, screenPadding, windowClass, writingDirection),
+    [screenPadding, theme, windowClass, writingDirection],
   );
   const [authorityState, setAuthorityState] = useState<AuthorityState>("checking");
   const [categories, setCategories] = useState<Category[]>([]);
@@ -67,9 +77,9 @@ export default function HomeScreen() {
       setCategories([]);
       setAuctions([]);
       setAuthorityState("unavailable");
-      setError(errorMessage(bootError));
+      setError(errorMessage(bootError, t));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     const task = setTimeout(() => {
@@ -84,57 +94,76 @@ export default function HomeScreen() {
     void boot();
   }, [boot]);
 
-  const loadCategory = useCallback(async (slug?: string) => {
-    setCategory(slug);
-    setListLoading(true);
-    setError(null);
-    try {
-      const nextAuctions = await fetchAuctions({ category: slug, limit: 40 });
-      setAuctions(nextAuctions.map(toAuctionView));
-      setAuthorityState("live");
-    } catch (loadError) {
-      setError(errorMessage(loadError));
-    } finally {
-      setListLoading(false);
-    }
-  }, []);
+  const loadCategory = useCallback(
+    async (slug?: string) => {
+      setCategory(slug);
+      setListLoading(true);
+      setError(null);
+      try {
+        const nextAuctions = await fetchAuctions({ category: slug, limit: 40 });
+        setAuctions(nextAuctions.map(toAuctionView));
+        setAuthorityState("live");
+      } catch (loadError) {
+        setError(errorMessage(loadError, t));
+      } finally {
+        setListLoading(false);
+      }
+    },
+    [t],
+  );
 
   const emptyAction = category ? (
     <NxsButton
-      label="Show featured auctions"
+      label={t("home.showFeaturedAuctions")}
       variant="secondary"
       onPress={() => void loadCategory(undefined)}
     />
   ) : (
-    <NxsButton label="Refresh auctions" variant="secondary" onPress={retryCanonical} />
+    <NxsButton
+      label={t("home.refreshAuctions")}
+      variant="secondary"
+      onPress={retryCanonical}
+    />
+  );
+
+  const sessionInvalidMessage = localizeKnownRuntimeMessage(
+    session.message,
+    t,
+    "home.sessionInvalidFallback",
+  );
+  const sessionRecoveryMessage = localizeKnownRuntimeMessage(
+    session.message,
+    t,
+    "home.sessionRecoveryUnavailable",
   );
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>
       <View style={styles.header}>
         <Text style={styles.wordmark} accessibilityRole="header">
-          Tenga<Text style={styles.brandAccent}>Sell</Text>
+          {BRAND_PREFIX}
+          <Text style={styles.brandAccent}>{BRAND_SUFFIX}</Text>
         </Text>
         {session.phase === "authenticated" ? (
           <Link href="/account" asChild>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Open account"
+              accessibilityLabel={t("home.openAccount")}
               hitSlop={4}
               style={({ pressed }) => [styles.headerButton, pressed && styles.pressed]}
             >
-              <Text style={styles.headerButtonText}>Account</Text>
+              <Text style={styles.headerButtonText}>{t("nav.account")}</Text>
             </Pressable>
           </Link>
         ) : (
           <Link href="/auth/login" asChild>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Sign in to TengaSell"
+              accessibilityLabel={t("home.signInA11y", { brand: BRAND })}
               hitSlop={4}
               style={({ pressed }) => [styles.headerButton, pressed && styles.pressed]}
             >
-              <Text style={styles.headerButtonText}>Sign in</Text>
+              <Text style={styles.headerButtonText}>{t("nav.signIn")}</Text>
             </Pressable>
           </Link>
         )}
@@ -146,38 +175,32 @@ export default function HomeScreen() {
         accessibilityLiveRegion="polite"
         accessibilityLabel={
           authorityState === "checking"
-            ? "Checking canonical auction authority"
+            ? t("home.authorityCheckingA11y")
             : authorityState === "live"
-              ? "Canonical auction authority connected"
-              : "Canonical auction authority unavailable"
+              ? t("home.authorityConnectedA11y")
+              : t("home.authorityUnavailableA11y")
         }
       >
         <Text style={styles.authorityText}>
           {authorityState === "checking"
-            ? "● Checking canonical authority"
+            ? t("home.authorityChecking")
             : authorityState === "live"
-              ? "● Canonical authority connected"
-              : "⚠ Canonical authority unavailable"}
+              ? t("home.authorityConnected")
+              : t("home.authorityUnavailable")}
         </Text>
       </View>
 
       {session.phase === "session-invalid" && (
         <View style={styles.warningBox} accessibilityRole="alert">
-          <Text style={styles.warningText}>
-            ⚠ {session.message ?? "Your saved session is no longer valid. Sign in again."}
-          </Text>
+          <Text style={styles.warningText}>⚠ {sessionInvalidMessage}</Text>
         </View>
       )}
 
       {session.phase === "network-degraded" && (
         <View style={styles.warningBox} accessibilityRole="alert">
-          <Text style={styles.warningText}>
-            ⚠{" "}
-            {session.message ??
-              "Session recovery is unavailable while the authority cannot be reached."}
-          </Text>
+          <Text style={styles.warningText}>⚠ {sessionRecoveryMessage}</Text>
           <NxsButton
-            label="Retry session"
+            label={t("home.retrySession")}
             variant="secondary"
             onPress={() => void session.retrySessionRecovery()}
           />
@@ -186,9 +209,11 @@ export default function HomeScreen() {
 
       {error && authorityState === "live" && (
         <View style={styles.errorBox} accessibilityRole="alert">
-          <Text style={styles.errorText}>Error: {error}</Text>
+          <Text style={styles.errorText}>
+            {t("common.errorWithMessage", { message: error })}
+          </Text>
           <NxsButton
-            label="Retry auction request"
+            label={t("home.retryAuctionRequest")}
             variant="secondary"
             onPress={() => void loadCategory(category)}
           />
@@ -200,22 +225,22 @@ export default function HomeScreen() {
           <ActivityIndicator
             color={theme.state.loading}
             size="large"
-            accessibilityLabel="Loading auctions"
+            accessibilityLabel={t("home.loadingAuctionsA11y")}
           />
-          <Text style={styles.secondaryText}>Loading live auction data…</Text>
+          <Text style={styles.secondaryText}>{t("home.loadingAuctions")}</Text>
         </View>
       ) : authorityState === "unavailable" ? (
         <View style={styles.center}>
           <Text style={styles.title} accessibilityRole="header">
-            Live auctions are temporarily unavailable
+            {t("home.liveUnavailableTitle")}
           </Text>
           <Text style={styles.secondaryText}>
-            {error ?? "The canonical authority cannot be reached."}
+            {error ?? t("common.canonicalUnreachable")}
           </Text>
           <Text style={styles.secondaryText}>
-            TengaSell has not substituted demo or cached commercial authority.
+            {t("home.noDemoFallback", { brand: BRAND })}
           </Text>
-          <NxsButton label="Retry canonical authority" onPress={retryCanonical} />
+          <NxsButton label={t("home.retryCanonical")} onPress={retryCanonical} />
         </View>
       ) : (
         <>
@@ -229,7 +254,7 @@ export default function HomeScreen() {
                 onPress={() => void loadCategory(undefined)}
                 accessibilityRole="button"
                 accessibilityState={{ selected: !category }}
-                accessibilityLabel="Show featured auctions"
+                accessibilityLabel={t("home.showFeaturedAuctions")}
                 hitSlop={4}
                 style={({ pressed }) => [
                   styles.chip,
@@ -238,7 +263,7 @@ export default function HomeScreen() {
                 ]}
               >
                 <Text style={[styles.chipText, !category && styles.chipTextActive]}>
-                  Featured
+                  {t("home.featured")}
                 </Text>
               </Pressable>
               {categories.map((item) => (
@@ -247,7 +272,9 @@ export default function HomeScreen() {
                   onPress={() => void loadCategory(item.slug)}
                   accessibilityRole="button"
                   accessibilityState={{ selected: category === item.slug }}
-                  accessibilityLabel={`Show ${item.name} auctions`}
+                  accessibilityLabel={t("home.showCategoryAuctions", {
+                    category: item.name,
+                  })}
                   hitSlop={4}
                   style={({ pressed }) => [
                     styles.chip,
@@ -271,7 +298,7 @@ export default function HomeScreen() {
           {listLoading && (
             <View style={styles.listLoading} accessible accessibilityLiveRegion="polite">
               <ActivityIndicator color={theme.state.loading} />
-              <Text style={styles.secondaryText}>Refreshing auctions…</Text>
+              <Text style={styles.secondaryText}>{t("home.refreshingAuctions")}</Text>
             </View>
           )}
 
@@ -282,10 +309,10 @@ export default function HomeScreen() {
             ListEmptyComponent={
               <View style={styles.emptyState}>
                 <Text style={styles.title} accessibilityRole="header">
-                  No live auctions here
+                  {t("home.noLiveAuctions")}
                 </Text>
                 <Text style={styles.secondaryText}>
-                  Try another category or refresh the live authority.
+                  {t("home.tryAnotherCategory")}
                 </Text>
                 {emptyAction}
               </View>
@@ -293,14 +320,23 @@ export default function HomeScreen() {
             renderItem={({ item }) => {
               const remainingMs = now === null ? null : Date.parse(item.ends_at) - now;
               const remaining =
-                remainingMs === null ? "Updating time…" : formatRemaining(remainingMs);
+                remainingMs === null
+                  ? t("home.updatingTime")
+                  : formatRemaining(remainingMs);
               const severity =
                 remainingMs === null ? "normal" : remainingSeverity(remainingMs);
+              const price = formatUSD(item.current_price);
+
               return (
                 <View
                   style={styles.card}
                   accessible
-                  accessibilityLabel={`${item.title}. ${formatUSD(item.current_price)}. ${item.bid_count} bids. ${remaining} remaining.`}
+                  accessibilityLabel={t("home.auctionA11y", {
+                    title: item.title,
+                    price,
+                    bidCount: item.bid_count,
+                    remaining,
+                  })}
                 >
                   {item.imageList[0] ? (
                     <Image
@@ -315,8 +351,11 @@ export default function HomeScreen() {
                   <View style={styles.cardBody}>
                     <Text style={styles.cardTitle}>{item.title}</Text>
                     <Text style={styles.cardMeta}>
-                      {formatUSD(item.current_price)} · {item.bid_count} bids · @
-                      {item.seller_username}
+                      {t("home.auctionMeta", {
+                        price,
+                        bidCount: item.bid_count,
+                        seller: item.seller_username,
+                      })}
                     </Text>
                     <Text
                       style={[
@@ -324,8 +363,9 @@ export default function HomeScreen() {
                         severity === "urgent" && styles.urgentTimer,
                       ]}
                     >
-                      {item.endingSoon ? "Ending soon · " : "Time remaining · "}
-                      {remaining}
+                      {item.endingSoon
+                        ? t("home.endingSoon", { remaining })
+                        : t("home.timeRemaining", { remaining })}
                     </Text>
                   </View>
                 </View>
@@ -342,14 +382,17 @@ function createStyles(
   theme: NxsTheme,
   screenPadding: number,
   windowClass: "compact" | "regular" | "wide",
+  writingDirection: "ltr" | "rtl",
 ) {
   const imageSize = windowClass === "compact" ? 104 : 120;
+  const textAlign = writingDirection === "rtl" ? "right" : "left";
+  const rowDirection = writingDirection === "rtl" ? "row-reverse" : "row";
 
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: theme.surface.canvas },
     header: {
       minHeight: 64,
-      flexDirection: "row",
+      flexDirection: rowDirection,
       alignItems: "center",
       justifyContent: "space-between",
       paddingHorizontal: screenPadding,
@@ -362,6 +405,7 @@ function createStyles(
       fontWeight: "800",
       color: theme.action.primary,
       letterSpacing: -0.5,
+      textAlign,
     },
     brandAccent: { color: theme.brand.accent },
     headerButton: {
@@ -378,6 +422,7 @@ function createStyles(
       fontSize: 15,
       lineHeight: 20,
       fontWeight: "700",
+      textAlign: "center",
     },
     pressed: { opacity: 0.78 },
     authorityRow: {
@@ -394,6 +439,7 @@ function createStyles(
       fontSize: 13,
       lineHeight: 18,
       fontWeight: "700",
+      textAlign,
     },
     warningBox: {
       marginHorizontal: screenPadding,
@@ -405,7 +451,12 @@ function createStyles(
       borderColor: theme.border.warning,
       backgroundColor: theme.surface.raised,
     },
-    warningText: { color: theme.state.warning, fontSize: 14, lineHeight: 21 },
+    warningText: {
+      color: theme.state.warning,
+      fontSize: 14,
+      lineHeight: 21,
+      textAlign,
+    },
     errorBox: {
       marginHorizontal: screenPadding,
       marginTop: 12,
@@ -416,7 +467,12 @@ function createStyles(
       borderColor: theme.border.error,
       backgroundColor: theme.surface.raised,
     },
-    errorText: { color: theme.state.error, fontSize: 14, lineHeight: 21 },
+    errorText: {
+      color: theme.state.error,
+      fontSize: 14,
+      lineHeight: 21,
+      textAlign,
+    },
     center: {
       flex: 1,
       width: "100%",
@@ -446,6 +502,7 @@ function createStyles(
       borderColor: theme.border.subtle,
     },
     chipsContent: {
+      flexDirection: rowDirection,
       gap: 8,
       paddingHorizontal: screenPadding,
       paddingVertical: 8,
@@ -474,7 +531,7 @@ function createStyles(
     chipTextActive: { color: theme.text.inverse },
     listLoading: {
       minHeight: 48,
-      flexDirection: "row",
+      flexDirection: rowDirection,
       alignItems: "center",
       justifyContent: "center",
       gap: 8,
@@ -496,7 +553,7 @@ function createStyles(
       paddingVertical: 32,
     },
     card: {
-      flexDirection: "row",
+      flexDirection: rowDirection,
       backgroundColor: theme.surface.raised,
       borderRadius: 14,
       overflow: "hidden",
@@ -509,13 +566,20 @@ function createStyles(
       fontSize: 16,
       lineHeight: 24,
       fontWeight: "700",
+      textAlign,
     },
-    cardMeta: { color: theme.text.secondary, fontSize: 13, lineHeight: 18 },
+    cardMeta: {
+      color: theme.text.secondary,
+      fontSize: 13,
+      lineHeight: 18,
+      textAlign,
+    },
     cardTimer: {
       color: theme.state.warning,
       fontSize: 13,
       lineHeight: 18,
       fontWeight: "700",
+      textAlign,
     },
     urgentTimer: { color: theme.state.error, fontWeight: "800" },
   });

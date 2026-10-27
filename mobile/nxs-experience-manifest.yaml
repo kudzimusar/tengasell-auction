@@ -29,6 +29,9 @@ internationalization:
     - "en"
   rtl_ready: true
   pseudolocalization: "required"
+  pseudo_ltr: "en-XA"
+  pseudo_rtl: "ar-XB"
+  test_override: "EXPO_PUBLIC_NXS_LOCALE"
 accessibility:
   large_text: "required"
   screen_reader: "required"
@@ -44,5 +47,5 @@ certification:
   hard_block_accessibility: true
 scope:
   programme: "TENGASELL-MOBILE-01"
-  work_unit: "MOB-01-R1"
+  work_unit: "MOB-01-R2"
   note: "NXS governs the native presentation and interaction layer only; canonical product, auth, security, data and commercial authority remain unchanged."
