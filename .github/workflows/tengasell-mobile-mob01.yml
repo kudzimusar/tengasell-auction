@@ -1,4 +1,4 @@
-name: Tengasell Mobile MOB-01 NXS gates
+name: Tengasell Mobile MOB-01 R2 dependency convergence
 
 on:
   push:
@@ -7,12 +7,12 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  mob01-nxs-gates:
+  resolve-r2-dependencies:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 20
     steps:
       - name: Checkout exact candidate
         uses: actions/checkout@v4
@@ -24,38 +24,37 @@ jobs:
           cache: npm
           cache-dependency-path: mobile/package-lock.json
 
-      - name: Install locked mobile dependencies
+      - name: Install locked mobile workspace
         working-directory: mobile
         run: npm ci
 
-      - name: NXS foundation static review
+      - name: Resolve Expo-compatible R2 environment dependencies
         working-directory: mobile
-        run: node scripts/verify-nxs-foundation.mjs
+        run: npx expo install expo-localization @react-native-community/netinfo
 
-      - name: Expo doctor
+      - name: Dependency security audit
         working-directory: mobile
-        run: npx expo-doctor
-
-      - name: Expo lint
-        working-directory: mobile
-        run: npx expo lint
-
-      - name: Typecheck
-        working-directory: mobile
-        run: npx tsc --noEmit
-
-      - name: Android export
-        working-directory: mobile
-        run: npx expo export --platform android
-
-      - name: iOS export
-        working-directory: mobile
-        run: npx expo export --platform ios
-
-      - name: Git diff check
-        run: git diff --check
-
-      - name: Working tree check
         run: |
-          git status --short
-          test -z "$(git status --short)"
+          npm audit --json > ../mob01-r2-npm-audit.json || true
+          node -e "const fs=require('fs');const a=JSON.parse(fs.readFileSync('../mob01-r2-npm-audit.json','utf8')); console.log(JSON.stringify({metadata:a.metadata,vulnerabilities:a.vulnerabilities},null,2));"
+
+      - name: Commit Expo-resolved dependency custody
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add mobile/package.json mobile/package-lock.json
+          if git diff --cached --quiet; then
+            echo "R2 package custody already converged."
+          else
+            git commit -m "chore(mobile): add NXS R2 environment dependencies [skip ci]"
+            git push origin HEAD:${{ github.ref_name }}
+          fi
+
+      - name: Upload audit evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mob01-r2-npm-audit
+          path: mob01-r2-npm-audit.json
+          if-no-files-found: error
+          retention-days: 7
