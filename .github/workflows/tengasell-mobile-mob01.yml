@@ -38,6 +38,8 @@ jobs:
           expo-linking
           expo-constants
           expo-secure-store
+          react-dom
+          react-native-web
 
       - name: Resolve Expo SDK-compatible lint dependencies
         working-directory: mobile
