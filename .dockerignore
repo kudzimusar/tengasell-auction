@@ -27,3 +27,6 @@ rebuild.log
 npm-install.log
 smoke-server.log
 tengasell-auction.zip
+
+# Native mobile workspace (built and released by EAS, not part of the web image)
+/mobile/

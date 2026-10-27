@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "TengaSell",
+    "slug": "tengasell",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#19717B",
+    "splash": {
+      "image": "./assets/adaptive-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#19717B"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.tengasell.app"
+    },
+    "android": {
+      "package": "com.tengasell.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#19717B",
+        "foregroundImage": "./assets/adaptive-icon.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "tengasellNote": "EXPO_PUBLIC_TENGASELL_API sets the gateway base URL (see src/lib/trailbase.ts)"
+    }
+  }
+}
