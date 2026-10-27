@@ -1,0 +1,59 @@
+name: Tengasell Mobile MOB-01 dependency convergence
+
+on:
+  push:
+    branches:
+      - feat/tengasell-mobile-01-product-foundation
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  resolve-sdk-dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v4
+
+      - name: Use Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install current mobile workspace
+        working-directory: mobile
+        run: npm ci
+
+      - name: Resolve Expo SDK-compatible runtime dependencies
+        working-directory: mobile
+        run: >-
+          npx expo install
+          expo-router
+          react-native-safe-area-context
+          react-native-screens
+          expo-linking
+          expo-constants
+          expo-secure-store
+
+      - name: Resolve Expo SDK-compatible lint dependencies
+        working-directory: mobile
+        run: npx expo install eslint eslint-config-expo --dev
+
+      - name: Static type probe after dependency resolution
+        working-directory: mobile
+        run: npx tsc --noEmit
+
+      - name: Upload resolved package custody
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mob01-resolved-package-custody
+          path: |
+            mobile/package.json
+            mobile/package-lock.json
+          if-no-files-found: error
+          retention-days: 7
