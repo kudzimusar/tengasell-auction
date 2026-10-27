@@ -73,7 +73,7 @@ import {
 } from "@/lib/tengasell/format";
 import { useCategories } from "@/lib/tengasell/hooks";
 import { useLinkProps } from "@/lib/tengasell/router";
-import type { Auction, VehicleIntakeInput } from "@/lib/tengasell/types";
+import type { Auction, ProductSchemaBundle, VehicleIntakeInput } from "@/lib/tengasell/types";
 import {
   Avatar,
   Countdown,
@@ -149,6 +149,13 @@ type VehicleFormState = {
   ownershipStatus: VehicleIntakeInput["ownershipStatus"];
   customsStatus: VehicleIntakeInput["customsStatus"];
   ownershipDocRef: string; registrationDocRef: string; customsDocRef: string;
+  trim: string; manufactureYear: string; firstRegistrationDate: string;
+  vehicleClass: string; bodyType: string; steeringSide: string;
+  doors: string; seats: string; primaryExteriorColour: string;
+  serviceHistoryClass: string; accidentHistory: string; repairHistory: string;
+  modificationStatus: string; numberOfKeys: string;
+  spareKey: boolean | null; spareWheel: boolean | null; toolKit: boolean | null;
+  manuals: boolean | null; serviceBook: boolean | null;
 };
 
 const EMPTY_VEHICLE: VehicleFormState = {
@@ -158,7 +165,18 @@ const EMPTY_VEHICLE: VehicleFormState = {
   fuelType: "PETROL", transmission: "AUTOMATIC", drivetrain: "RWD",
   odometerKm: "", ownershipStatus: "DECLARED_OWNER", customsStatus: "LOCAL",
   ownershipDocRef: "", registrationDocRef: "", customsDocRef: "",
+  trim: "", manufactureYear: "", firstRegistrationDate: "",
+  vehicleClass: "UNKNOWN", bodyType: "UNKNOWN", steeringSide: "UNKNOWN",
+  doors: "", seats: "", primaryExteriorColour: "UNKNOWN",
+  serviceHistoryClass: "UNKNOWN", accidentHistory: "UNKNOWN", repairHistory: "UNKNOWN",
+  modificationStatus: "UNKNOWN", numberOfKeys: "",
+  spareKey: null, spareWheel: null, toolKit: null, manuals: null, serviceBook: null,
 };
+
+const PRODUCT_INTAKE_STEPS = [
+  "CATEGORY", "IDENTITY", "TECHNICAL", "PHYSICAL", "CONDITION",
+  "HISTORY", "DOCUMENTS", "MEDIA", "COMMERCIAL", "REVIEW",
+] as const;
 
 const STEP_DEFS = [
   { id: 1, short: "Photos", label: "Photos & basics" },
@@ -315,6 +333,10 @@ export default function SellNewPage() {
   const [city, setCity] = useState("");
   const [vehicleAssetKind, setVehicleAssetKind] = useState<VehicleAssetKind>("vehicle");
   const [vehicleForm, setVehicleForm] = useState<VehicleFormState>(EMPTY_VEHICLE);
+  const [productCategoryKey, setProductCategoryKey] = useState("VEHICLE_WHOLE_UNCLASSIFIED");
+  const [productSchema, setProductSchema] = useState<ProductSchemaBundle | null>(null);
+  const requestedProductCategoryKey = vehicleAssetKind === "part" ? "VEHICLE_PARTS_GENERAL" : productCategoryKey;
+  const productSchemaLoading = category === "vehicles" && productSchema?.category?.key !== requestedProductCategoryKey;
 
   const [startPrice, setStartPrice] = useState("");
   const [buyNowPrice, setBuyNowPrice] = useState("");
@@ -353,9 +375,21 @@ export default function SellNewPage() {
       user?.profile?.city &&
       KNOWN_CITIES.has(user.profile.city)
     ) {
-      setCity(user.profile.city);
+      const profileCity = user.profile.city;
+      const timer = window.setTimeout(() => setCity(profileCity), 0);
+      return () => window.clearTimeout(timer);
     }
   }, [user, city]);
+
+  useEffect(() => {
+    if (category !== "vehicles") return;
+    const requested = requestedProductCategoryKey;
+    let active = true;
+    api.productSchema(requested)
+      .then((schema) => { if (active) setProductSchema(schema); })
+      .catch(() => { if (active) setProductSchema(null); });
+    return () => { active = false; };
+  }, [category, requestedProductCategoryKey]);
 
   // scroll wizard into view on step change (skip first mount)
   useEffect(() => {
@@ -558,7 +592,7 @@ export default function SellNewPage() {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const auction = await api.createAuction({
+      const listingInput = {
         title: title.trim(),
         description: description.trim(),
         category,
@@ -580,11 +614,32 @@ export default function SellNewPage() {
           allowOffers && offerMinNum != null && offerMinNum >= 1
             ? round2(offerMinNum)
             : null,
-        assetKind:
-          category === "vehicles"
-            ? vehicleAssetKind
-            : "general",
-      });
+        assetKind: category === "vehicles" ? vehicleAssetKind : "general" as const,
+      };
+      let auction: Auction;
+      let intakeSession: { id: number; revision: number } | null = null;
+      if (category === "vehicles") {
+        const opened = await api.openProductIntake({
+          categoryKey: vehicleAssetKind === "part" ? "VEHICLE_PARTS_GENERAL" : productCategoryKey,
+          title: listingInput.title,
+          description: listingInput.description,
+          condition: listingInput.condition,
+          start_price: listingInput.start_price,
+          buy_now_price: listingInput.buy_now_price,
+          reserve_price: listingInput.reserve_price,
+          shipping_fee: listingInput.shipping_fee,
+          shipping: listingInput.shipping,
+          city: listingInput.city,
+          durationHours: listingInput.durationHours,
+          images: listingInput.images,
+          allowOffers: listingInput.allowOffers,
+          offerMin: listingInput.offerMin,
+        });
+        auction = opened.auction;
+        intakeSession = opened.session;
+      } else {
+        auction = await api.createAuction(listingInput);
+      }
 
       if (isWholeVehicle) {
         const bundle = await api.saveVehicleIntake(auction.id, {
@@ -608,6 +663,25 @@ export default function SellNewPage() {
           ownershipStatus: vehicleForm.ownershipStatus,
           customsStatus: vehicleForm.customsStatus,
           requestedDurationHours: durationHours,
+          vehicleClass: vehicleForm.vehicleClass,
+          bodyType: vehicleForm.bodyType,
+          trim: vehicleForm.trim.trim() || null,
+          manufactureYear: vehicleForm.manufactureYear ? Number(vehicleForm.manufactureYear) : null,
+          firstRegistrationDate: vehicleForm.firstRegistrationDate || null,
+          steeringSide: vehicleForm.steeringSide,
+          doors: vehicleForm.doors ? Number(vehicleForm.doors) : null,
+          seats: vehicleForm.seats ? Number(vehicleForm.seats) : null,
+          primaryExteriorColour: vehicleForm.primaryExteriorColour,
+          serviceHistoryClass: vehicleForm.serviceHistoryClass,
+          accidentHistory: vehicleForm.accidentHistory,
+          repairHistory: vehicleForm.repairHistory,
+          modificationStatus: vehicleForm.modificationStatus,
+          numberOfKeys: vehicleForm.numberOfKeys ? Number(vehicleForm.numberOfKeys) : null,
+          spareKey: vehicleForm.spareKey,
+          spareWheel: vehicleForm.spareWheel,
+          toolKit: vehicleForm.toolKit,
+          manuals: vehicleForm.manuals,
+          serviceBook: vehicleForm.serviceBook,
         });
         if (!bundle.vehicle) throw new Error("Vehicle intake was not persisted.");
 
@@ -626,6 +700,31 @@ export default function SellNewPage() {
             documentType: "CUSTOMS_CLEARANCE",
             documentRef: vehicleForm.customsDocRef.trim(),
           });
+        }
+      }
+      if (intakeSession) {
+        const stepData: Record<(typeof PRODUCT_INTAKE_STEPS)[number], Record<string, unknown>> = {
+          CATEGORY: { productCategoryKey: vehicleAssetKind === "part" ? "VEHICLE_PARTS_GENERAL" : productCategoryKey },
+          IDENTITY: { vin: vehicleVin || null, chassisNumber: vehicleChassis || null, registrationNumber: vehicleForm.registrationNumber || null, make: vehicleForm.make, model: vehicleForm.model, modelYear: vehicleYear, trim: vehicleForm.trim || null },
+          TECHNICAL: { fuelType: vehicleForm.fuelType, transmission: vehicleForm.transmission, drivetrain: vehicleForm.drivetrain, odometerKm: vehicleOdometer },
+          PHYSICAL: { bodyType: vehicleForm.bodyType, steeringSide: vehicleForm.steeringSide, doors: vehicleForm.doors || null, seats: vehicleForm.seats || null, exteriorColour: vehicleForm.primaryExteriorColour },
+          CONDITION: { condition, serviceHistoryClass: vehicleForm.serviceHistoryClass, accidentHistory: vehicleForm.accidentHistory, repairHistory: vehicleForm.repairHistory },
+          HISTORY: { modificationStatus: vehicleForm.modificationStatus },
+          DOCUMENTS: { ownershipDeclared: !!vehicleForm.ownershipDocRef, registrationDeclared: !!vehicleForm.registrationDocRef, customsDeclared: !!vehicleForm.customsDocRef, artefactsPendingUpload: true },
+          MEDIA: { imageCount: images.length },
+          COMMERCIAL: { startPrice: round2(startNum), buyNowPrice: buyNowNum, reserveDisclosure: reserveNum == null ? "NO_RESERVE" : "RESERVE_APPLIES", durationHours },
+          REVIEW: { sellerDeclarationAccepted: true, inspectionRequired: isWholeVehicle },
+        };
+        let revision = intakeSession.revision;
+        for (const stepKey of PRODUCT_INTAKE_STEPS) {
+          const session = await api.saveProductIntakeStep({
+            sessionId: intakeSession.id,
+            expectedRevision: revision,
+            stepKey,
+            complete: true,
+            data: stepData[stepKey],
+          });
+          revision = session.revision;
         }
       }
       // Gap-8 F1: featured fee is charged AFTER the listing exists, so a fee
@@ -682,6 +781,8 @@ export default function SellNewPage() {
     setDescription("");
     setVehicleAssetKind("vehicle");
     setVehicleForm(EMPTY_VEHICLE);
+    setProductCategoryKey("VEHICLE_WHOLE_UNCLASSIFIED");
+    setProductSchema(null);
     setStartPrice("");
     setBuyNowPrice("");
     setReservePrice("");
@@ -961,6 +1062,10 @@ export default function SellNewPage() {
             vehicleForm={vehicleForm}
             setVehicleForm={setVehicleForm}
             vehicleError={errors.vehicle}
+            productCategoryKey={productCategoryKey}
+            setProductCategoryKey={setProductCategoryKey}
+            productSchema={productSchema}
+            productSchemaLoading={productSchemaLoading}
           />
         )}
 
@@ -1137,6 +1242,10 @@ function StepPhotos(props: {
   vehicleForm: VehicleFormState;
   setVehicleForm: (v: VehicleFormState) => void;
   vehicleError: string | null;
+  productCategoryKey: string;
+  setProductCategoryKey: (v: string) => void;
+  productSchema: ProductSchemaBundle | null;
+  productSchemaLoading: boolean;
 }) {
   const {
     images,
@@ -1170,7 +1279,14 @@ function StepPhotos(props: {
     vehicleForm,
     setVehicleForm,
     vehicleError,
+    productCategoryKey,
+    setProductCategoryKey,
+    productSchema,
+    productSchemaLoading,
   } = props;
+
+  const schemaKeys = new Set(productSchema?.attributes.map((attribute) => attribute.attribute_key) ?? []);
+  const schemaIncludes = (key: string) => productSchemaLoading || !productSchema || schemaKeys.has(key);
 
   return (
     <section aria-labelledby="step1-heading" className="space-y-6">
@@ -1420,7 +1536,11 @@ function StepPhotos(props: {
 
           <RadioGroup
             value={vehicleAssetKind}
-            onValueChange={(v) => setVehicleAssetKind(v as VehicleAssetKind)}
+            onValueChange={(v) => {
+              const next = v as VehicleAssetKind;
+              setVehicleAssetKind(next);
+              setProductCategoryKey(next === "part" ? "VEHICLE_PARTS_GENERAL" : "VEHICLE_WHOLE_UNCLASSIFIED");
+            }}
             className="grid gap-2 sm:grid-cols-2"
             aria-label="Vehicle listing type"
           >
@@ -1433,6 +1553,36 @@ function StepPhotos(props: {
               <span><span className="block font-semibold">Part / accessory</span><span className="text-caption text-muted-foreground">Normal marketplace listing</span></span>
             </Label>
           </RadioGroup>
+
+          <div className="rounded-input border border-border bg-card p-3 sm:p-4">
+            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+              <FieldShell label="Product type" htmlFor="vehicle-product-type" hint="Product fields and requiredness come from the active governed schema.">
+                <Select
+                  value={vehicleAssetKind === "part" ? "VEHICLE_PARTS_GENERAL" : productCategoryKey}
+                  disabled={vehicleAssetKind === "part" || productSchemaLoading}
+                  onValueChange={setProductCategoryKey}
+                >
+                  <SelectTrigger id="vehicle-product-type" className="h-11 min-h-11"><SelectValue placeholder="Choose a product type" /></SelectTrigger>
+                  <SelectContent>
+                    {(productSchema?.categories ?? [])
+                      .filter((item) => vehicleAssetKind === "part" ? item.key === "VEHICLE_PARTS_GENERAL" : item.key !== "VEHICLE_PARTS_GENERAL")
+                      .map((item) => <SelectItem key={item.key} value={item.key}>{item.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </FieldShell>
+              <div className="text-caption text-muted-foreground sm:text-right">
+                <p className="font-semibold text-foreground">{productSchema?.schema?.key ?? (productSchemaLoading ? "Loading schema…" : "Schema unavailable")}</p>
+                <p>{productSchema?.attributes.filter((item) => item.publish_required === 1).length ?? 0} publish-required facts</p>
+              </div>
+            </div>
+            <ol aria-label="Seller intake workflow" className="mt-4 flex gap-2 overflow-x-auto pb-1">
+              {PRODUCT_INTAKE_STEPS.map((item, index) => (
+                <li key={item} className="flex shrink-0 items-center gap-2 rounded-pill border border-border bg-muted/50 px-2.5 py-1 text-[10px] font-semibold text-muted-foreground">
+                  <span className="grid size-4 place-items-center rounded-full bg-teal text-[9px] text-white">{index + 1}</span>{item.replaceAll("_", " ")}
+                </li>
+              ))}
+            </ol>
+          </div>
 
           {vehicleAssetKind === "vehicle" && (
             <div className="space-y-5">
@@ -1473,6 +1623,27 @@ function StepPhotos(props: {
                     onChange={(e) => setVehicleForm({ ...vehicleForm, variant: e.target.value })}
                     className="h-11 min-h-11" placeholder="GD-6" />
                 </FieldShell>
+                {schemaIncludes("TRIM") && (
+                  <FieldShell label="Trim" htmlFor="vehicle-trim">
+                    <Input id="vehicle-trim" value={vehicleForm.trim}
+                      onChange={(e) => setVehicleForm({ ...vehicleForm, trim: e.target.value })}
+                      className="h-11 min-h-11" placeholder="Product grade / trim" />
+                  </FieldShell>
+                )}
+                {schemaIncludes("MANUFACTURE_YEAR") && (
+                  <FieldShell label="Manufacture year" htmlFor="vehicle-manufacture-year">
+                    <Input id="vehicle-manufacture-year" type="number" min={1900} value={vehicleForm.manufactureYear}
+                      onChange={(e) => setVehicleForm({ ...vehicleForm, manufactureYear: e.target.value })}
+                      className="h-11 min-h-11" placeholder="Unknown if not documented" />
+                  </FieldShell>
+                )}
+                {schemaIncludes("FIRST_REGISTRATION_DATE") && (
+                  <FieldShell label="First registration date" htmlFor="vehicle-first-registration">
+                    <Input id="vehicle-first-registration" type="date" value={vehicleForm.firstRegistrationDate}
+                      onChange={(e) => setVehicleForm({ ...vehicleForm, firstRegistrationDate: e.target.value })}
+                      className="h-11 min-h-11" />
+                  </FieldShell>
+                )}
                 <FieldShell label="Odometer (km)" htmlFor="vehicle-odometer">
                   <Input id="vehicle-odometer" type="number" min={0} inputMode="numeric"
                     value={vehicleForm.odometerKm}
@@ -1501,6 +1672,45 @@ function StepPhotos(props: {
                     <Select value={vehicleForm[key]} onValueChange={(v) => setVehicleForm({ ...vehicleForm, [key]: v })}>
                       <SelectTrigger className="h-11 min-h-11"><SelectValue /></SelectTrigger>
                       <SelectContent>{options.map((o) => <SelectItem key={o} value={o}>{o.replaceAll("_"," ")}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </FieldShell>
+                ))}
+                {([
+                  ["Vehicle class", "vehicleClass", ["PASSENGER_CAR","SUV_CROSSOVER","PICKUP","VAN_MINIBUS","TRUCK","BUS","MOTORCYCLE","AGRICULTURAL","SPECIAL_PURPOSE","OTHER","UNKNOWN"]],
+                  ["Body type", "bodyType", ["SEDAN","HATCHBACK","WAGON","COUPE","CONVERTIBLE","SUV","CROSSOVER","PICKUP_SINGLE_CAB","PICKUP_DOUBLE_CAB","VAN","MINIBUS","TRUCK","BUS","MOTORCYCLE","TRACTOR","OTHER","UNKNOWN"]],
+                  ["Steering side", "steeringSide", ["RIGHT","LEFT","CENTRE","OTHER","UNKNOWN"]],
+                  ["Exterior colour", "primaryExteriorColour", ["BLACK","WHITE","SILVER","GREY","RED","BLUE","GREEN","BROWN","BEIGE","GOLD","ORANGE","YELLOW","PURPLE","MULTICOLOUR","OTHER","UNKNOWN"]],
+                  ["Service history", "serviceHistoryClass", ["FULL_MANUFACTURER","FULL_INDEPENDENT","PARTIAL","NONE_DECLARED","OTHER","UNKNOWN"]],
+                  ["Accident history", "accidentHistory", ["NONE_DECLARED","ACCIDENT_DECLARED","DAMAGE_DECLARED","OTHER","UNKNOWN"]],
+                  ["Repair history", "repairHistory", ["NONE_DECLARED","REPAIRED","PAINTWORK","MULTIPLE_REPAIRS","OTHER","UNKNOWN"]],
+                  ["Modification status", "modificationStatus", ["STANDARD","MODIFIED","RESTORED","CONVERTED","OTHER","UNKNOWN"]],
+                ] as const).filter(([, key]) => schemaIncludes({
+                  vehicleClass: "VEHICLE_CLASS", bodyType: "BODY_TYPE", steeringSide: "STEERING_SIDE",
+                  primaryExteriorColour: "EXTERIOR_COLOUR", serviceHistoryClass: "SERVICE_HISTORY_CLASS",
+                  accidentHistory: "ACCIDENT_HISTORY", repairHistory: "REPAIR_HISTORY", modificationStatus: "MODIFICATION_STATUS",
+                }[key])).map(([label,key,options]) => (
+                  <FieldShell key={key} label={label}>
+                    <Select value={vehicleForm[key]} onValueChange={(v) => setVehicleForm({ ...vehicleForm, [key]: v })}>
+                      <SelectTrigger className="h-11 min-h-11"><SelectValue /></SelectTrigger>
+                      <SelectContent>{options.map((option) => <SelectItem key={option} value={option}>{option.replaceAll("_", " ")}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </FieldShell>
+                ))}
+                {schemaIncludes("DOORS") && <FieldShell label="Doors" htmlFor="vehicle-doors"><Input id="vehicle-doors" type="number" min={0} max={20} value={vehicleForm.doors} onChange={(e) => setVehicleForm({ ...vehicleForm, doors: e.target.value })} className="h-11 min-h-11" /></FieldShell>}
+                {schemaIncludes("SEATS") && <FieldShell label="Seats" htmlFor="vehicle-seats"><Input id="vehicle-seats" type="number" min={1} max={200} value={vehicleForm.seats} onChange={(e) => setVehicleForm({ ...vehicleForm, seats: e.target.value })} className="h-11 min-h-11" /></FieldShell>}
+                {schemaIncludes("NUMBER_OF_KEYS") && <FieldShell label="Number of keys" htmlFor="vehicle-keys"><Input id="vehicle-keys" type="number" min={0} max={20} value={vehicleForm.numberOfKeys} onChange={(e) => setVehicleForm({ ...vehicleForm, numberOfKeys: e.target.value })} className="h-11 min-h-11" placeholder="Unknown if not counted" /></FieldShell>}
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                {([
+                  ["Spare key", "spareKey", "SPARE_KEY"], ["Spare wheel", "spareWheel", "SPARE_WHEEL"],
+                  ["Tool kit", "toolKit", "TOOL_KIT"], ["Manuals", "manuals", "MANUALS"], ["Service book", "serviceBook", "SERVICE_BOOK"],
+                ] as const).filter(([, , attribute]) => schemaIncludes(attribute)).map(([label, key]) => (
+                  <FieldShell key={key} label={label}>
+                    <Select value={vehicleForm[key] == null ? "UNKNOWN" : vehicleForm[key] ? "YES" : "NO"}
+                      onValueChange={(value) => setVehicleForm({ ...vehicleForm, [key]: value === "UNKNOWN" ? null : value === "YES" })}>
+                      <SelectTrigger className="h-11 min-h-11"><SelectValue /></SelectTrigger>
+                      <SelectContent><SelectItem value="UNKNOWN">Unknown</SelectItem><SelectItem value="YES">Yes</SelectItem><SelectItem value="NO">No</SelectItem></SelectContent>
                     </Select>
                   </FieldShell>
                 ))}

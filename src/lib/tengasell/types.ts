@@ -434,9 +434,9 @@ export interface CurrentUser {
 
 // ── IMP-04 Vehicle / Tengasell Inspection ─────────────────────────────
 
-export type VehicleFuel = "PETROL" | "DIESEL" | "HYBRID" | "ELECTRIC" | "LPG" | "OTHER";
-export type VehicleTransmission = "MANUAL" | "AUTOMATIC" | "CVT" | "DCT" | "OTHER";
-export type VehicleDrivetrain = "FWD" | "RWD" | "AWD" | "4WD" | "OTHER";
+export type VehicleFuel = "PETROL" | "DIESEL" | "HYBRID" | "ELECTRIC" | "LPG" | "OTHER" | "UNKNOWN";
+export type VehicleTransmission = "MANUAL" | "AUTOMATIC" | "CVT" | "DCT" | "OTHER" | "UNKNOWN";
+export type VehicleDrivetrain = "FWD" | "RWD" | "AWD" | "4WD" | "OTHER" | "UNKNOWN";
 export type VehicleGrade = "A" | "B" | "C" | "D" | "E" | "REJECT";
 
 export interface VehicleIntakeInput {
@@ -458,6 +458,44 @@ export interface VehicleIntakeInput {
   ownershipStatus: "DECLARED_OWNER" | "FINANCED" | "THIRD_PARTY" | "UNKNOWN";
   customsStatus: "LOCAL" | "CLEARED" | "PENDING" | "NOT_APPLICABLE" | "UNKNOWN";
   requestedDurationHours: number;
+  vehicleClass?: string | null;
+  bodyType?: string | null;
+  modelCode?: string | null;
+  generationSeries?: string | null;
+  trim?: string | null;
+  manufactureYear?: number | null;
+  firstRegistrationDate?: string | null;
+  steeringSide?: string | null;
+  doors?: number | null;
+  seats?: number | null;
+  cabType?: string | null;
+  primaryExteriorColour?: string | null;
+  manufacturerColourName?: string | null;
+  manufacturerColourCode?: string | null;
+  interiorColour?: string | null;
+  interiorMaterial?: string | null;
+  engineCode?: string | null;
+  powerKw?: number | null;
+  torqueNm?: number | null;
+  gearCount?: number | null;
+  hybridType?: string | null;
+  evBatteryCapacityKwh?: number | null;
+  evRangeKm?: number | null;
+  ownerCount?: number | null;
+  originCountry?: string | null;
+  firstRegistrationCountry?: string | null;
+  importSourceCountry?: string | null;
+  serviceHistoryClass?: string | null;
+  accidentHistory?: string | null;
+  repairHistory?: string | null;
+  structuralRepairHistory?: string | null;
+  modificationStatus?: string | null;
+  numberOfKeys?: number | null;
+  spareKey?: boolean | null;
+  spareWheel?: boolean | null;
+  toolKit?: boolean | null;
+  manuals?: boolean | null;
+  serviceBook?: boolean | null;
 }
 
 export interface Vehicle {
@@ -483,6 +521,44 @@ export interface Vehicle {
   ownership_status: string;
   customs_status: string;
   requested_duration_hours: number;
+  vehicle_class: string | null;
+  body_type: string | null;
+  model_code: string | null;
+  generation_series: string | null;
+  trim: string | null;
+  manufacture_year: number | null;
+  first_registration_date: string | null;
+  steering_side: string | null;
+  doors: number | null;
+  seats: number | null;
+  cab_type: string | null;
+  primary_exterior_colour: string | null;
+  manufacturer_colour_name: string | null;
+  manufacturer_colour_code: string | null;
+  interior_colour: string | null;
+  interior_material: string | null;
+  engine_code: string | null;
+  power_kw: number | null;
+  torque_nm: number | null;
+  gear_count: number | null;
+  hybrid_type: string | null;
+  ev_battery_capacity_kwh: number | null;
+  ev_range_km: number | null;
+  owner_count: number | null;
+  origin_country: string | null;
+  first_registration_country: string | null;
+  import_source_country: string | null;
+  service_history_class: string | null;
+  accident_history: string | null;
+  repair_history: string | null;
+  structural_repair_history: string | null;
+  modification_status: string | null;
+  number_of_keys: number | null;
+  spare_key: number | null;
+  spare_wheel: number | null;
+  tool_kit: number | null;
+  manuals: number | null;
+  service_book: number | null;
   declaration_accepted_at: string;
   lifecycle: "INTAKE" | "INSPECTION" | "REVIEW" | "ELIGIBLE" | "INELIGIBLE" | "RETIRED";
   tengasell_grade: VehicleGrade | null;
@@ -500,6 +576,10 @@ export interface VehicleDocument {
   status: "DECLARED" | "UPLOADED" | "VERIFIED" | "REJECTED" | "EXPIRED";
   verified_at: string | null;
   rejection_reason?: string | null;
+  document_number?: string | null;
+  artifact_required?: number;
+  artifact_state?: "NOT_REQUIRED" | "MISSING" | "STORED" | "VERIFIED" | "REJECTED";
+  historic_review_required?: number;
 }
 
 export interface VehicleInspection {
@@ -564,4 +644,56 @@ export interface VehicleBundle {
   eligibilityReasons?: VehicleEligibilityReason[];
   provenance?: Record<string, "SELLER_DECLARATION" | "DOCUMENT" | "INSPECTION" | "REVIEW">;
   permissions: { inspect: boolean; review: boolean; administer: boolean };
+}
+
+export interface ProductSchemaAttribute {
+  attribute_key: string;
+  data_type: "TEXT" | "INTEGER" | "DECIMAL" | "BOOLEAN" | "DATE" | "DATETIME" | "ENUM" | "MULTI_ENUM" | "MEASUREMENT" | "IDENTIFIER";
+  label: string;
+  display_group: string;
+  display_order: number;
+  draft_required: number;
+  publish_required: number;
+  eligibility_required: number;
+  privacy_policy_key: string;
+  validation: Record<string, unknown>;
+  canonicalUnit: string | null;
+  options: { key: string; label: string }[];
+}
+
+export interface ProductSchemaBundle {
+  categories: { id: number; key: string; label: string; kind: string }[];
+  category: { id: number; key: string; label: string } | null;
+  schema: { id: number; key: string; version: number; hash: string } | null;
+  attributes: ProductSchemaAttribute[];
+}
+
+export interface ProductIntakeSession {
+  id: number;
+  auction_id: number;
+  category_id: number;
+  schema_version_id: number;
+  state: "DRAFT" | "READY_FOR_PUBLISH" | "PUBLISHED" | "ABANDONED";
+  current_step: string;
+  revision: number;
+  updated_at: string;
+}
+
+export interface PublicProductFact {
+  key: string;
+  group: string;
+  value: unknown;
+  unit?: string | null;
+  source: string;
+  conflict: "NONE" | "LOWER_TRUST_DISAGREEMENT" | "PEER_CONFLICT" | "RESOLVED";
+}
+
+export interface PublicProductBundle {
+  product: Record<string, unknown> | null;
+  facts: PublicProductFact[];
+  documents: Record<string, unknown>[];
+  history: Record<string, unknown>[];
+  modifications: Record<string, unknown>[];
+  equipment: Record<string, unknown>[];
+  findings: Record<string, unknown>[];
 }

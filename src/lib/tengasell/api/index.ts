@@ -7,7 +7,7 @@
 import { LocalStore } from "./local";
 import { RemoteApi } from "./remote";
 import { AuctionAuthorityError, DEGRADED_COMMERCIAL_MUTATIONS, isExplicitDemoIntent } from "@/lib/auction-authority";
-import type { Auction, AuctionEvent, AuctionEventBundle, AuctionQuery, Bid, BidResult, Category, CurrentUser, LiveSession, Message, Notification, Offer, Order, Paginated, Payment, Profile, Question, Rating, RunListCommandInput, SavedSearch, SaveSearchInput, Thread, VehicleBundle, VehicleDocument, VehicleFinding, VehicleInspection, VehicleIntakeInput } from "../types";
+import type { Auction, AuctionEvent, AuctionEventBundle, AuctionQuery, Bid, BidResult, Category, CurrentUser, LiveSession, Message, Notification, Offer, Order, Paginated, Payment, ProductIntakeSession, ProductSchemaBundle, Profile, PublicProductBundle, Question, Rating, RunListCommandInput, SavedSearch, SaveSearchInput, Thread, VehicleBundle, VehicleDocument, VehicleFinding, VehicleInspection, VehicleIntakeInput } from "../types";
 
 export type ApiMode = "live" | "demo" | "degraded";
 
@@ -36,14 +36,35 @@ export interface TengasellApi {
   askQuestion(auctionId: number, body: string): Promise<Question>;
   answerQuestion(questionId: number, body: string): Promise<Question>;
   createAuction(input: Parameters<RemoteApi["createAuction"]>[0]): Promise<Auction>;
+  productSchema(categoryKey?: string): Promise<ProductSchemaBundle>;
+  publicProductForAuction(auctionId: number): Promise<PublicProductBundle>;
+  openProductIntake(input: Parameters<RemoteApi["openProductIntake"]>[0]): Promise<{ auction: Auction; session: ProductIntakeSession; schema: ProductSchemaBundle }>;
+  productIntakeSession(auctionId: number): Promise<{ session: ProductIntakeSession; steps: Record<string, unknown>[] }>;
+  saveProductIntakeStep(input: Parameters<RemoteApi["saveProductIntakeStep"]>[0]): Promise<ProductIntakeSession>;
+  publishProductIntake(input: Parameters<RemoteApi["publishProductIntake"]>[0]): Promise<ProductIntakeSession>;
   // IMP-04 Vehicle / Tengasell Inspection authority.
   vehicleForAuction(auctionId: number): Promise<VehicleBundle>;
   saveVehicleIntake(auctionId: number, vehicle: VehicleIntakeInput): Promise<VehicleBundle>;
+  addVehicleHistoryEvent(vehicleId: number, history: {
+    eventType: string; title: string; description?: string; occurredOn?: string | null;
+    odometerKm?: number | null; providerName?: string | null; countryCode?: string | null;
+  }): Promise<Record<string, unknown>>;
+  addVehicleModification(vehicleId: number, modification: {
+    category: string; title: string; description?: string; installedOn?: string | null;
+    installer?: string | null; approvalReference?: string | null; reversible?: boolean | null;
+  }): Promise<Record<string, unknown>>;
+  addVehicleEquipment(vehicleId: number, equipment: {
+    equipmentType: string; equipmentKey?: string | null; label: string; description?: string;
+    quantity?: number; included?: boolean; conditionState?: string | null;
+  }): Promise<Record<string, unknown>>;
   addVehicleDocument(vehicleId: number, document: {
     documentType: string; documentRef: string; issuer?: string | null;
     issuedAt?: string | null; expiresAt?: string | null; storageRef?: string | null;
+    documentNumber?: string | null; artifactRequired?: boolean;
   }): Promise<VehicleDocument>;
-  reviewVehicleDocument(documentId: number, action: "VERIFY" | "REJECT", reason?: string): Promise<VehicleDocument>;
+  reviewVehicleDocument(documentId: number, action: "VERIFY" | "REJECT", reason?: string, derivedFact?: {
+    attributeKey: string; value: unknown; extractionPath: string;
+  } | null): Promise<VehicleDocument>;
   startVehicleInspection(vehicleId: number): Promise<VehicleInspection>;
   addVehicleFinding(inspectionId: number, finding: {
     category: string; component: string; location?: string | null; severity: string;

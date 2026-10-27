@@ -48,7 +48,9 @@ function Spec({ label, value, provenance }: { label: string; value: unknown; pro
 export function VehicleDetails({ auctionId }: { auctionId: number }) {
   const { user } = useAuth();
   const res = useResource<VehicleBundle>(
-    () => api.vehicleForAuction(auctionId),
+    () => user
+      ? api.vehicleForAuction(auctionId)
+      : Promise.resolve({ vehicle: null, permissions: { inspect: false, review: false, administer: false } }),
     [auctionId, user?.username],
   );
   const bundle = res.data;
@@ -96,6 +98,7 @@ export function VehicleDetails({ auctionId }: { auctionId: number }) {
     return <div className="min-h-40 animate-pulse rounded-card bg-muted" aria-busy="true" />;
   }
   if (res.error) {
+    if (res.error.includes("authority") || res.error.includes("AUTH_REQUIRED")) return null;
     return (
       <div role="alert" className="rounded-card border border-danger/30 bg-danger/5 p-4 text-caption text-danger">
         Vehicle authority could not be loaded. {res.error}

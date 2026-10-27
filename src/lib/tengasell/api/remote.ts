@@ -24,6 +24,9 @@ import type {
   Paginated,
   Payment,
   Profile,
+  ProductIntakeSession,
+  ProductSchemaBundle,
+  PublicProductBundle,
   Question,
   Rating,
   RunListCommandInput,
@@ -580,6 +583,95 @@ export class RemoteApi {
   }
 
   // ── IMP-04 Vehicle / Tengasell Inspection ───────────────────────
+  async productSchema(categoryKey?: string): Promise<ProductSchemaBundle> {
+    const res = await rpc<{ ok: boolean; schema?: ProductSchemaBundle }>("product:schema:get", { categoryKey });
+    if (!res.schema) throw new Error("Product schema could not be loaded.");
+    return res.schema;
+  }
+
+  async publicProductForAuction(auctionId: number): Promise<PublicProductBundle> {
+    const res = await rpc<{ ok: boolean; bundle?: PublicProductBundle }>("product:public:get", { auctionId });
+    if (!res.bundle) throw new Error("Public product details could not be loaded.");
+    return res.bundle;
+  }
+
+  async openProductIntake(input: {
+    categoryKey: string;
+    title: string;
+    description: string;
+    condition: string;
+    start_price: number;
+    buy_now_price?: number | null;
+    reserve_price?: number | null;
+    shipping_fee?: number;
+    shipping: string;
+    city: string;
+    durationHours: number;
+    images: string[];
+    allowOffers?: boolean;
+    offerMin?: number | null;
+  }): Promise<{ auction: Auction; session: ProductIntakeSession; schema: ProductSchemaBundle }> {
+    const now = Date.now();
+    const res = await rpc<{
+      ok: boolean; auction?: Auction; session?: ProductIntakeSession; schema?: ProductSchemaBundle;
+    }>("product:intake:open", {
+      intake: {
+        commandId: globalThis.crypto.randomUUID(),
+        categoryKey: input.categoryKey,
+        title: input.title,
+        slug: slugify(input.title) + "-" + now.toString(36),
+        description: input.description,
+        condition: input.condition,
+        start_price: input.start_price,
+        buy_now_price: input.buy_now_price ?? null,
+        reserve_price: input.reserve_price ?? null,
+        shipping_fee: input.shipping_fee ?? 0,
+        shipping: input.shipping,
+        city: input.city,
+        ends_at: new Date(now + input.durationHours * 3600_000).toISOString().replace(/\.\d+Z$/, "Z"),
+        images: input.images,
+        allow_offers: !!input.allowOffers,
+        offer_min: input.offerMin ?? null,
+      },
+    });
+    if (!res.auction || !res.session || !res.schema) throw new Error("Product intake could not be opened.");
+    return { auction: res.auction, session: res.session, schema: res.schema };
+  }
+
+  async productIntakeSession(auctionId: number): Promise<{ session: ProductIntakeSession; steps: Record<string, unknown>[] }> {
+    const res = await rpc<{ ok: boolean; session?: ProductIntakeSession; steps?: Record<string, unknown>[] }>(
+      "product:intake:get", { auctionId },
+    );
+    if (!res.session) throw new Error("Product intake session could not be loaded.");
+    return { session: res.session, steps: res.steps ?? [] };
+  }
+
+  async saveProductIntakeStep(input: {
+    sessionId: number;
+    expectedRevision: number;
+    stepKey: string;
+    complete: boolean;
+    data?: Record<string, unknown>;
+  }): Promise<ProductIntakeSession> {
+    const res = await rpc<{ ok: boolean; session?: ProductIntakeSession }>("product:intake:step", {
+      step: { ...input, commandId: globalThis.crypto.randomUUID() },
+    });
+    if (!res.session) throw new Error("Product intake step could not be saved.");
+    return res.session;
+  }
+
+  async publishProductIntake(input: {
+    sessionId: number;
+    expectedRevision: number;
+    commandType: "CHECK_READY" | "PUBLISH" | "ABANDON";
+  }): Promise<ProductIntakeSession> {
+    const res = await rpc<{ ok: boolean; session?: ProductIntakeSession }>("product:intake:publish", {
+      command: { ...input, commandId: globalThis.crypto.randomUUID() },
+    });
+    if (!res.session) throw new Error("Product intake publish check could not be saved.");
+    return res.session;
+  }
+
   async vehicleForAuction(auctionId: number): Promise<VehicleBundle> {
     const res = await rpc<{ ok: boolean; bundle?: VehicleBundle }>("vehicle:get", { auctionId });
     return res.bundle ?? { vehicle: null, permissions: { inspect: false, review: false, administer: false } };
@@ -590,11 +682,39 @@ export class RemoteApi {
     return this.vehicleForAuction(auctionId);
   }
 
+  async addVehicleHistoryEvent(vehicleId: number, history: {
+    eventType: string; title: string; description?: string; occurredOn?: string | null;
+    odometerKm?: number | null; providerName?: string | null; countryCode?: string | null;
+  }): Promise<Record<string, unknown>> {
+    const res = await rpc<{ ok: boolean; historyEvent?: Record<string, unknown> }>("vehicle:history:add", { vehicleId, history });
+    if (!res.historyEvent) throw new Error("Vehicle history event could not be read back.");
+    return res.historyEvent;
+  }
+
+  async addVehicleModification(vehicleId: number, modification: {
+    category: string; title: string; description?: string; installedOn?: string | null;
+    installer?: string | null; approvalReference?: string | null; reversible?: boolean | null;
+  }): Promise<Record<string, unknown>> {
+    const res = await rpc<{ ok: boolean; modification?: Record<string, unknown> }>("vehicle:modification:add", { vehicleId, modification });
+    if (!res.modification) throw new Error("Vehicle modification could not be read back.");
+    return res.modification;
+  }
+
+  async addVehicleEquipment(vehicleId: number, equipment: {
+    equipmentType: string; equipmentKey?: string | null; label: string; description?: string;
+    quantity?: number; included?: boolean; conditionState?: string | null;
+  }): Promise<Record<string, unknown>> {
+    const res = await rpc<{ ok: boolean; equipment?: Record<string, unknown> }>("vehicle:equipment:add", { vehicleId, equipment });
+    if (!res.equipment) throw new Error("Vehicle equipment could not be read back.");
+    return res.equipment;
+  }
+
   async addVehicleDocument(
     vehicleId: number,
     document: {
       documentType: string; documentRef: string; issuer?: string | null;
       issuedAt?: string | null; expiresAt?: string | null; storageRef?: string | null;
+      documentNumber?: string | null; artifactRequired?: boolean;
     },
   ): Promise<VehicleDocument> {
     const res = await rpc<{ ok: boolean; document?: VehicleDocument }>("vehicle:document:add", { vehicleId, document });
@@ -602,9 +722,11 @@ export class RemoteApi {
     return res.document;
   }
 
-  async reviewVehicleDocument(documentId: number, action: "VERIFY" | "REJECT", reason?: string): Promise<VehicleDocument> {
+  async reviewVehicleDocument(documentId: number, action: "VERIFY" | "REJECT", reason?: string, derivedFact?: {
+    attributeKey: string; value: unknown; extractionPath: string;
+  } | null): Promise<VehicleDocument> {
     const res = await rpc<{ ok: boolean; document?: VehicleDocument }>(
-      "vehicle:document:review", { documentId, action, reason: reason ?? null },
+      "vehicle:document:review", { documentId, action, reason: reason ?? null, derivedFact: derivedFact ?? null },
     );
     if (!res.document) throw new Error("Vehicle document review could not be read back.");
     return res.document;
