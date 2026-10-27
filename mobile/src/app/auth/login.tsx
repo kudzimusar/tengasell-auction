@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ElementRef } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -30,12 +30,12 @@ function loginErrorMessage(error: unknown): string {
 
 export default function LoginScreen() {
   const session = useSession();
-  const { theme, tokens, screenPadding, windowClass } = useNxs();
+  const { theme, screenPadding, windowClass } = useNxs();
   const styles = useMemo(
     () => createStyles(theme, screenPadding, windowClass),
     [screenPadding, theme, windowClass],
   );
-  const passwordRef = useRef<TextInput>(null);
+  const passwordRef = useRef<ElementRef<typeof TextInput>>(null);
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [passwordVisible, setPasswordVisible] = useState(false);
