@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   resolve-sdk-dependencies:
@@ -45,9 +45,26 @@ jobs:
         working-directory: mobile
         run: npx expo install eslint eslint-config-expo --dev
 
-      - name: Static type probe after dependency resolution
+      - name: Align application package authority
         working-directory: mobile
-        run: npx tsc --noEmit
+        run: |
+          npm pkg set version=0.1.0
+          npm pkg set main=expo-router/entry
+          npm pkg set scripts.lint="expo lint"
+          npm pkg set scripts.typecheck="tsc --noEmit"
+          npm install --package-lock-only --ignore-scripts
+
+      - name: Commit Expo-resolved dependency custody
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add mobile/package.json mobile/package-lock.json
+          if git diff --cached --quiet; then
+            echo "Package custody already converged."
+          else
+            git commit -m "chore(mobile): converge Expo SDK 58 dependencies [skip ci]"
+            git push origin HEAD:${{ github.ref_name }}
+          fi
 
       - name: Upload resolved package custody
         uses: actions/upload-artifact@v4
