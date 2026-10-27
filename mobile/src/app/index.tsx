@@ -30,7 +30,7 @@ function errorMessage(error: unknown): string {
 
 export default function HomeScreen() {
   const session = useSession();
-  const { theme, tokens, screenPadding, windowClass } = useNxs();
+  const { theme, screenPadding, windowClass } = useNxs();
   const styles = useMemo(
     () => createStyles(theme, screenPadding, windowClass),
     [screenPadding, theme, windowClass],
