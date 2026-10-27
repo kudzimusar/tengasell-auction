@@ -73,7 +73,10 @@ export default function HomeScreen() {
   }, []);
 
   useEffect(() => {
-    void boot();
+    const task = setTimeout(() => {
+      void boot();
+    }, 0);
+    return () => clearTimeout(task);
   }, [boot]);
 
   const retryCanonical = useCallback(() => {

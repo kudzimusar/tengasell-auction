@@ -189,7 +189,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [applyAuthenticated, clearLocalSession]);
 
   useEffect(() => {
-    void restoreSession();
+    const task = setTimeout(() => {
+      void restoreSession();
+    }, 0);
+    return () => clearTimeout(task);
   }, [restoreSession]);
 
   const login = useCallback(

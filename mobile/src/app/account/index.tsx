@@ -40,7 +40,7 @@ export default function AccountScreen() {
     } finally {
       setLoading(false);
     }
-  }, [session.identity, session.phase, session.withAuthenticatedToken]);
+  }, [session]);
 
   useEffect(() => {
     if (session.phase === "anonymous" || session.phase === "session-invalid") {
@@ -76,7 +76,7 @@ export default function AccountScreen() {
     return () => {
       active = false;
     };
-  }, [session.identity?.id, session.phase, session.withAuthenticatedToken]);
+  }, [session]);
 
   const signOut = async () => {
     setProfile(null);
