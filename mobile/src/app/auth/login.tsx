@@ -65,7 +65,7 @@ export default function LoginScreen() {
   if (session.phase === "booting") {
     return (
       <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
-        <View style={styles.center} accessibilityRole="status">
+        <View style={styles.center} accessible accessibilityLiveRegion="polite">
           <ActivityIndicator color={TEAL} size="large" />
           <Text style={styles.muted}>Restoring your secure session…</Text>
         </View>

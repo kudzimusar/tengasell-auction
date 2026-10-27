@@ -65,7 +65,7 @@ export default function AccountScreen() {
   if (session.phase === "booting") {
     return (
       <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
-        <View style={styles.center} accessibilityRole="status">
+        <View style={styles.center} accessible accessibilityLiveRegion="polite">
           <ActivityIndicator color={TEAL} size="large" />
           <Text style={styles.muted}>Restoring your secure session…</Text>
         </View>
@@ -107,7 +107,7 @@ export default function AccountScreen() {
   if (session.phase !== "authenticated" || !session.identity) {
     return (
       <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
-        <View style={styles.center} accessibilityRole="status">
+        <View style={styles.center} accessible accessibilityLiveRegion="polite">
           <ActivityIndicator color={TEAL} />
           <Text style={styles.muted}>Returning to sign in…</Text>
         </View>
@@ -119,13 +119,13 @@ export default function AccountScreen() {
     <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
       <View style={styles.panel}>
         <Text style={styles.title} accessibilityRole="header">Your account</Text>
-        <Text style={styles.statusText} accessibilityRole="status">
+        <Text style={styles.statusText} accessible accessibilityLiveRegion="polite">
           Authenticated through canonical TrailBase
         </Text>
 
         <View style={styles.card}>
           {loading ? (
-            <View style={styles.loadingRow} accessibilityRole="status">
+            <View style={styles.loadingRow} accessible accessibilityLiveRegion="polite">
               <ActivityIndicator color={TEAL} />
               <Text style={styles.muted}>Loading authenticated profile…</Text>
             </View>

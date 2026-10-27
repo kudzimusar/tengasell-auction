@@ -1,4 +1,4 @@
-name: Tengasell Mobile MOB-01 dependency convergence
+name: Tengasell Mobile MOB-01 gates
 
 on:
   push:
@@ -7,12 +7,12 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  resolve-sdk-dependencies:
+  mob01-gates:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - name: Checkout exact candidate
         uses: actions/checkout@v4
@@ -24,55 +24,34 @@ jobs:
           cache: npm
           cache-dependency-path: mobile/package-lock.json
 
-      - name: Install current mobile workspace
+      - name: Install locked mobile dependencies
         working-directory: mobile
         run: npm ci
 
-      - name: Resolve Expo SDK-compatible runtime dependencies
+      - name: Expo doctor
         working-directory: mobile
-        run: >-
-          npx expo install
-          expo-router
-          react-native-safe-area-context
-          react-native-screens
-          expo-linking
-          expo-constants
-          expo-secure-store
-          react-dom
-          react-native-web
+        run: npx expo-doctor
 
-      - name: Resolve Expo SDK-compatible lint dependencies
+      - name: Expo lint
         working-directory: mobile
-        run: npx expo install eslint eslint-config-expo --dev
+        run: npx expo lint
 
-      - name: Align application package authority
+      - name: Typecheck
         working-directory: mobile
+        run: npx tsc --noEmit
+
+      - name: Android export
+        working-directory: mobile
+        run: npx expo export --platform android
+
+      - name: iOS export
+        working-directory: mobile
+        run: npx expo export --platform ios
+
+      - name: Git diff check
+        run: git diff --check
+
+      - name: Working tree check
         run: |
-          npm pkg set version=0.1.0
-          npm pkg set main=expo-router/entry
-          npm pkg set scripts.lint="expo lint"
-          npm pkg set scripts.typecheck="tsc --noEmit"
-          npm install --package-lock-only --ignore-scripts
-
-      - name: Commit Expo-resolved dependency custody
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add mobile/package.json mobile/package-lock.json
-          if git diff --cached --quiet; then
-            echo "Package custody already converged."
-          else
-            git commit -m "chore(mobile): converge Expo SDK 58 dependencies [skip ci]"
-            git push origin HEAD:${{ github.ref_name }}
-          fi
-
-      - name: Upload resolved package custody
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: mob01-resolved-package-custody
-          path: |
-            mobile/package.json
-            mobile/package-lock.json
-          if-no-files-found: error
-          retention-days: 7
+          git status --short
+          test -z "$(git status --short)"

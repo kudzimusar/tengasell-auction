@@ -3,6 +3,7 @@
     "name": "TengaSell",
     "slug": "tengasell",
     "version": "0.1.0",
+    "scheme": "tengasell",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -27,8 +28,12 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store"
+    ],
     "extra": {
-      "tengasellNote": "EXPO_PUBLIC_TENGASELL_API sets the gateway base URL (see src/lib/trailbase.ts)"
+      "tengasellNote": "EXPO_PUBLIC_TENGASELL_API is required for canonical gateway access; no permanent or authenticated demo fallback is embedded."
     }
   }
 }
