@@ -34,7 +34,7 @@ No Expo-SDK-58-compatible patched package is currently established by this audit
 
 ## Actual mobile runtime exposure
 
-No Tengasell runtime source imports `@expo/cli` or `zod`. The R2 NXS static gate fails if either package becomes imported under `mobile/src`.
+No Tengasell runtime source imports `@expo/cli` or `zod`. The R2 NXS static gate fails if either package becomes imported under `mobile/src`. The installed root Zod instance is also deduped into other Node tooling paths (including lint/tooling dependencies), but npm audit records the vulnerable effect chain through `@expo/cli`; this does not establish native bundle reachability.
 
 This means:
 

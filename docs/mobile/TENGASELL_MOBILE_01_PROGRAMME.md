@@ -1,11 +1,12 @@
 # TENGASELL-MOBILE-01 — Native Mobile Programme Charter
 
 **Programme:** TENGASELL-MOBILE-01  
-**Current unit:** MOB-01-R1 — Native Foundation Closure  
+**Current unit:** MOB-01-R2 — NXS Foundation Convergence  
 **Repository:** `kudzimusar/tengasell-auction`  
 **Branch:** `feat/tengasell-mobile-01-product-foundation`  
 **Frozen original programme parent:** `98a607c326ca4bcf24062c045d4eaa35762a3aa5`  
 **MOB-01-R1 starting authority:** `cc707ebb5f52617de80aee4de2c343da8a18c173`  
+**MOB-01-R2 accepted starting authority:** `00833452d9e9be6caa576b70e138718e7be46984`  
 **Implementation candidate:** `1f11dd4c97ad654afa70d1e62676a7c6f475abd6`  
 **Implementer / verifier segregation:** implementation evidence is not certification.
 
@@ -306,3 +307,202 @@ No V3–V5 or NXS CERTIFIED claim is made by the implementer.
 - **Certification state:** pending independent VAP/NXS verification.
 
 > **STATUS: READY_FOR_INDEPENDENT_VERIFICATION** — this is an implementation readiness declaration, not certification.
+
+
+---
+
+## 13. MOB-01-R2 — NXS foundation convergence
+
+**Moderator disposition:** `REMEDIATE — BOUNDED NXS FOUNDATION DEFECTS ONLY`
+
+R2 preserves the accepted R1 Router, TrailBase, SecureStore, NXS token and canonical-authority architecture. It remediates only localization/pseudolocalization, runtime environment completeness, static enforcement and dependency-security evidence.
+
+### R2 custody
+
+```text
+r2_starting_sha:           00833452d9e9be6caa576b70e138718e7be46984
+r2_source_candidate:       24cfe442baedb479b83c7812a7fb5b284f315814
+branch:                    feat/tengasell-mobile-01-product-foundation
+schema_migrations:         none
+production_access:         none
+local01_workspace:         untouched
+```
+
+The final handoff head may contain evidence-only documentation after the source candidate. It is reported separately in the specialist return and must independently pass the same automated gates.
+
+---
+
+## 14. R2 localization and pseudolocalization authority
+
+MOB-01 user-facing route/component strings are externalized through:
+
+`mobile/src/nxs/localization/catalog.ts`
+
+The current launch locale remains English.
+
+Development/certification stress modes are:
+
+```bash
+EXPO_PUBLIC_NXS_LOCALE=en-XA
+EXPO_PUBLIC_NXS_LOCALE=ar-XB
+```
+
+`en-XA` expands/accentuates resource text. `ar-XB` applies the same expansion plus RTL isolation and NXS effective RTL layout direction.
+
+Resource templates are pseudolocalized **before** placeholder interpolation. Dynamic domain values therefore remain literal, including:
+
+- auction/item titles;
+- category names;
+- usernames;
+- prices and bid counts;
+- TrailBase user IDs;
+- unknown backend/domain error text.
+
+Known Tengasell/TrailBase client messages are mapped to resource keys. Unknown server messages are preserved rather than mechanically transformed.
+
+`expo-localization ~58.0.5` supplies the native device locale/language/direction signal. The app's system-declared supported launch locale remains `en`; pseudolocales are explicit development/certification overrides rather than fake production languages.
+
+---
+
+## 15. R2 NXSContext environment truth
+
+The R2 environment resolver exposes:
+
+```text
+platform
+viewportWidth / viewportHeight
+orientation
+windowClass
+fontScale
+locale / language
+deviceLocale / deviceLanguage
+writingDirection / deviceWritingDirection
+safeArea
+keyboardVisible
+colorScheme
+reduceMotion
+screenReader
+contrastPreference
+reduceTransparency
+networkState
+networkType
+```
+
+Truth policy:
+
+- orientation derives from the current window, not a device model;
+- locale signals come from Expo Localization;
+- keyboard visibility comes from React Native keyboard events;
+- reduce motion and screen-reader state come from React Native AccessibilityInfo queries/events;
+- Android high-text-contrast and iOS darker-system-colors are normalized into `contrastPreference`;
+- reduced-transparency is exposed on iOS and remains `unknown` where no reliable equivalent is available;
+- NetInfo resolves online / offline / degraded / unknown without inventing reachability;
+- unavailable/unresolved values remain `unknown`.
+
+The provider does not claim that platform-specific accessibility settings are semantically identical.
+
+---
+
+## 16. R2 static enforcement and touch audit
+
+`mobile/scripts/verify-nxs-foundation.mjs` now enforces:
+
+- NXS manifest exists and pins 1.0;
+- iOS and Android remain declared;
+- strict certification remains declared;
+- pseudolocalization remains required;
+- `en-XA` and `ar-XB` mechanisms remain declared;
+- NXS 48×48 touch floor remains encoded;
+- `expo-router/entry` remains application entry;
+- adaptive orientation remains enabled;
+- automatic theme remains enabled;
+- Expo Router / SecureStore / Localization config remains present;
+- SecureStore remains credential persistence authority;
+- legacy `App.tsx` / `index.ts` entries remain absent;
+- permanent `trycloudflare.com` URLs remain absent from runtime source;
+- navigation-contract evidence remains present;
+- localization authority remains consumed by every MOB-01 route;
+- hard-coded custom-control/accessibility labels are rejected in route files;
+- numeric custom interactive geometry below 48 is rejected;
+- app-source imports of `@expo/cli` or `zod` are rejected.
+
+R2 workflow run `40469054727` reports:
+
+`NXS R2 foundation static checks passed: 2 interactive source files audited.`
+
+This is a bounded source audit, not physical touch certification.
+
+---
+
+## 17. R2 dependency-security triage
+
+Audit evidence: run `40468330471`, plus repeat snapshot in run `40469054727`.
+
+The three npm high findings resolve to the known Expo tooling advisory chain:
+
+```text
+expo 58.0.19
+  -> @expo/cli 58.1.15
+      -> zod 3.25.76
+          GHSA-mrhx-c7xc-m3w5
+          affected < 4.6.6
+```
+
+No `mobile/src` file imports `@expo/cli` or `zod`. Native runtime exploit reachability is therefore not demonstrated by current evidence; Node build/development-tooling exposure remains.
+
+The installed root Zod instance is also deduped into other Node tooling paths, reinforcing that dependency placement in npm's production graph does not by itself prove native-runtime reachability.
+
+`npm audit` suggests `expo@54.0.38` as a force-fix target and marks the change SemVer-major. That would violate the accepted SDK-58 / React Native 0.88 authority. No force-fix was applied.
+
+R2 disposition:
+
+`KNOWN_EXPO_TOOLING_ADVISORY — MONITOR_AND_PATCH_WITHIN_SDK_58`
+
+See `docs/mobile/TENGASELL_MOBILE_01_R2_DEPENDENCY_SECURITY.md`.
+
+---
+
+## 18. R2 implementer gates — source candidate
+
+Exact source candidate:
+
+`24cfe442baedb479b83c7812a7fb5b284f315814`
+
+GitHub Actions run:
+
+`40469054727`
+
+| Gate | Result |
+| --- | --- |
+| `npm ci` | **PASS** |
+| NXS R2 foundation static review | **PASS — 2 interactive source files audited** |
+| Dependency-security snapshot / known-chain assertion | **PASS** |
+| `npx expo-doctor` | **PASS — 20/20 checks** |
+| `npx expo lint` | **PASS** |
+| `npx tsc --noEmit` | **PASS** |
+| `npx expo export --platform android` | **PASS — Exported: dist** |
+| `npx expo export --platform ios` | **PASS — Exported: dist** |
+| `git diff --check` | **PASS** |
+| clean `git status --short` assertion | **PASS** |
+
+---
+
+## 19. R2 limitations reserved for independent NXS verification
+
+Not self-certified in this unit:
+
+- physical 48×48 thumb/reach behavior;
+- VoiceOver/TalkBack task completion;
+- 200% text reflow;
+- keyboard behavior on representative devices;
+- actual `en-XA` and `ar-XB` visual captures;
+- native back-direction behavior under true platform RTL;
+- compact / tall / landscape / expanded tablet physical adaptation;
+- light/dark contrast measurements;
+- slow-network repeated-tap behavior on device;
+- performance/frame stability;
+- future representative-screen topology transformation.
+
+MOB-02 remains unauthorized.
+
+> **MOB-01-R2 IMPLEMENTER STATE: READY_FOR_NXS_INDEPENDENT_VERIFICATION** — implementation readiness only; no NXS certification or numerical score is issued here.
