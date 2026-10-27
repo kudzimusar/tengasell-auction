@@ -8,11 +8,6 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "backgroundColor": "#19717B",
-    "splash": {
-      "image": "./assets/adaptive-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#19717B"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.tengasell.app"
