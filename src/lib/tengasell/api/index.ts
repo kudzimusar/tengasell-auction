@@ -7,7 +7,7 @@
 import { LocalStore } from "./local";
 import { RemoteApi } from "./remote";
 import { AuctionAuthorityError, DEGRADED_COMMERCIAL_MUTATIONS, isExplicitDemoIntent } from "@/lib/auction-authority";
-import type { Auction, AuctionEvent, AuctionEventBundle, AuctionQuery, Bid, BidResult, Category, CurrentUser, LiveSession, Message, Notification, Offer, Order, Paginated, Payment, ProductIntakeSession, ProductSchemaBundle, Profile, PublicProductBundle, Question, Rating, RunListCommandInput, SavedSearch, SaveSearchInput, Thread, VehicleBundle, VehicleDocument, VehicleFinding, VehicleInspection, VehicleIntakeInput } from "../types";
+import type { Auction, AuctionEvent, AuctionEventBundle, AuctionQuery, Bid, BidResult, Category, CurrentUser, LiveSession, Message, Notification, Offer, Order, Paginated, Payment, ProductIntakeSession, ProductSchemaBundle, Profile, PublicProductBundle, Question, Rating, RunListCommandInput, SavedSearch, SaveSearchInput, Thread, VehicleBundle, VehicleDocument, VehicleFinding, VehicleInspection, VehicleIntakeInput, CategoryFilterMetadata, ProductComparisonResponse, SavedSearchFacet } from "../types";
 
 export type ApiMode = "live" | "demo" | "degraded";
 
@@ -38,6 +38,9 @@ export interface TengasellApi {
   createAuction(input: Parameters<RemoteApi["createAuction"]>[0]): Promise<Auction>;
   productSchema(categoryKey?: string): Promise<ProductSchemaBundle>;
   publicProductForAuction(auctionId: number): Promise<PublicProductBundle>;
+  categoryFilters(categoryKey?: string): Promise<CategoryFilterMetadata>;
+  compareProducts(auctionIds: number[]): Promise<ProductComparisonResponse>;
+  savedSearchFacets(savedSearchId: number): Promise<SavedSearchFacet[]>;
   openProductIntake(input: Parameters<RemoteApi["openProductIntake"]>[0]): Promise<{ auction: Auction; session: ProductIntakeSession; schema: ProductSchemaBundle }>;
   productIntakeSession(auctionId: number): Promise<{ session: ProductIntakeSession; steps: Record<string, unknown>[] }>;
   saveProductIntakeStep(input: Parameters<RemoteApi["saveProductIntakeStep"]>[0]): Promise<ProductIntakeSession>;

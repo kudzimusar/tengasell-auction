@@ -484,3 +484,430 @@ export async function publicProductBundle(store: VehicleStore, auctionId: number
     findings: findings.map(({ created_by: _actor, evidence_document_id: _evidence, ...row }) => row),
   };
 }
+
+export type FilterClass = "PRIMARY" | "SECONDARY" | "ADVANCED" | "DISPLAY_ONLY" | "NONE";
+
+export interface CategoryFilterItem {
+  attributeKey: string;
+  label: string;
+  dataType: string;
+  filterClass: FilterClass;
+  unit: string | null;
+  displayGroup: string;
+  displayOrder: number;
+  options: { key: string; label: string }[];
+  range: { min?: number; max?: number } | null;
+  operators: string[];
+}
+
+export async function categoryFilterMetadata(
+  store: VehicleStore,
+  categoryKey?: string | null,
+): Promise<{
+  category: { id: number; key: string; name: string } | null;
+  schemaVersion: { id: number; key: string; version: number } | null;
+  filters: CategoryFilterItem[];
+}> {
+  const categories = await store.list("categories", params({ "filter[active][$eq]": 1, limit: 300 }));
+  const cat = (categoryKey
+    ? categories.find((c: any) => c.category_key === categoryKey || c.slug === categoryKey)
+    : null) ?? categories.find((c: any) => c.category_key === "VEHICLE_PASSENGER_CAR") ?? categories[0];
+
+  if (!cat) return { category: null, schemaVersion: null, filters: [] };
+
+  const schemas = await store.list("pi_category_schema_versions", params({
+    "filter[category_id][$eq]": cat.id,
+    "filter[status][$eq]": "ACTIVE",
+    limit: 1,
+  }));
+  const schema = schemas[0] ?? null;
+  if (!schema) {
+    return {
+      category: { id: cat.id, key: cat.category_key, name: cat.name },
+      schemaVersion: null,
+      filters: [],
+    };
+  }
+
+  const [bindings, definitions, versions, labels, options, optionLabels] = await Promise.all([
+    store.list("pi_category_attributes", params({ "filter[schema_version_id][$eq]": schema.id, limit: 300 })),
+    store.list("pi_attribute_definitions", params({ "filter[active][$eq]": 1, limit: 300 })),
+    store.list("pi_attribute_definition_versions", params({ limit: 300 })),
+    store.list("pi_attribute_labels", params({ "filter[locale][$eq]": "en", limit: 300 })),
+    store.list("pi_attribute_options", params({ "filter[active][$eq]": 1, order: "sort_order", limit: 1000 })),
+    store.list("pi_attribute_option_labels", params({ "filter[locale][$eq]": "en", limit: 1000 })),
+  ]);
+
+  const filters: CategoryFilterItem[] = [];
+
+  for (const binding of bindings) {
+    const def = definitions.find((d: any) => Number(d.id) === Number(binding.attribute_id));
+    if (!def) continue;
+
+    const filterClass = (binding.filter_class ?? def.filter_class ?? "NONE") as FilterClass;
+    if (filterClass === "NONE" || filterClass === "DISPLAY_ONLY") continue;
+
+    const ver = versions.find((v: any) => Number(v.id) === Number(binding.attribute_version_id));
+    const label = labels.find((l: any) => Number(l.attribute_id) === Number(def.id))?.label ?? def.attribute_key;
+
+    let range: { min?: number; max?: number } | null = null;
+    if (ver?.validation_json) {
+      try {
+        const parsed = JSON.parse(ver.validation_json);
+        if (parsed.minimum != null || parsed.maximum != null) {
+          range = { min: parsed.minimum, max: parsed.maximum };
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
+    const attributeOptions = options
+      .filter((o: any) => Number(o.attribute_id) === Number(def.id))
+      .map((o: any) => ({
+        key: o.option_key,
+        label: optionLabels.find((ol: any) => Number(ol.option_id) === Number(o.id))?.label ?? o.option_key,
+      }));
+
+    let operators = ["EQ"];
+    switch (def.data_type) {
+      case "ENUM":
+      case "MULTI_ENUM":
+        operators = ["EQ", "IN"];
+        break;
+      case "INTEGER":
+      case "DECIMAL":
+      case "MEASUREMENT":
+        operators = ["MIN", "MAX", "BETWEEN", "EQ"];
+        break;
+      case "BOOLEAN":
+        operators = ["EQ"];
+        break;
+      case "DATE":
+        operators = ["MIN", "MAX", "BETWEEN", "EQ"];
+        break;
+      default:
+        operators = ["EQ", "IN", "EXISTS"];
+    }
+
+    filters.push({
+      attributeKey: def.attribute_key,
+      label,
+      dataType: def.data_type,
+      filterClass,
+      unit: ver?.canonical_unit ?? null,
+      displayGroup: binding.display_group ?? def.display_group,
+      displayOrder: binding.display_order ?? def.display_order,
+      options: attributeOptions,
+      range,
+      operators,
+    });
+  }
+
+  filters.sort((a, b) => {
+    const rank: Record<FilterClass, number> = { PRIMARY: 1, SECONDARY: 2, ADVANCED: 3, DISPLAY_ONLY: 4, NONE: 5 };
+    if (rank[a.filterClass] !== rank[b.filterClass]) return rank[a.filterClass] - rank[b.filterClass];
+    return a.displayOrder - b.displayOrder;
+  });
+
+  return {
+    category: { id: cat.id, key: cat.category_key, name: cat.name },
+    schemaVersion: { id: schema.id, key: schema.schema_key, version: schema.version },
+    filters,
+  };
+}
+
+export type ComparisonState = "KNOWN" | "UNKNOWN" | "CONFLICTED" | "REDACTED" | "NOT_APPLICABLE";
+
+export interface ComparisonCell {
+  state: ComparisonState;
+  rawValue: unknown;
+  displayValue: string;
+  unit: string | null;
+  provenance?: string;
+  conflictState?: string;
+}
+
+export interface ComparisonRow {
+  attributeKey: string;
+  label: string;
+  section: string;
+  unit: string | null;
+  values: ComparisonCell[];
+}
+
+export interface ProductComparisonResponse {
+  items: Array<{
+    auctionId: number;
+    title: string;
+    currentPrice: number;
+    thumbnail: string | null;
+    categoryKey: string;
+    productType: string;
+    endsAt: string;
+    status: string;
+  }>;
+  categoryRelationship: "SAME_LEAF" | "RELATED_FAMILY" | "UNRELATED";
+  sections: Array<{
+    title: string;
+    rows: ComparisonRow[];
+  }>;
+}
+
+export async function productCompare(
+  store: VehicleStore,
+  auctionIds: number[],
+): Promise<ProductComparisonResponse> {
+  const boundedIds = Array.isArray(auctionIds) ? auctionIds.filter((id) => Number.isSafeInteger(id) && id > 0).slice(0, 3) : [];
+  if (!boundedIds.length) {
+    return { items: [], categoryRelationship: "UNRELATED", sections: [] };
+  }
+
+  const bundles = await Promise.all(boundedIds.map(async (id) => {
+    const [auction, bundle, psi] = await Promise.all([
+      store.get("auctions", id),
+      publicProductBundle(store, id).catch(() => null),
+      (store.list("product_search_index", params({ "filter[auction_id][$eq]": id, limit: 1 }))).then((r) => r[0]).catch(() => null),
+    ]);
+    let category = null;
+    if (auction?.product_category_id) {
+      category = await store.get("categories", auction.product_category_id).catch(() => null);
+    }
+    return { auctionId: id, auction, bundle, psi, category };
+  }));
+
+  const items = bundles.map((b) => {
+    const a = b.auction ?? {};
+    let thumbnail: string | null = null;
+    try {
+      const imgs = JSON.parse(a.images || "[]");
+      if (Array.isArray(imgs) && imgs[0]) thumbnail = String(imgs[0]);
+    } catch {
+      /* ignore */
+    }
+    const catKey = b.bundle?.product?.category_key ?? b.psi?.category_key ?? b.category?.category_key ?? "GENERAL";
+    const prodType = b.bundle?.product?.product_type ?? b.category?.name ?? "General Item";
+    return {
+      auctionId: b.auctionId,
+      title: a.title ?? b.psi?.title ?? `Auction #${b.auctionId}`,
+      currentPrice: Number(a.current_price ?? a.start_price ?? b.psi?.price ?? 0),
+      thumbnail,
+      categoryKey: catKey,
+      productType: prodType,
+      endsAt: a.ends_at ?? b.psi?.ending_time ?? "",
+      status: a.status ?? b.psi?.auction_status ?? "live",
+    };
+  });
+
+  const catKeys = items.map((i) => i.categoryKey);
+  const allSameLeaf = catKeys.every((k) => k === catKeys[0]);
+  const allVehicle = catKeys.every((k) => k.startsWith("VEHICLE_"));
+  const categoryRelationship: "SAME_LEAF" | "RELATED_FAMILY" | "UNRELATED" = allSameLeaf
+    ? "SAME_LEAF"
+    : allVehicle
+      ? "RELATED_FAMILY"
+      : "UNRELATED";
+
+  const rows: ComparisonRow[] = [];
+
+  const addRow = (
+    attributeKey: string,
+    label: string,
+    section: string,
+    unit: string | null,
+    extractor: (b: typeof bundles[0]) => { value: unknown; state?: ComparisonState; unit?: string | null; provenance?: string; conflict?: string },
+  ) => {
+    const values: ComparisonCell[] = bundles.map((b) => {
+      if (!b.auction && !b.psi && !b.bundle) {
+        return { state: "UNKNOWN", rawValue: null, displayValue: "Not provided", unit };
+      }
+      const ext = extractor(b);
+      const state = ext.state ?? (ext.value != null && ext.value !== "" ? "KNOWN" : "UNKNOWN");
+      let displayValue = "Not provided";
+      if (state === "KNOWN") {
+        if (typeof ext.value === "boolean") {
+          displayValue = ext.value ? "Yes" : "No";
+        } else if (typeof ext.value === "number") {
+          displayValue = unit ? `${ext.value.toLocaleString()} ${unit}` : ext.value.toLocaleString();
+        } else {
+          displayValue = String(ext.value);
+        }
+      } else if (state === "UNKNOWN") {
+        displayValue = "Not provided";
+      } else if (state === "CONFLICTED") {
+        displayValue = `Conflicted (${ext.conflict || "Disputed"})`;
+      } else if (state === "REDACTED") {
+        displayValue = "Recorded privately";
+      } else if (state === "NOT_APPLICABLE") {
+        displayValue = "N/A";
+      }
+      return {
+        state,
+        rawValue: ext.value,
+        displayValue,
+        unit: ext.unit ?? unit,
+        provenance: ext.provenance,
+        conflictState: ext.conflict,
+      };
+    });
+    rows.push({ attributeKey, label, section, unit, values });
+  };
+
+  // 1. Identity section
+  addRow("MODEL_YEAR", "Year", "Identity", null, (b) => ({
+    value: b.bundle?.product?.model_year ?? b.psi?.year ?? null,
+  }));
+  addRow("MAKE", "Make", "Identity", null, (b) => ({
+    value: b.bundle?.product?.make ?? b.psi?.make ?? null,
+  }));
+  addRow("MODEL", "Model", "Identity", null, (b) => ({
+    value: b.bundle?.product?.model ?? b.psi?.model ?? null,
+  }));
+  if (categoryRelationship !== "UNRELATED") {
+    addRow("GENERATION", "Generation", "Identity", null, (b) => ({
+      value: b.bundle?.product?.generation_series ?? b.psi?.generation ?? null,
+    }));
+    addRow("VARIANT", "Variant", "Identity", null, (b) => ({
+      value: b.bundle?.product?.variant ?? b.psi?.variant ?? null,
+    }));
+    addRow("TRIM", "Trim", "Identity", null, (b) => ({
+      value: b.bundle?.product?.trim ?? b.psi?.trim ?? null,
+    }));
+    addRow("MODEL_CODE", "Model Code", "Identity", null, (b) => ({
+      value: b.bundle?.product?.model_code ?? b.psi?.model_code ?? null,
+    }));
+
+    // 2. Configuration section
+    addRow("VEHICLE_CLASS", "Vehicle Class", "Configuration", null, (b) => ({
+      value: b.bundle?.product?.vehicle_class ?? b.psi?.vehicle_class ?? null,
+    }));
+    addRow("BODY_TYPE", "Body Type", "Configuration", null, (b) => ({
+      value: b.bundle?.product?.body_type ?? b.psi?.body_type ?? null,
+    }));
+    addRow("CAB_TYPE", "Cab Type", "Configuration", null, (b) => ({
+      value: b.bundle?.product?.cab_type ?? null,
+    }));
+    addRow("DOORS", "Doors", "Configuration", null, (b) => ({
+      value: b.bundle?.product?.doors ?? null,
+    }));
+    addRow("SEATS", "Seats", "Configuration", null, (b) => ({
+      value: b.bundle?.product?.seats ?? null,
+    }));
+
+    // 3. Usage section
+    addRow("ODOMETER_KM", "Mileage", "Usage", "km", (b) => {
+      const p = b.bundle?.product;
+      const km = p?.effective_odometer_km ?? b.psi?.mileage ?? null;
+      const isConflict = p?.odometer_conflict && p.odometer_conflict !== "NONE";
+      return {
+        value: km,
+        state: isConflict ? "CONFLICTED" : km != null ? "KNOWN" : "UNKNOWN",
+        conflict: p?.odometer_conflict,
+        provenance: p?.odometer_source,
+      };
+    });
+
+    // 4. Powertrain section
+    addRow("FUEL_TYPE", "Fuel", "Powertrain", null, (b) => ({
+      value: b.bundle?.product?.fuel_type ?? b.psi?.fuel ?? null,
+    }));
+    addRow("ENGINE_DISPLACEMENT_CC", "Engine Displacement", "Powertrain", "cc", (b) => ({
+      value: b.bundle?.product?.engine_displacement_cc ?? null,
+    }));
+    addRow("POWER_KW", "Power", "Powertrain", "kW", (b) => ({
+      value: b.bundle?.product?.power_kw ?? null,
+    }));
+    addRow("TORQUE_NM", "Torque", "Powertrain", "Nm", (b) => ({
+      value: b.bundle?.product?.torque_nm ?? null,
+    }));
+    addRow("TRANSMISSION", "Transmission", "Powertrain", null, (b) => ({
+      value: b.bundle?.product?.transmission ?? b.psi?.transmission ?? null,
+    }));
+    addRow("GEAR_COUNT", "Gears", "Powertrain", null, (b) => ({
+      value: b.bundle?.product?.gear_count ?? null,
+    }));
+    addRow("DRIVETRAIN", "Drivetrain", "Powertrain", null, (b) => ({
+      value: b.bundle?.product?.drivetrain ?? b.psi?.drivetrain ?? null,
+    }));
+
+    // 5. Physical section
+    addRow("EXTERIOR_COLOUR", "Exterior Colour", "Physical", null, (b) => ({
+      value: b.bundle?.product?.primary_exterior_colour ?? b.psi?.exterior_colour ?? null,
+    }));
+    addRow("STEERING_SIDE", "Steering Side", "Physical", null, (b) => ({
+      value: b.bundle?.product?.steering_side ?? b.psi?.steering_side ?? null,
+    }));
+
+    // 6. History section
+    addRow("SERVICE_HISTORY_CLASS", "Service History", "History", null, (b) => ({
+      value: b.bundle?.product?.service_history_class ?? b.psi?.service_history_class ?? null,
+    }));
+    addRow("ACCIDENT_HISTORY", "Accident History", "History", null, (b) => ({
+      value: b.bundle?.product?.accident_history ?? b.psi?.accident_history ?? null,
+    }));
+    addRow("REPAIR_HISTORY", "Repair History", "History", null, (b) => ({
+      value: b.bundle?.product?.repair_history ?? b.psi?.repair_history ?? null,
+    }));
+    addRow("MODIFICATION_STATUS", "Modification Status", "History", null, (b) => ({
+      value: b.bundle?.product?.modification_status ?? b.psi?.modification_status ?? null,
+    }));
+    addRow("CUSTOMS_STATUS", "Customs Status", "History", null, (b) => ({
+      value: b.bundle?.product?.customs_status ?? b.psi?.customs_status ?? null,
+    }));
+
+    // 7. Condition section
+    addRow("INSPECTION_GRADE", "Inspection Grade", "Condition", null, (b) => ({
+      value: b.bundle?.product?.inspection_grade ?? b.psi?.inspection_grade ?? null,
+    }));
+    addRow("ROADWORTHY", "Roadworthy", "Condition", null, (b) => {
+      const rw = b.bundle?.product?.roadworthy ?? b.psi?.roadworthy;
+      return { value: rw != null ? Boolean(rw) : null };
+    });
+    addRow("MAJOR_DEFECT_COUNT", "Major Defects", "Condition", null, (b) => ({
+      value: b.bundle?.product?.major_defect_count ?? null,
+    }));
+
+    // 8. Provenance section
+    addRow("VIN_CLASSIFICATION", "VIN Status", "Provenance", null, () => ({
+      value: "RECORDED",
+      state: "REDACTED",
+    }));
+
+    // 9. Equipment section
+    addRow("NUMBER_OF_KEYS", "Keys", "Equipment", null, (b) => ({
+      value: b.bundle?.product?.number_of_keys ?? null,
+    }));
+    addRow("SPARE_WHEEL", "Spare Wheel", "Equipment", null, (b) => {
+      const sw = b.bundle?.product?.spare_wheel;
+      return { value: sw != null ? Boolean(sw) : null };
+    });
+  }
+
+  // 10. Commercial section (always present for all comparisons)
+  addRow("LOCATION", "Location", "Commercial", null, (b) => ({
+    value: b.auction?.city ?? b.psi?.location ?? null,
+  }));
+  addRow("CURRENT_PRICE", "Current Price", "Commercial", "USD", (b) => ({
+    value: Number(b.auction?.current_price ?? b.auction?.start_price ?? b.psi?.price ?? 0),
+  }));
+  addRow("RESERVE_DISCLOSURE", "Reserve", "Commercial", null, (b) => ({
+    value: b.auction?.reserve_disclosure ?? b.psi?.reserve_disclosure ?? "UNSPECIFIED",
+  }));
+  addRow("ENDS_AT", "Auction Ends", "Commercial", null, (b) => ({
+    value: b.auction?.ends_at ?? b.psi?.ending_time ?? null,
+  }));
+
+  const sectionMap = new Map<string, ComparisonRow[]>();
+  for (const r of rows) {
+    const list = sectionMap.get(r.section) ?? [];
+    list.push(r);
+    sectionMap.set(r.section, list);
+  }
+
+  return {
+    items,
+    categoryRelationship,
+    sections: Array.from(sectionMap.entries()).map(([title, srows]) => ({ title, rows: srows })),
+  };
+}
+

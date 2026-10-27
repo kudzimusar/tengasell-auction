@@ -14,11 +14,10 @@
 // rows. The results section is remounted (key) on every query change so
 // loading skeletons show exactly when they should.
 //
-// Gap-8 (F1): "Save this search" — signed-in users store the current
-// criteria (keyword, category, price range) as a named saved search with an
-// optional new-match alert.
+// DISC-01/02/03/04: Structured Discovery — schema-aware filters, active chips,
+// persistent URL state, structured saved search facets, and product comparison (max 3).
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   AlertTriangle,
@@ -64,7 +63,7 @@ import { useCategories } from "@/lib/tengasell/hooks";
 import { useI18n } from "@/lib/tengasell/i18n";
 import { formatUSD } from "@/lib/tengasell/format";
 import { useRouter } from "@/lib/tengasell/router";
-import type { AuctionQuery } from "@/lib/tengasell/types";
+import type { AuctionQuery, CategoryFilterMetadata } from "@/lib/tengasell/types";
 import { cn } from "@/lib/utils";
 import {
   countActiveFilters,
@@ -75,6 +74,7 @@ import {
   type BrowseFilters,
 } from "./filter-panel";
 import { ResultsSection } from "./results";
+import { CompareDialog } from "./compare-dialog";
 
 type SortOrder = NonNullable<AuctionQuery["order"]>;
 type ViewMode = "grid" | "list";
@@ -103,6 +103,12 @@ function parsePriceParam(raw: string | null): number | null {
   return Math.round(n * 100) / 100;
 }
 
+function parseYearParam(raw: string | null): number | null {
+  if (!raw) return null;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n >= 1900 && n <= 2050 ? n : null;
+}
+
 interface FilterChip {
   key: string;
   label: string;
@@ -125,11 +131,21 @@ export default function BrowsePage({
   const { user } = useAuth();
   const { t, locale } = useI18n();
 
-  // Saved-search deep-link params (read once per mount — the page is remounted
-  // by the router's AnimatePresence on every hash change, same as q/ending).
+  // Saved-search deep-link params
   const catParam = mode === "search" ? route.query.get("cat") : null;
   const urlMin = parsePriceParam(route.query.get("min"));
   const urlMax = parsePriceParam(route.query.get("max"));
+  const urlMake = route.query.get("make") || undefined;
+  const urlModel = route.query.get("model") || undefined;
+  const urlMinYear = parseYearParam(route.query.get("minYear"));
+  const urlMaxYear = parseYearParam(route.query.get("maxYear"));
+  const urlMinKm = parsePriceParam(route.query.get("minKm"));
+  const urlMaxKm = parsePriceParam(route.query.get("maxKm"));
+  const urlBodyType = route.query.get("bodyType") || undefined;
+  const urlFuel = route.query.get("fuel") || undefined;
+  const urlTransmission = route.query.get("transmission") || undefined;
+  const urlDrivetrain = route.query.get("drivetrain") || undefined;
+  const urlInspectionGrade = route.query.get("inspectionGrade") || undefined;
 
   const [filters, setFilters] = useState<BrowseFilters>(() => {
     const base = initialFilters(parseEnding(ending));
@@ -137,28 +153,52 @@ export default function BrowsePage({
       ...base,
       minPrice: urlMin ?? base.minPrice,
       maxPrice: urlMax ?? base.maxPrice,
+      make: urlMake ?? base.make,
+      model: urlModel ?? base.model,
+      minYear: urlMinYear ?? base.minYear,
+      maxYear: urlMaxYear ?? base.maxYear,
+      minKm: urlMinKm ?? base.minKm,
+      maxKm: urlMaxKm ?? base.maxKm,
+      bodyType: urlBodyType ?? base.bodyType,
+      fuel: urlFuel ?? base.fuel,
+      transmission: urlTransmission ?? base.transmission,
+      drivetrain: urlDrivetrain ?? base.drivetrain,
+      inspectionGrade: urlInspectionGrade ?? base.inspectionGrade,
     };
   });
+
   const [sort, setSort] = useState<SortOrder>("ending");
   const [view, setView] = useState<ViewMode>("grid");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [resultCount, setResultCount] = useState<number | null>(null);
   const reduced = useReducedMotion();
 
-  // Gap-8 F1: save-this-search dialog state
+  // Product Intelligence category filter metadata
+  const [filterMeta, setFilterMeta] = useState<CategoryFilterMetadata | null>(null);
+
+  // Comparison State (max 3 items)
+  const [selectedCompareIds, setSelectedCompareIds] = useState<number[]>([]);
+  const [compareModalOpen, setCompareModalOpen] = useState(false);
+
+  // Save-this-search dialog state
   const [saveOpen, setSaveOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
   const [saveAlerts, setSaveAlerts] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const category = useMemo(
-    () => {
-      const slug = mode === "category" ? categorySlug : catParam;
-      return slug ? categories.find((c) => c.slug === slug) : undefined;
-    },
-    [mode, categorySlug, catParam, categories],
-  );
+  const activeCategorySlug = mode === "category" ? categorySlug : catParam;
+
+  useEffect(() => {
+    const key = activeCategorySlug || "VEHICLE_PASSENGER_CAR";
+    api.categoryFilters(key)
+      .then(setFilterMeta)
+      .catch(() => setFilterMeta(null));
+  }, [activeCategorySlug]);
+
+  const category = useMemo(() => {
+    return activeCategorySlug ? categories.find((c) => c.slug === activeCategorySlug) : undefined;
+  }, [activeCategorySlug, categories]);
 
   const heading =
     mode === "category"
@@ -173,29 +213,63 @@ export default function BrowsePage({
 
   const activeCount = countActiveFilters(filters);
   const routeKey = `${mode}:${categorySlug ?? ""}:${q ?? ""}:${ending ?? ""}`;
-  // FilterPanel remount key — route changes AND external price-filter changes
-  // (chip removal, clear all) re-seed the draft inputs without sync effects.
-  const panelKey = `${routeKey}:${filters.minPrice ?? ""}-${filters.maxPrice ?? ""}`;
+  const panelKey = `${routeKey}:${filters.minPrice ?? ""}-${filters.maxPrice ?? ""}:${filters.make ?? ""}-${filters.model ?? ""}:${filters.minYear ?? ""}-${filters.maxYear ?? ""}:${filters.bodyType ?? ""}`;
 
-  // URL changes (q / category / ending) remount this page via the router's
-  // AnimatePresence key, so useState initializers re-run on every route.
+  // URL state persistence
+  const syncUrlState = (next: BrowseFilters) => {
+    if (typeof window === "undefined") return;
+    const currentParams = new URLSearchParams(window.location.hash.split("?")[1] || "");
+    if (next.make) currentParams.set("make", next.make); else currentParams.delete("make");
+    if (next.model) currentParams.set("model", next.model); else currentParams.delete("model");
+    if (next.minYear != null) currentParams.set("minYear", String(next.minYear)); else currentParams.delete("minYear");
+    if (next.maxYear != null) currentParams.set("maxYear", String(next.maxYear)); else currentParams.delete("maxYear");
+    if (next.minKm != null) currentParams.set("minKm", String(next.minKm)); else currentParams.delete("minKm");
+    if (next.maxKm != null) currentParams.set("maxKm", String(next.maxKm)); else currentParams.delete("maxKm");
+    if (next.bodyType) currentParams.set("bodyType", next.bodyType); else currentParams.delete("bodyType");
+    if (next.fuel) currentParams.set("fuel", next.fuel); else currentParams.delete("fuel");
+    if (next.transmission) currentParams.set("transmission", next.transmission); else currentParams.delete("transmission");
+    if (next.drivetrain) currentParams.set("drivetrain", next.drivetrain); else currentParams.delete("drivetrain");
+    if (next.inspectionGrade) currentParams.set("inspectionGrade", next.inspectionGrade); else currentParams.delete("inspectionGrade");
+    const qs = currentParams.toString();
+    const basePath = window.location.hash.split("?")[0] || "#/search";
+    window.history.replaceState(null, "", `${basePath}${qs ? `?${qs}` : ""}`);
+  };
 
   const applyFilters = useCallback((patch: Partial<BrowseFilters>) => {
-    setFilters((f) => ({ ...f, ...patch }));
+    setFilters((f) => {
+      const next = { ...f, ...patch };
+      syncUrlState(next);
+      return next;
+    });
   }, []);
 
   const clearFilters = useCallback(() => {
-    setFilters(initialFilters(null));
+    const blank = initialFilters(null);
+    setFilters(blank);
+    syncUrlState(blank);
     toast({
       title: "Filters cleared",
       description: "Showing all live auctions in this view.",
     });
   }, []);
 
-  // ── Gap-8 F1: save this search ────────────────────────────────
-  // Criteria come from page state only (q/category props + filter state),
-  // never re-parsed from the URL.
-  const activeCategorySlug = mode === "category" ? categorySlug : catParam;
+  // Comparison toggle
+  const toggleCompare = (id: number) => {
+    setSelectedCompareIds((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.length >= 3) {
+        toast({
+          title: "Comparison limit reached",
+          description: "You can compare up to 3 items at a time.",
+          variant: "destructive",
+        });
+        return prev;
+      }
+      return [...prev, id];
+    });
+  };
+
+  // Criteria summary for saved searches
   const categoryDisplayName = category
     ? locale === "ja"
       ? category.name_ja
@@ -216,18 +290,37 @@ export default function BrowsePage({
       else value = `${t("searches.save.under")} ${formatUSD(max as number)}`;
       rows.push({ key: "price", label: t("searches.save.price"), value });
     }
+    if (filters.make) rows.push({ key: "make", label: "Make", value: filters.make });
+    if (filters.model) rows.push({ key: "model", label: "Model", value: filters.model });
+    if (filters.minYear != null || filters.maxYear != null) {
+      const yr =
+        filters.minYear != null && filters.maxYear != null
+          ? `${filters.minYear} \u2013 ${filters.maxYear}`
+          : filters.minYear != null
+            ? `${filters.minYear}+`
+            : `Up to ${filters.maxYear}`;
+      rows.push({ key: "year", label: "Year", value: yr });
+    }
+    if (filters.maxKm != null) {
+      rows.push({ key: "maxKm", label: "Max Mileage", value: `${filters.maxKm.toLocaleString()} km` });
+    }
+    if (filters.fuel) rows.push({ key: "fuel", label: "Fuel", value: filters.fuel });
+    if (filters.transmission) rows.push({ key: "transmission", label: "Transmission", value: filters.transmission });
+    if (filters.drivetrain) rows.push({ key: "drivetrain", label: "Drivetrain", value: filters.drivetrain });
+    if (filters.inspectionGrade) rows.push({ key: "grade", label: "Inspection Grade", value: filters.inspectionGrade });
     return rows;
-  }, [q, categoryDisplayName, filters.minPrice, filters.maxPrice, t]);
+  }, [q, categoryDisplayName, filters, t]);
 
-  const defaultSaveName = useMemo(
-    () =>
-      q
-        ? q
-        : categoryDisplayName
-          ? `${t("searches.save.namePrefix")} ${categoryDisplayName}`
-          : t("searches.save.any"),
-    [q, categoryDisplayName, t],
-  );
+  const defaultSaveName = useMemo(() => {
+    const parts: string[] = [];
+    if (filters.make) parts.push(filters.make);
+    if (filters.model) parts.push(filters.model);
+    if (q) parts.push(q);
+    if (parts.length > 0) return parts.join(" ");
+    return categoryDisplayName
+      ? `${t("searches.save.namePrefix")} ${categoryDisplayName}`
+      : t("searches.save.any");
+  }, [filters.make, filters.model, q, categoryDisplayName, t]);
 
   const openSaveDialog = () => {
     if (!user) {
@@ -245,14 +338,43 @@ export default function BrowsePage({
     const name = saveName.trim().slice(0, 80) || defaultSaveName;
     setSaving(true);
     setSaveError(null);
+
+    const facets: Array<{
+      attributeKey: string;
+      operator: string;
+      optionValue?: string;
+      minNumeric?: number;
+      maxNumeric?: number;
+    }> = [];
+    if (filters.make) facets.push({ attributeKey: "MAKE", operator: "EQ", optionValue: filters.make });
+    if (filters.model) facets.push({ attributeKey: "MODEL", operator: "EQ", optionValue: filters.model });
+    if (filters.minYear != null || filters.maxYear != null) {
+      if (filters.minYear != null && filters.maxYear != null) {
+        facets.push({ attributeKey: "YEAR", operator: "BETWEEN", minNumeric: filters.minYear, maxNumeric: filters.maxYear });
+      } else if (filters.minYear != null) {
+        facets.push({ attributeKey: "YEAR", operator: "MIN", minNumeric: filters.minYear });
+      } else {
+        facets.push({ attributeKey: "YEAR", operator: "MAX", maxNumeric: filters.maxYear! });
+      }
+    }
+    if (filters.maxKm != null) facets.push({ attributeKey: "ODOMETER_KM", operator: "MAX", maxNumeric: filters.maxKm });
+    if (filters.bodyType) facets.push({ attributeKey: "BODY_TYPE", operator: "EQ", optionValue: filters.bodyType });
+    if (filters.fuel) facets.push({ attributeKey: "FUEL_TYPE", operator: "EQ", optionValue: filters.fuel });
+    if (filters.transmission) facets.push({ attributeKey: "TRANSMISSION", operator: "EQ", optionValue: filters.transmission });
+    if (filters.drivetrain) facets.push({ attributeKey: "DRIVETRAIN", operator: "EQ", optionValue: filters.drivetrain });
+    if (filters.inspectionGrade) facets.push({ attributeKey: "INSPECTION_GRADE", operator: "EQ", optionValue: filters.inspectionGrade });
+
     try {
       await api.saveSearch({
         name,
         query: q ?? null,
         category: activeCategorySlug ?? null,
+        categoryKey: filterMeta?.categoryKey,
+        productCategoryId: filterMeta?.categoryId,
         minPrice: filters.minPrice,
         maxPrice: filters.maxPrice,
         alerts: saveAlerts,
+        facets: facets.length > 0 ? facets : undefined,
       });
       setSaveOpen(false);
       toast({
@@ -266,7 +388,7 @@ export default function BrowsePage({
     }
   };
 
-  // compact filter summary chips (whole chip = remove target, 44px)
+  // Filter summary chips with individual clear buttons
   const chips: FilterChip[] = useMemo(() => {
     const list: FilterChip[] = [];
     if (filters.condition) {
@@ -296,6 +418,81 @@ export default function BrowsePage({
         clear: () => applyFilters({ city: "" }),
       });
     }
+    if (filters.make) {
+      list.push({
+        key: "make",
+        label: `Make: ${filters.make}`,
+        clear: () => applyFilters({ make: "" }),
+      });
+    }
+    if (filters.model) {
+      list.push({
+        key: "model",
+        label: `Model: ${filters.model}`,
+        clear: () => applyFilters({ model: "" }),
+      });
+    }
+    if (filters.minYear != null || filters.maxYear != null) {
+      const yr =
+        filters.minYear != null && filters.maxYear != null
+          ? `${filters.minYear}–${filters.maxYear}`
+          : filters.minYear != null
+            ? `${filters.minYear}+`
+            : `Up to ${filters.maxYear}`;
+      list.push({
+        key: "year",
+        label: `Year: ${yr}`,
+        clear: () => applyFilters({ minYear: null, maxYear: null }),
+      });
+    }
+    if (filters.minKm != null || filters.maxKm != null) {
+      const km =
+        filters.minKm != null && filters.maxKm != null
+          ? `${filters.minKm.toLocaleString()}–${filters.maxKm.toLocaleString()} km`
+          : filters.minKm != null
+            ? `${filters.minKm.toLocaleString()}+ km`
+            : `Under ${filters.maxKm?.toLocaleString()} km`;
+      list.push({
+        key: "mileage",
+        label: `Mileage: ${km}`,
+        clear: () => applyFilters({ minKm: null, maxKm: null }),
+      });
+    }
+    if (filters.bodyType) {
+      list.push({
+        key: "bodyType",
+        label: `Body: ${filters.bodyType}`,
+        clear: () => applyFilters({ bodyType: "" }),
+      });
+    }
+    if (filters.fuel) {
+      list.push({
+        key: "fuel",
+        label: `Fuel: ${filters.fuel}`,
+        clear: () => applyFilters({ fuel: "" }),
+      });
+    }
+    if (filters.transmission) {
+      list.push({
+        key: "transmission",
+        label: `Trans: ${filters.transmission}`,
+        clear: () => applyFilters({ transmission: "" }),
+      });
+    }
+    if (filters.drivetrain) {
+      list.push({
+        key: "drivetrain",
+        label: `Drive: ${filters.drivetrain}`,
+        clear: () => applyFilters({ drivetrain: "" }),
+      });
+    }
+    if (filters.inspectionGrade) {
+      list.push({
+        key: "inspectionGrade",
+        label: `Inspection: ${filters.inspectionGrade.replace("GRADE_", "Grade ")}`,
+        clear: () => applyFilters({ inspectionGrade: "" }),
+      });
+    }
     if (filters.endingMinutes != null) {
       list.push({
         key: "ending",
@@ -313,7 +510,7 @@ export default function BrowsePage({
     return list;
   }, [filters, applyFilters]);
 
-  // server-side query — free shipping stays client-side by design
+  // Server-side query with structured PI parameters
   const query = useMemo(() => {
     const base: AuctionQuery = { status: "live", order: sort };
     if (mode === "category" && categorySlug) base.category = categorySlug;
@@ -326,6 +523,18 @@ export default function BrowsePage({
     if (filters.endingMinutes != null) {
       base.endingWithinMinutes = filters.endingMinutes;
     }
+    if (filters.make) base.make = filters.make;
+    if (filters.model) base.model = filters.model;
+    if (filters.minYear != null) base.minYear = filters.minYear;
+    if (filters.maxYear != null) base.maxYear = filters.maxYear;
+    if (filters.minKm != null) base.minKm = filters.minKm;
+    if (filters.maxKm != null) base.maxKm = filters.maxKm;
+    if (filters.bodyType) base.bodyType = filters.bodyType;
+    if (filters.fuel) base.fuel = filters.fuel;
+    if (filters.transmission) base.transmission = filters.transmission;
+    if (filters.drivetrain) base.drivetrain = filters.drivetrain;
+    if (filters.exteriorColour) base.exteriorColour = filters.exteriorColour;
+    if (filters.inspectionGrade) base.inspectionGrade = filters.inspectionGrade;
     return base;
   }, [mode, categorySlug, catParam, q, sort, filters]);
 
@@ -419,7 +628,12 @@ export default function BrowsePage({
                 </button>
               )}
             </div>
-            <FilterPanel key={panelKey} filters={filters} onApply={applyFilters} />
+            <FilterPanel
+              key={panelKey}
+              filters={filters}
+              onApply={applyFilters}
+              categoryFilterMeta={filterMeta}
+            />
           </div>
         </aside>
 
@@ -442,8 +656,6 @@ export default function BrowsePage({
               )}
             </Button>
 
-            {/* Gap-8 F1: save this search — icon-only under sm (44px target),
-                label appears from sm up; stays in this toolbar on mobile */}
             <Button
               variant="outline"
               className="h-11 min-h-11 min-w-11 rounded-control"
@@ -503,7 +715,7 @@ export default function BrowsePage({
                   aria-pressed={view === "list"}
                   aria-label="List view"
                   className={cn(
-                    "size-11 grid place-items-center transition-colors border-s border-border",
+                    "size-11 grid place-items-center transition-colors",
                     view === "list"
                       ? "bg-secondary text-teal"
                       : "text-muted-foreground hover:bg-accent/60",
@@ -516,7 +728,6 @@ export default function BrowsePage({
           </div>
 
           <ResultsSection
-            key={queryKey}
             query={query}
             queryKey={queryKey}
             view={view}
@@ -525,6 +736,8 @@ export default function BrowsePage({
             onClearFilters={clearFilters}
             onCountChange={setResultCount}
             popularCategories={popularCategories}
+            selectedCompareIds={selectedCompareIds}
+            onToggleCompare={toggleCompare}
           />
         </div>
       </div>
@@ -540,7 +753,12 @@ export default function BrowsePage({
             </DrawerDescription>
           </DrawerHeader>
           <div className="flex-1 overflow-y-auto ts-scrollbar px-4 py-3">
-            <FilterPanel key={panelKey} filters={filters} onApply={applyFilters} />
+            <FilterPanel
+              key={panelKey}
+              filters={filters}
+              onApply={applyFilters}
+              categoryFilterMeta={filterMeta}
+            />
           </div>
           <DrawerFooter className="flex-row gap-2 pt-0">
             <Button
@@ -561,7 +779,42 @@ export default function BrowsePage({
         </DrawerContent>
       </Drawer>
 
-      {/* Gap-8 F1: save this search dialog */}
+      {/* Floating Comparison Tray */}
+      {selectedCompareIds.length > 0 && (
+        <div className="fixed bottom-6 right-6 z-50 rounded-card border border-teal/40 bg-raised/95 backdrop-blur p-4 shadow-xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4">
+          <div>
+            <p className="text-label font-bold text-foreground">
+              Compare ({selectedCompareIds.length}/3)
+            </p>
+            <p className="text-caption text-muted-foreground">Select up to 3 listings</p>
+          </div>
+          <Button
+            variant="default"
+            className="h-10 px-4 bg-teal hover:bg-teal-deep text-white font-bold"
+            onClick={() => setCompareModalOpen(true)}
+          >
+            Compare Now
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setSelectedCompareIds([])}
+            className="h-10 px-2 text-muted-foreground hover:text-foreground"
+          >
+            Clear
+          </Button>
+        </div>
+      )}
+
+      {/* Comparison Modal */}
+      <CompareDialog
+        open={compareModalOpen}
+        onOpenChange={setCompareModalOpen}
+        auctionIds={selectedCompareIds}
+        onRemoveItem={(id) => setSelectedCompareIds((prev) => prev.filter((x) => x !== id))}
+      />
+
+      {/* Save this search dialog */}
       <Dialog open={saveOpen} onOpenChange={setSaveOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>

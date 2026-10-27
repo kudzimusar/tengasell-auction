@@ -38,6 +38,9 @@ import type {
   VehicleInspection,
   VehicleFinding,
   VehicleDocument,
+  CategoryFilterMetadata,
+  ProductComparisonResponse,
+  SavedSearchFacet,
 } from "../types";
 
 const TB = 3001;
@@ -595,6 +598,41 @@ export class RemoteApi {
     return res.bundle;
   }
 
+  async categoryFilters(categoryKey?: string): Promise<CategoryFilterMetadata> {
+    try {
+      const res = await rpc<{ ok: boolean; metadata?: CategoryFilterMetadata }>("product:filters:get", { categoryKey });
+      if (res?.metadata) return res.metadata;
+    } catch {
+      /* fallback */
+    }
+    const targetKey = categoryKey || "VEHICLE_PASSENGER_CAR";
+    const httpRes = await fetch(`/api/pi/categories/${encodeURIComponent(targetKey)}/filters`);
+    if (httpRes.ok) {
+      const data = await httpRes.json();
+      if (data.ok) return data;
+    }
+    throw new Error("Could not load category filter metadata.");
+  }
+
+  async compareProducts(auctionIds: number[]): Promise<ProductComparisonResponse> {
+    try {
+      const res = await rpc<{ ok: boolean; comparison?: ProductComparisonResponse }>("product:compare", { auctionIds });
+      if (res?.comparison) return res.comparison;
+    } catch {
+      /* fallback */
+    }
+    const httpRes = await fetch("/api/pi/compare", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ auctionIds }),
+    });
+    if (httpRes.ok) {
+      const data = await httpRes.json();
+      if (data.ok && data.comparison) return data.comparison;
+    }
+    throw new Error("Could not compare products.");
+  }
+
   async openProductIntake(input: {
     categoryKey: string;
     title: string;
@@ -976,12 +1014,32 @@ export class RemoteApi {
     }
   }
 
-  // ── Gap-8: saved searches (user-owned, TrailBase REST) ───────────
+  // ── Gap-8: saved searches (user-owned, TrailBase REST + DISC-03 facets) ───────────
   async savedSearches(): Promise<SavedSearch[]> {
     if (!this.cachedUser && !(await this.currentUser())) return [];
     const res = await tbFetch("/api/records/v1/saved_searches", {
       headers: this.authHeaders(),
       params: { order: "-created_at", limit: 100 },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const searches = (data.records ?? []) as SavedSearch[];
+    for (const s of searches) {
+      s.facets = await this.savedSearchFacets(s.id).catch(() => []);
+    }
+    return searches;
+  }
+
+  async savedSearchFacets(savedSearchId: number): Promise<SavedSearchFacet[]> {
+    try {
+      const res = await rpc<{ ok: boolean; facets?: SavedSearchFacet[] }>("saved-search:facets:get", { savedSearchId });
+      if (res?.facets) return res.facets;
+    } catch {
+      /* fallback */
+    }
+    const res = await tbFetch("/api/records/v1/saved_search_facets", {
+      headers: this.authHeaders(),
+      params: { [`filter[saved_search_id][$eq]`]: savedSearchId, limit: 50 },
     });
     if (!res.ok) return [];
     const data = await res.json();
@@ -991,6 +1049,12 @@ export class RemoteApi {
   async saveSearch(input: SaveSearchInput): Promise<SavedSearch> {
     if (!this.cachedUser && !(await this.currentUser()))
       throw new Error("Sign in to save searches.");
+    try {
+      const res = await rpc<{ ok: boolean; savedSearch?: SavedSearch; error?: string }>("saved-search:save", { search: input });
+      if (res?.savedSearch) return res.savedSearch;
+    } catch {
+      /* fallback to REST */
+    }
     // high-water mark: only listings created AFTER this point trigger alerts
     const top = await tbFetch("/api/records/v1/auction_public", {
       headers: this.authHeaders(),
@@ -1007,6 +1071,9 @@ export class RemoteApi {
         name: input.name.slice(0, 80),
         query: input.query?.trim() || null,
         category: input.category || null,
+        product_category_id: input.productCategoryId ?? null,
+        product_schema_version_id: input.productSchemaVersionId ?? null,
+        category_key: input.categoryKey ?? null,
         min_price: input.minPrice ?? null,
         max_price: input.maxPrice ?? null,
         alerts: input.alerts === false ? 0 : 1,
@@ -1017,12 +1084,36 @@ export class RemoteApi {
     });
     if (!res.ok) throw new Error(await errorMessage(res));
     const data = await res.json();
+    const createdId = Number(data.ids?.[0] ?? 0);
+    if (Array.isArray(input.facets)) {
+      for (const f of input.facets) {
+        if (!f.attributeKey || !f.operator) continue;
+        await tbFetch("/api/records/v1/saved_search_facets", {
+          method: "POST",
+          headers: this.authHeaders(),
+          body: JSON.stringify({
+            saved_search_id: createdId,
+            attribute_key: f.attributeKey.toUpperCase(),
+            operator: f.operator.toUpperCase(),
+            value_text: f.valueText ?? null,
+            value_number: f.valueNumber ?? null,
+            value_boolean: f.valueBoolean != null ? (f.valueBoolean ? 1 : 0) : null,
+            value_min: f.valueMin ?? null,
+            value_max: f.valueMax ?? null,
+            value_json: "{}",
+            created_at: now,
+          }),
+        }).catch(() => null);
+      }
+    }
     const created = await tbFetch(
-      `/api/records/v1/saved_searches/${data.ids?.[0] ?? 0}`,
+      `/api/records/v1/saved_searches/${createdId}`,
       { headers: this.authHeaders() },
     );
     if (!created.ok) throw new Error("Search saved but could not be read back.");
-    return await created.json();
+    const saved = await created.json();
+    saved.facets = await this.savedSearchFacets(createdId);
+    return saved;
   }
 
   async deleteSearch(id: number): Promise<void> {

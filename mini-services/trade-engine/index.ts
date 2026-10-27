@@ -58,13 +58,20 @@ import {
   vehicleBundle,
 } from "./vehicle-authority";
 import {
+  categoryFilterMetadata,
   intakeSession,
   openProductIntake,
+  productCompare,
   productSchema,
   publicProductBundle,
   publishIntake,
   saveIntakeStep,
 } from "./product-intelligence";
+import {
+  queryProductSearch,
+  rebuildProductSearchIndex,
+  refreshAuctionSearch,
+} from "./search-indexing";
 import {
   createAuctionEvent,
   eventBundle,
@@ -731,11 +738,32 @@ async function publishAuctionCoreEvent(event: AuctionOutboxEnvelope): Promise<vo
   }
 }
 
+async function drainPiProjectionOutbox(): Promise<void> {
+  try {
+    const events = await getRecords("pi_projection_outbox", "order=id&limit=50");
+    for (const evt of events) {
+      if (evt.product_type === "AUCTION" || evt.product_type === "VEHICLE") {
+        let auctionId = Number(evt.product_id);
+        if (evt.product_type === "VEHICLE") {
+          const veh = await getRecord("vehicles", evt.product_id);
+          auctionId = Number(veh?.auction_id ?? 0);
+        }
+        if (auctionId > 0) {
+          await refreshAuctionSearch(auctionCoreStore, auctionId);
+        }
+      }
+    }
+  } catch (e) {
+    /* best effort */
+  }
+}
+
 async function drainAuctionOutbox(): Promise<void> {
   if (auctionOutboxDraining) return;
   auctionOutboxDraining = true;
   try {
     await flushAuctionOutbox(auctionCoreStore, publishAuctionCoreEvent);
+    await drainPiProjectionOutbox();
   } finally {
     auctionOutboxDraining = false;
   }
@@ -874,18 +902,82 @@ async function sweepOfferExpiry() {
   }
 }
 
-/** Does this auction match a saved-search row? (Gap-8 alerts) */
-function matchesSearch(a: any, ss: any): boolean {
+/** Does this auction match a saved-search row? (Gap-8 alerts + DISC-03 structured facets) */
+function matchesSearch(a: any, ss: any, facets: any[] = [], psi: any = null): boolean {
   if (a.live_session_id != null) return false; // live-room lots aren't "new listings"
   if (ss.query) {
     const q = String(ss.query).toLowerCase();
     const hay = `${a.title ?? ""} ${a.description ?? ""}`.toLowerCase();
     if (!hay.includes(q)) return false;
   }
-  if (ss.category && a.category !== ss.category) return false;
+  if (ss.category && a.category !== ss.category && a.category_key !== ss.category) return false;
+  if (ss.category_key && a.category_key && a.category_key !== ss.category_key) return false;
   const price = Number(a.current_price ?? a.start_price ?? 0);
   if (ss.min_price != null && price < Number(ss.min_price)) return false;
   if (ss.max_price != null && price > Number(ss.max_price)) return false;
+
+  if (!facets || facets.length === 0) return true;
+
+  // Evaluate structured facets against search projection / auction fields
+  for (const f of facets) {
+    const key = String(f.attribute_key).toUpperCase();
+    const op = String(f.operator).toUpperCase();
+
+    let actualValue: any = null;
+    if (psi) {
+      switch (key) {
+        case "MAKE": actualValue = psi.make; break;
+        case "MODEL": actualValue = psi.model; break;
+        case "MODEL_YEAR": actualValue = psi.year; break;
+        case "ODOMETER_KM": actualValue = psi.mileage; break;
+        case "BODY_TYPE": actualValue = psi.body_type; break;
+        case "VEHICLE_CLASS": actualValue = psi.vehicle_class; break;
+        case "FUEL_TYPE": actualValue = psi.fuel; break;
+        case "TRANSMISSION": actualValue = psi.transmission; break;
+        case "DRIVETRAIN": actualValue = psi.drivetrain; break;
+        case "EXTERIOR_COLOUR": actualValue = psi.exterior_colour; break;
+        case "INSPECTION_GRADE": actualValue = psi.inspection_grade; break;
+        case "ROADWORTHY": actualValue = psi.roadworthy; break;
+        case "SERVICE_HISTORY_CLASS": actualValue = psi.service_history_class; break;
+        case "ACCIDENT_HISTORY": actualValue = psi.accident_history; break;
+        case "CUSTOMS_STATUS": actualValue = psi.customs_status; break;
+        default: actualValue = psi[key.toLowerCase()] ?? null;
+      }
+    } else {
+      actualValue = a[key.toLowerCase()] ?? null;
+    }
+
+    if (actualValue == null) return false; // constraint required but missing
+
+    switch (op) {
+      case "EQ":
+        if (f.value_text != null && String(actualValue).toLowerCase() !== String(f.value_text).toLowerCase()) return false;
+        if (f.value_number != null && Number(actualValue) !== Number(f.value_number)) return false;
+        if (f.value_boolean != null && Boolean(actualValue) !== Boolean(f.value_boolean)) return false;
+        break;
+      case "IN":
+        let allowed: string[] = [];
+        try {
+          allowed = f.value_text ? f.value_text.split(",").map((s: string) => s.trim().toLowerCase()) : [];
+        } catch { /* ignore */ }
+        if (!allowed.includes(String(actualValue).toLowerCase())) return false;
+        break;
+      case "MIN":
+        if (f.value_number != null && Number(actualValue) < Number(f.value_number)) return false;
+        break;
+      case "MAX":
+        if (f.value_number != null && Number(actualValue) > Number(f.value_number)) return false;
+        break;
+      case "BETWEEN":
+        if (f.value_min != null && Number(actualValue) < Number(f.value_min)) return false;
+        if (f.value_max != null && Number(actualValue) > Number(f.value_max)) return false;
+        break;
+      case "EXISTS":
+        if (actualValue == null || actualValue === "") return false;
+        break;
+    }
+  }
+
   return true;
 }
 
@@ -903,7 +995,20 @@ async function sweepSavedSearches() {
       "auctions",
       `filter[id][$gt]=${Number(ss.last_seen_id ?? 0)}&filter[status][$eq]=live&order=id&limit=50`,
     );
-    const matches = candidates.filter((a: any) => matchesSearch(a, ss));
+    const facets = await getRecords("saved_search_facets", `filter[saved_search_id][$eq]=${ss.id}&limit=50`).catch(() => []);
+
+    const matches: any[] = [];
+    for (const a of candidates) {
+      let psi: any = null;
+      if (facets.length > 0) {
+        const psiRows = await getRecords("product_search_index", `filter[auction_id][$eq]=${a.id}&limit=1`).catch(() => []);
+        psi = psiRows[0] ?? null;
+      }
+      if (matchesSearch(a, ss, facets, psi)) {
+        matches.push(a);
+      }
+    }
+
     let username: string | null = null;
     for (const m of matches.slice(0, 5)) {
       if (!username) {
@@ -1126,6 +1231,108 @@ io.on("connection", (socket: Socket) => {
     } catch (err) {
       console.error("[product:intake:publish]", err);
       ack?.({ ok: false, error: "Product publish readiness could not be checked." });
+    }
+  });
+
+  socket.on("product:filters:get", async (data: any, ack?: Ack) => {
+    try {
+      const metadata = await categoryFilterMetadata(auctionCoreStore, data?.categoryKey);
+      ack?.({ ok: true, metadata });
+    } catch (err) {
+      console.error("[product:filters:get]", err);
+      ack?.({ ok: false, error: "Filter metadata is temporarily unavailable." });
+    }
+  });
+
+  socket.on("product:search:query", async (data: any, ack?: Ack) => {
+    try {
+      const res = await queryProductSearch(auctionCoreStore, data?.query ?? {});
+      ack?.({ ok: true, ...res });
+    } catch (err) {
+      console.error("[product:search:query]", err);
+      ack?.({ ok: false, error: "Search query failed." });
+    }
+  });
+
+  socket.on("product:compare", async (data: any, ack?: Ack) => {
+    try {
+      const res = await productCompare(auctionCoreStore, data?.auctionIds ?? []);
+      ack?.({ ok: true, comparison: res });
+    } catch (err) {
+      console.error("[product:compare]", err);
+      ack?.({ ok: false, error: "Product comparison failed." });
+    }
+  });
+
+  socket.on("product:search:rebuild", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user?.admin) return ack?.({ ok: false, error: "Admin authority required to rebuild search index." });
+      const res = await rebuildProductSearchIndex(auctionCoreStore);
+      ack?.({ ok: true, count: res.count });
+    } catch (err) {
+      console.error("[product:search:rebuild]", err);
+      ack?.({ ok: false, error: "Search rebuild failed." });
+    }
+  });
+
+  socket.on("saved-search:facets:get", async (data: any, ack?: Ack) => {
+    try {
+      const searchId = Number(data?.savedSearchId);
+      if (!searchId) return ack?.({ ok: false, error: "Saved search id is required." });
+      const facets = await getRecords("saved_search_facets", `filter[saved_search_id][$eq]=${searchId}&limit=50`);
+      ack?.({ ok: true, facets });
+    } catch (err) {
+      console.error("[saved-search:facets:get]", err);
+      ack?.({ ok: false, error: "Saved search facets could not be loaded." });
+    }
+  });
+
+  socket.on("saved-search:save", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, code: "AUTH_REQUIRED", error: "Sign in to save searches." });
+      const input = data?.search ?? {};
+      const searchId = await createRecord("saved_searches", {
+        user: user.id,
+        name: clean(input.name, 100),
+        query: input.query ? clean(input.query, 120) : null,
+        category: input.category ? clean(input.category, 80) : null,
+        product_category_id: input.productCategoryId ? Number(input.productCategoryId) : null,
+        product_schema_version_id: input.productSchemaVersionId ? Number(input.productSchemaVersionId) : null,
+        category_key: input.categoryKey ? clean(input.categoryKey, 80) : null,
+        min_price: input.minPrice != null ? Number(input.minPrice) : null,
+        max_price: input.maxPrice != null ? Number(input.maxPrice) : null,
+        alerts: input.alerts === false ? 0 : 1,
+        last_seen_id: 0,
+        created_at: nowIso(),
+        updated_at: nowIso(),
+      });
+      if (!searchId) return ack?.({ ok: false, error: "Could not save search." });
+
+      const facets = Array.isArray(input.facets) ? input.facets : [];
+      for (const f of facets) {
+        if (!f.attributeKey || !f.operator) continue;
+        await createRecord("saved_search_facets", {
+          saved_search_id: searchId,
+          attribute_key: clean(f.attributeKey, 80).toUpperCase(),
+          operator: clean(f.operator, 20).toUpperCase(),
+          value_text: f.valueText != null ? clean(f.valueText, 200) : null,
+          value_number: f.valueNumber != null ? Number(f.valueNumber) : null,
+          value_boolean: f.valueBoolean != null ? (f.valueBoolean ? 1 : 0) : null,
+          value_min: f.valueMin != null ? Number(f.valueMin) : null,
+          value_max: f.valueMax != null ? Number(f.valueMax) : null,
+          value_json: JSON.stringify(f.valueJson ?? {}),
+          created_at: nowIso(),
+        });
+      }
+
+      const saved = await getRecord("saved_searches", searchId);
+      const savedFacets = await getRecords("saved_search_facets", `filter[saved_search_id][$eq]=${searchId}&limit=50`);
+      ack?.({ ok: true, savedSearch: { ...saved, facets: savedFacets } });
+    } catch (err) {
+      console.error("[saved-search:save]", err);
+      ack?.({ ok: false, error: "Saving search failed." });
     }
   });
 

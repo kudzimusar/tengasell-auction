@@ -580,5 +580,32 @@ record_apis: [
     acl_authenticated: [CREATE, READ]
     create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
     read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "product_search_index"
+    table_name: "product_search_index"
+    acl_world: [READ]
+    acl_authenticated: [CREATE, READ, UPDATE, DELETE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    delete_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "product_search_facet_values"
+    table_name: "product_search_facet_values"
+    acl_world: [READ]
+    acl_authenticated: [CREATE, READ, UPDATE, DELETE]
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    delete_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
+    name: "saved_search_facets"
+    table_name: "saved_search_facets"
+    acl_authenticated: [CREATE, READ, UPDATE, DELETE]
+    create_access_rule: "EXISTS(SELECT 1 FROM saved_searches WHERE id = _ROW_.saved_search_id AND user = _USER_.id) OR EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    read_access_rule: "EXISTS(SELECT 1 FROM saved_searches WHERE id = _ROW_.saved_search_id AND user = _USER_.id) OR EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM saved_searches WHERE id = _ROW_.saved_search_id AND user = _USER_.id) OR EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    delete_access_rule: "EXISTS(SELECT 1 FROM saved_searches WHERE id = _ROW_.saved_search_id AND user = _USER_.id) OR EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
   }
 ]
