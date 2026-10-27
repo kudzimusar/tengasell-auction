@@ -43,16 +43,18 @@ export default function HomeScreen() {
   const [category, setCategory] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [listLoading, setListLoading] = useState(false);
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState<number | null>(null);
 
   useEffect(() => {
+    const initialTick = setTimeout(() => setNow(Date.now()), 0);
     const timer = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(timer);
+    return () => {
+      clearTimeout(initialTick);
+      clearInterval(timer);
+    };
   }, []);
 
   const boot = useCallback(async () => {
-    setAuthorityState("checking");
-    setError(null);
     try {
       await probeCanonical();
       const [nextCategories, nextAuctions] = await Promise.all([
@@ -71,6 +73,12 @@ export default function HomeScreen() {
   }, []);
 
   useEffect(() => {
+    void boot();
+  }, [boot]);
+
+  const retryCanonical = useCallback(() => {
+    setAuthorityState("checking");
+    setError(null);
     void boot();
   }, [boot]);
 
@@ -177,7 +185,7 @@ export default function HomeScreen() {
           <Text style={styles.errorText}>{error}</Text>
           <Pressable
             style={styles.retryButton}
-            onPress={() => void boot()}
+            onPress={retryCanonical}
             accessibilityRole="button"
             accessibilityLabel="Retry canonical authority connection"
           >
@@ -250,9 +258,11 @@ export default function HomeScreen() {
               <Text style={styles.mutedText}>No live auctions in this category.</Text>
             }
             renderItem={({ item }) => {
-              const remainingMs = Date.parse(item.ends_at) - now;
-              const remaining = formatRemaining(remainingMs);
-              const severity = remainingSeverity(remainingMs);
+              const remainingMs = now === null ? null : Date.parse(item.ends_at) - now;
+              const remaining =
+                remainingMs === null ? "Updating time…" : formatRemaining(remainingMs);
+              const severity =
+                remainingMs === null ? "normal" : remainingSeverity(remainingMs);
               return (
                 <View
                   style={styles.card}

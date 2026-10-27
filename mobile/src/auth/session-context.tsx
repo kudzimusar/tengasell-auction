@@ -142,7 +142,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const expectedGeneration = ++generationRef.current;
     tokensRef.current = null;
     refreshPromiseRef.current = null;
-    setSnapshot({ phase: "booting", identity: null, message: null });
 
     try {
       if (!(await secureSessionStorageAvailable())) {
@@ -319,15 +318,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     [clearLocalSession, refreshSession, snapshot.phase],
   );
 
+  const retrySessionRecovery = useCallback(async () => {
+    setSnapshot({ phase: "booting", identity: null, message: null });
+    await restoreSession();
+  }, [restoreSession]);
+
   const value = useMemo<SessionContextValue>(
     () => ({
       ...snapshot,
       login,
       logout,
-      retrySessionRecovery: restoreSession,
+      retrySessionRecovery,
       withAuthenticatedToken,
     }),
-    [login, logout, restoreSession, snapshot, withAuthenticatedToken],
+    [login, logout, retrySessionRecovery, snapshot, withAuthenticatedToken],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

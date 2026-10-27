@@ -17,10 +17,10 @@ const MIN_TOUCH = 48;
 export default function AccountScreen() {
   const session = useSession();
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadProfile = useCallback(async () => {
+  const retryProfile = useCallback(async () => {
     if (session.phase !== "authenticated" || !session.identity) return;
     const userId = session.identity.id;
     setLoading(true);
@@ -40,20 +40,43 @@ export default function AccountScreen() {
     } finally {
       setLoading(false);
     }
-  }, [session]);
+  }, [session.identity, session.phase, session.withAuthenticatedToken]);
 
   useEffect(() => {
     if (session.phase === "anonymous" || session.phase === "session-invalid") {
-      setProfile(null);
       router.replace("/auth/login");
       return;
     }
-    if (session.phase !== "authenticated") {
-      setProfile(null);
-      return;
-    }
-    void loadProfile();
-  }, [loadProfile, session.phase]);
+    if (session.phase !== "authenticated" || !session.identity) return;
+
+    let active = true;
+    const userId = session.identity.id;
+
+    void session
+      .withAuthenticatedToken((authToken) => fetchAuthenticatedProfile(authToken, userId))
+      .then(
+        (nextProfile) => {
+          if (!active) return;
+          setProfile(nextProfile);
+          setError(null);
+          setLoading(false);
+        },
+        (loadError: unknown) => {
+          if (!active) return;
+          setProfile(null);
+          setError(
+            loadError instanceof Error
+              ? loadError.message
+              : "Authenticated profile request failed.",
+          );
+          setLoading(false);
+        },
+      );
+
+    return () => {
+      active = false;
+    };
+  }, [session.identity?.id, session.phase, session.withAuthenticatedToken]);
 
   const signOut = async () => {
     setProfile(null);
@@ -146,7 +169,7 @@ export default function AccountScreen() {
             <Text style={styles.errorText}>{error}</Text>
             <Pressable
               style={styles.secondaryButton}
-              onPress={() => void loadProfile()}
+              onPress={() => void retryProfile()}
               accessibilityRole="button"
               accessibilityLabel="Retry authenticated profile request"
             >
