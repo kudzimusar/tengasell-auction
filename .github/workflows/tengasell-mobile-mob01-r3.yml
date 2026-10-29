@@ -48,6 +48,8 @@ jobs:
             if (blocked) throw new Error("Untriaged high or critical dependency advisory");
           '
       - name: Expo Doctor
+        id: expo_doctor
+        continue-on-error: true
         working-directory: mobile
         run: npx expo-doctor
       - name: Expo lint
@@ -68,3 +70,8 @@ jobs:
         run: |
           git status --short
           test -z "$(git status --short)"
+      - name: Assert Expo Doctor result after all gates
+        if: always()
+        run: |
+          echo "Expo Doctor outcome: ${{ steps.expo_doctor.outcome }}"
+          test "${{ steps.expo_doctor.outcome }}" = "success"
