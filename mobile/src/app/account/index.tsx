@@ -120,7 +120,9 @@ export default function AccountScreen() {
       <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
         <View style={styles.center}>
           <Text style={styles.title} accessibilityRole="header">
-            {t("session.signoutPending")}
+            {session.phase === "signout-pending"
+              ? t("session.signoutPending")
+              : t("session.signoutIncompleteTitle")}
           </Text>
           {session.phase === "signout-incomplete" && (
             <>

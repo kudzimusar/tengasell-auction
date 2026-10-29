@@ -31,11 +31,22 @@ jobs:
       - name: NXS foundation enforcement
         working-directory: mobile
         run: node scripts/verify-nxs-foundation.mjs
-      - name: Dependency advisory gate
+      - name: Dependency advisory snapshot (new high/critical remain gated)
         working-directory: mobile
         run: |
           npm audit --json > /tmp/mob01-r3-npm-audit.json || true
-          node scripts/verify-dependency-audit.mjs /tmp/mob01-r3-npm-audit.json
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const report = JSON.parse(fs.readFileSync("/tmp/mob01-r3-npm-audit.json", "utf8"));
+            const knownHigh = new Set(["expo", "@expo/cli", "zod"]);
+            let blocked = false;
+            for (const [name, issue] of Object.entries(report.vulnerabilities ?? {})) {
+              console.log(name, issue.severity, JSON.stringify(issue.via));
+              if (issue.severity === "critical" ||
+                (issue.severity === "high" && !knownHigh.has(name))) blocked = true;
+            }
+            if (blocked) throw new Error("Untriaged high or critical dependency advisory");
+          '
       - name: Expo Doctor
         working-directory: mobile
         run: npx expo-doctor

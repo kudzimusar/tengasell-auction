@@ -100,6 +100,7 @@ export const englishStrings = {
     "Session changed while credentials were being persisted.",
   "session.noStoredSession": "No saved sign-in was found on this device.",
   "session.signoutPending": "Signing out and checking this device…",
+  "session.signoutIncompleteTitle": "Finish signing out",
   "session.signoutIncomplete": "Sign-out is not complete. We could not verify that your saved sign-in details were removed. Retry before sharing this device.",
   "session.signoutLocalOnly": "Signed out on this device. We could not confirm that the server ended your session.",
   "session.signoutBlocked": "Complete the previous sign-out before signing in again.",
