@@ -190,6 +190,27 @@ export default function HomeScreen() {
         </Text>
       </View>
 
+      {(session.phase === "signout-pending" ||
+        session.phase === "signout-incomplete" ||
+        session.phase === "signed-out-locally") && (
+        <View style={styles.warningBox} accessibilityRole="alert">
+          <Text style={styles.warningText}>
+            {session.phase === "signout-pending"
+              ? t("session.signoutPending")
+              : session.phase === "signout-incomplete"
+                ? t("session.signoutIncomplete")
+                : t("session.signoutLocalOnly")}
+          </Text>
+          {session.phase === "signout-incomplete" && (
+            <NxsButton
+              label={t("session.retrySignout")}
+              variant="destructive"
+              onPress={() => void session.retryLogout()}
+            />
+          )}
+        </View>
+      )}
+
       {session.phase === "session-invalid" && (
         <View style={styles.warningBox} accessibilityRole="alert">
           <Text style={styles.warningText}>⚠ {sessionInvalidMessage}</Text>

@@ -19,18 +19,30 @@ import {
   type TrailBaseTokens,
 } from "../lib/trailbase";
 import {
+  clearLogoutIntent,
   clearStoredSession,
+  hasLogoutIntent,
+  markLogoutIntent,
+  readCredentialsForLogout,
   readStoredSession,
   secureSessionStorageAvailable,
+  SessionRestorationBlockedError,
   writeStoredSession,
 } from "./session-storage";
+import {
+  settleLogout,
+  type LogoutEvidence,
+} from "./logout-transaction";
 
 export type SessionPhase =
   | "booting"
   | "anonymous"
   | "authenticated"
   | "session-invalid"
-  | "network-degraded";
+  | "network-degraded"
+  | "signout-pending"
+  | "signout-incomplete"
+  | "signed-out-locally";
 
 export interface SessionSnapshot {
   phase: SessionPhase;
@@ -40,7 +52,8 @@ export interface SessionSnapshot {
 
 interface SessionContextValue extends SessionSnapshot {
   login: (identifier: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
+  logout: () => Promise<LogoutEvidence>;
+  retryLogout: () => Promise<LogoutEvidence>;
   retrySessionRecovery: () => Promise<void>;
   withAuthenticatedToken: <T>(operation: (authToken: string) => Promise<T>) => Promise<T>;
 }
@@ -63,6 +76,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const tokensRef = useRef<TrailBaseTokens | null>(null);
   const generationRef = useRef(0);
   const refreshPromiseRef = useRef<Promise<TrailBaseTokens> | null>(null);
+  const credentialWriteRef = useRef<Promise<void> | null>(null);
+  const logoutPromiseRef = useRef<Promise<LogoutEvidence> | null>(null);
 
   const clearLocalSession = useCallback(
     async (phase: SessionPhase, message: string | null) => {
@@ -99,9 +114,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         );
       }
 
-      await writeStoredSession(tokens);
+      const write = writeStoredSession(tokens);
+      credentialWriteRef.current = write;
+      try {
+        await write;
+      } finally {
+        if (credentialWriteRef.current === write) credentialWriteRef.current = null;
+      }
       if (generationRef.current !== expectedGeneration) {
-        await clearStoredSession();
+        // The new owner of the generation is responsible for cleanup.
+        // In particular, logout waits for in-flight credential writes before
+        // verifying deletion; do not race that cleanup from this stale task.
         throw new TrailBaseError(
           "session-invalid",
           "Session changed while credentials were being persisted.",
@@ -153,6 +176,28 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      // A durable logout intent takes precedence over a still-valid token pair.
+      // A failed guard read must never be interpreted as "no marker".
+      let signoutIntent: boolean;
+      try {
+        signoutIntent = await hasLogoutIntent();
+      } catch {
+        setSnapshot({
+          phase: "signout-incomplete",
+          identity: null,
+          message: "We could not check whether your last sign-out finished.",
+        });
+        return;
+      }
+      if (signoutIntent) {
+        setSnapshot({
+          phase: "signout-incomplete",
+          identity: null,
+          message: "Your last sign-out needs to be completed on this device.",
+        });
+        return;
+      }
+
       const stored = await readStoredSession();
       if (!stored) {
         setSnapshot({ phase: "anonymous", identity: null, message: null });
@@ -169,6 +214,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if (generationRef.current !== expectedGeneration) return;
       tokensRef.current = null;
 
+      if (error instanceof SessionRestorationBlockedError) {
+        setSnapshot({
+          phase: "signout-incomplete",
+          identity: null,
+          message: "Your last sign-out needs to be completed on this device.",
+        });
+        return;
+      }
+
       if (isNetworkOrConfiguration(error)) {
         setSnapshot({
           phase: "network-degraded",
@@ -181,10 +235,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      await clearLocalSession(
-        "session-invalid",
-        error instanceof Error ? error.message : "Stored session could not be restored safely.",
-      );
+      try {
+        await clearLocalSession(
+          "session-invalid",
+          error instanceof Error ? error.message : "Stored session could not be restored safely.",
+        );
+      } catch {
+        setSnapshot({
+          phase: "signout-incomplete",
+          identity: null,
+          message: "We could not safely clear the saved session. Try again.",
+        });
+      }
     }
   }, [applyAuthenticated, clearLocalSession]);
 
@@ -197,46 +259,81 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (identifier: string, password: string) => {
+      if (logoutPromiseRef.current || snapshot.phase === "signout-incomplete" ||
+          snapshot.phase === "signout-pending") {
+        throw new SessionRestorationBlockedError();
+      }
+      // Guard the fresh sign-in path as well as automatic session restoration.
+      if (await hasLogoutIntent()) throw new SessionRestorationBlockedError();
       const expectedGeneration = ++generationRef.current;
       tokensRef.current = null;
       refreshPromiseRef.current = null;
       const tokens = await loginTrailBase(identifier.trim(), password);
       await applyAuthenticated(tokens, expectedGeneration);
     },
-    [applyAuthenticated],
+    [applyAuthenticated, snapshot.phase],
   );
 
-  const logout = useCallback(async () => {
-    let previous = tokensRef.current;
-    if (!previous) {
-      try {
-        previous = await readStoredSession();
-      } catch {
-        previous = null;
-      }
-    }
+  const logout = useCallback((): Promise<LogoutEvidence> => {
+    if (logoutPromiseRef.current) return logoutPromiseRef.current;
 
+    // Generation invalidation and privileged UI removal occur synchronously,
+    // before ANY await (including an in-flight credential write).
+    const previous = tokensRef.current;
+    const pendingWrite = credentialWriteRef.current;
     generationRef.current += 1;
     tokensRef.current = null;
     refreshPromiseRef.current = null;
-    setSnapshot({ phase: "anonymous", identity: null, message: null });
+    setSnapshot({ phase: "signout-pending", identity: null, message: null });
 
-    try {
-      await clearStoredSession();
-    } catch {
-      // State and in-memory credentials are already cleared. A later session recovery
-      // will fail closed if secure storage could not actually be cleared.
-    }
+    const task = settleLogout({
+      markIntent: markLogoutIntent,
+      awaitPendingWrite: async () => {
+        if (pendingWrite) await pendingWrite.catch(() => undefined);
+      },
+      captureAuthToken: async () => {
+        if (previous) return previous.authToken;
+        try {
+          return (await readCredentialsForLogout())?.authToken ?? null;
+        } catch {
+          return null;
+        }
+      },
+      clearCredentials: clearStoredSession,
+      revokeSession: async (authToken) => {
+        if (!authToken) return false;
+        await logoutTrailBase(authToken);
+        // TrailBase documents that a successful logout revokes the session's
+        // stateful refresh token, but stateless JWTs live until expiry.
+        return true;
+      },
+      clearIntent: clearLogoutIntent,
+    });
 
-    if (previous?.authToken) {
-      try {
-        await logoutTrailBase(previous.authToken);
-      } catch {
-        // Local logout must not retain privileged UI when the authority is unreachable.
-        // Independent verification covers server-side invalidation and offline logout paths.
+    logoutPromiseRef.current = task;
+    void task.then((evidence) => {
+      if (evidence.status === "complete") {
+        setSnapshot({ phase: "anonymous", identity: null, message: null });
+      } else if (evidence.status === "local-only") {
+        setSnapshot({
+          phase: "signed-out-locally",
+          identity: null,
+          message: "Signed out on this device. Server sign-out could not be confirmed.",
+        });
+      } else {
+        setSnapshot({
+          phase: "signout-incomplete",
+          identity: null,
+          message: "Sign-out is incomplete. The saved session needs to be cleared.",
+        });
       }
-    }
+    }).finally(() => {
+      if (logoutPromiseRef.current === task) logoutPromiseRef.current = null;
+    });
+    return task;
   }, []);
+
+  const retryLogout = logout;
 
   const withAuthenticatedToken = useCallback(
     async <T,>(operation: (authToken: string) => Promise<T>): Promise<T> => {
@@ -322,19 +419,22 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   );
 
   const retrySessionRecovery = useCallback(async () => {
+    if (logoutPromiseRef.current || snapshot.phase === "signout-incomplete" ||
+        snapshot.phase === "signout-pending") return;
     setSnapshot({ phase: "booting", identity: null, message: null });
     await restoreSession();
-  }, [restoreSession]);
+  }, [restoreSession, snapshot.phase]);
 
   const value = useMemo<SessionContextValue>(
     () => ({
       ...snapshot,
       login,
       logout,
+      retryLogout,
       retrySessionRecovery,
       withAuthenticatedToken,
     }),
-    [login, logout, retrySessionRecovery, snapshot, withAuthenticatedToken],
+    [login, logout, retryLogout, retrySessionRecovery, snapshot, withAuthenticatedToken],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

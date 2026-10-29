@@ -1,6 +1,18 @@
 import type { NxsTranslator } from "./catalog";
 
 const EXACT_MESSAGES: Record<string, Parameters<NxsTranslator>[0]> = {
+  "A previous sign-out needs to be completed before this device can sign in.":
+    "session.signoutBlocked",
+  "We could not check whether your last sign-out finished.":
+    "session.signoutIncomplete",
+  "Your last sign-out needs to be completed on this device.":
+    "session.signoutIncomplete",
+  "We could not safely clear the saved session. Try again.":
+    "session.signoutIncomplete",
+  "Sign-out is incomplete. The saved session needs to be cleared.":
+    "session.signoutIncomplete",
+  "Signed out on this device. Server sign-out could not be confirmed.":
+    "session.signoutLocalOnly",
   "Secure credential storage is unavailable on this device.":
     "session.secureStorageUnavailable",
   "Session recovery is temporarily unavailable.": "session.recoveryUnavailable",

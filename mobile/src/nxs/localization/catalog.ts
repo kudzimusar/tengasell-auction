@@ -3,37 +3,37 @@ export const englishStrings = {
   "nav.account": "Account",
 
   "common.inProgress": "{action} in progress",
-  "common.canonicalUnreachable": "The canonical TrailBase authority cannot be reached.",
+  "common.canonicalUnreachable": "Can’t connect to the marketplace. Check your connection and try again.",
   "common.canonicalNotConfigured":
-    "Canonical API is not configured for this build.",
+    "The marketplace connection is not ready on this device. Contact support.",
   "common.genericUnavailable": "The requested service is temporarily unavailable.",
   "common.errorWithMessage": "Error: {message}",
 
   "home.openAccount": "Open account",
   "home.signInA11y": "Sign in to {brand}",
-  "home.authorityCheckingA11y": "Checking canonical auction authority",
-  "home.authorityConnectedA11y": "Canonical auction authority connected",
-  "home.authorityUnavailableA11y": "Canonical auction authority unavailable",
-  "home.authorityChecking": "● Checking canonical authority",
-  "home.authorityConnected": "● Canonical authority connected",
-  "home.authorityUnavailable": "⚠ Canonical authority unavailable",
+  "home.authorityCheckingA11y": "Checking the live marketplace connection",
+  "home.authorityConnectedA11y": "Connected to live auctions",
+  "home.authorityUnavailableA11y": "Live marketplace connection unavailable",
+  "home.authorityChecking": "● Connecting to live auctions",
+  "home.authorityConnected": "● Live auctions connected",
+  "home.authorityUnavailable": "⚠ Live auctions unavailable",
   "home.sessionInvalidFallback": "Your saved session is no longer valid. Sign in again.",
   "home.sessionRecoveryUnavailable":
-    "Session recovery is unavailable while the authority cannot be reached.",
+    "We can’t restore your sign-in while the marketplace connection is unavailable.",
   "home.retrySession": "Retry session",
   "home.retryAuctionRequest": "Retry auction request",
   "home.loadingAuctionsA11y": "Loading auctions",
   "home.loadingAuctions": "Loading live auction data…",
   "home.liveUnavailableTitle": "Live auctions are temporarily unavailable",
   "home.noDemoFallback":
-    "{brand} has not substituted demo or cached commercial authority.",
-  "home.retryCanonical": "Retry canonical authority",
+    "Only live auction information is shown. Try again when the connection returns.",
+  "home.retryCanonical": "Try connecting again",
   "home.featured": "Featured",
   "home.showFeaturedAuctions": "Show featured auctions",
   "home.showCategoryAuctions": "Show {category} auctions",
   "home.refreshingAuctions": "Refreshing auctions…",
   "home.noLiveAuctions": "No live auctions here",
-  "home.tryAnotherCategory": "Try another category or refresh the live authority.",
+  "home.tryAnotherCategory": "Try another category or refresh the auctions.",
   "home.refreshAuctions": "Refresh auctions",
   "home.updatingTime": "Updating time…",
   "home.auctionA11y":
@@ -45,14 +45,14 @@ export const englishStrings = {
   "login.restoringSession": "Restoring your secure session…",
   "login.recoveryUnavailableTitle": "Session recovery unavailable",
   "login.recoveryUnavailableFallback":
-    "The canonical TrailBase authority cannot be reached.",
-  "login.retryRecovery": "Retry session recovery",
-  "login.clearSavedSession": "Clear saved session",
+    "Can’t connect to the marketplace. Check your connection and try again.",
+  "login.retryRecovery": "Try restoring sign-in again",
+  "login.clearSavedSession": "Sign out on this device",
   "login.clearSavedSessionHint":
-    "Removes the locally stored TrailBase session from this device.",
+    "Attempts to remove saved sign-in details and end the session securely.",
   "login.title": "Sign in to {brand}",
   "login.intro":
-    "Credentials are sent only to the canonical TrailBase authentication authority.",
+    "Enter your marketplace account details to sign in securely.",
   "login.enterCredentials": "Enter your email or username and password.",
   "login.emailOrUsername": "Email or username",
   "login.password": "Password",
@@ -62,7 +62,7 @@ export const englishStrings = {
     "Changes whether the password characters are visible on screen.",
   "login.signIn": "Sign in",
   "login.mfaRequired":
-    "This account requires MFA. MFA entry is outside MOB-01; use an account without MFA for this verification unit.",
+    "This account requires an extra verification step that is not available here yet.",
   "login.signInFailed": "Sign in failed.",
   "login.wrongCredentials": "Incorrect email/username or password.",
 
@@ -73,24 +73,24 @@ export const englishStrings = {
   "account.retrySession": "Retry session",
   "account.signOutDevice": "Sign out on this device",
   "account.signOutDeviceHint":
-    "Clears this device session and returns to the public home screen.",
+    "Attempts to clear your saved sign-in details. You’ll be told if sign-out is incomplete.",
   "account.returningToSignIn": "Returning to sign in…",
   "account.title": "Your account",
-  "account.authenticatedStatus": "✓ Authenticated through canonical TrailBase",
-  "account.loadingProfile": "Loading authenticated profile…",
-  "account.profileRequestFailed": "Authenticated profile request failed.",
-  "account.retryProfile": "Retry profile request",
-  "account.authenticatedUser": "Authenticated user",
-  "account.userId": "TrailBase user ID",
-  "account.profileIncomplete": "ℹ Profile details are incomplete.",
+  "account.authenticatedStatus": "✓ Signed in securely",
+  "account.loadingProfile": "Loading your account details…",
+  "account.profileRequestFailed": "Your account details couldn’t be loaded. Try again.",
+  "account.retryProfile": "Try loading account again",
+  "account.authenticatedUser": "Account holder",
+  "account.userId": "Account ID",
+  "account.profileIncomplete": "ℹ Some account details are missing.",
   "account.profileIncompleteDetail":
-    "The authenticated session remains valid, but TrailBase did not return a profile record.",
+    "You are still signed in. Some account details could not be loaded.",
   "account.signOut": "Sign out",
   "account.signOutHint":
-    "Ends the local session and requests canonical TrailBase logout.",
+    "Removes saved sign-in details and asks the marketplace to end your session.",
 
   "session.secureStorageUnavailable":
-    "Secure credential storage is unavailable on this device.",
+    "Secure sign-in storage isn’t available on this device.",
   "session.recoveryUnavailable": "Session recovery is temporarily unavailable.",
   "session.storedSessionInvalid": "Stored session could not be restored safely.",
   "session.expired": "Your session has expired. Sign in again.",
@@ -98,22 +98,27 @@ export const englishStrings = {
   "session.changedDuringAuth": "Session changed while authentication was completing.",
   "session.changedDuringPersistence":
     "Session changed while credentials were being persisted.",
-  "session.noStoredSession": "No stored TrailBase session is available.",
+  "session.noStoredSession": "No saved sign-in was found on this device.",
+  "session.signoutPending": "Signing out and checking this device…",
+  "session.signoutIncomplete": "Sign-out is not complete. We could not verify that your saved sign-in details were removed. Retry before sharing this device.",
+  "session.signoutLocalOnly": "Signed out on this device. We could not confirm that the server ended your session.",
+  "session.signoutBlocked": "Complete the previous sign-out before signing in again.",
+  "session.retrySignout": "Retry sign-out",
   "session.protectedWithoutSession":
     "Protected request attempted without an authenticated session.",
   "session.responseDiscarded":
     "Protected response was discarded because the session changed.",
 
   "trailbase.sessionInvalid":
-    "The authenticated TrailBase session is no longer valid.",
-  "trailbase.refreshInvalid": "The TrailBase refresh session is invalid or expired.",
-  "trailbase.mfaRequired": "This account requires MFA. MOB-01 does not implement MFA entry.",
-  "trailbase.loginMalformed": "TrailBase login response was not usable.",
-  "trailbase.refreshMalformed": "TrailBase refresh response was not usable.",
+    "Your sign-in has expired. Please sign in again.",
+  "trailbase.refreshInvalid": "Your saved sign-in has expired. Please sign in again.",
+  "trailbase.mfaRequired": "This account needs an extra verification step that is not available here yet.",
+  "trailbase.loginMalformed": "We couldn’t complete sign-in. Please try again.",
+  "trailbase.refreshMalformed": "We couldn’t restore your sign-in. Please sign in again.",
   "trailbase.malformedJson":
-    "Canonical TrailBase returned malformed JSON (HTTP {status}).",
+    "The marketplace sent an unexpected response (code {status}). Please retry.",
   "trailbase.httpFailure":
-    "Canonical TrailBase request failed with HTTP {status}.",
+    "The marketplace request failed (code {status}). Please try again.",
 } as const;
 
 export type NxsStringKey = keyof typeof englishStrings;

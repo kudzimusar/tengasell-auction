@@ -99,8 +99,8 @@ export default function AccountScreen() {
   const signOut = async () => {
     setProfile(null);
     setError(null);
-    await session.logout();
-    router.replace("/");
+    const result = await session.logout();
+    if (result.status !== "incomplete") router.replace("/");
   };
 
   if (session.phase === "booting") {
@@ -109,6 +109,31 @@ export default function AccountScreen() {
         <View style={styles.center} accessible accessibilityLiveRegion="polite">
           <ActivityIndicator color={theme.state.loading} size="large" />
           <Text style={styles.secondaryText}>{t("account.restoringSession")}</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (session.phase === "signout-pending" ||
+      session.phase === "signout-incomplete") {
+    return (
+      <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
+        <View style={styles.center}>
+          <Text style={styles.title} accessibilityRole="header">
+            {t("session.signoutPending")}
+          </Text>
+          {session.phase === "signout-incomplete" && (
+            <>
+              <Text style={styles.secondaryText} accessibilityRole="alert">
+                {t("session.signoutIncomplete")}
+              </Text>
+              <NxsButton
+                label={t("session.retrySignout")}
+                variant="destructive"
+                onPress={() => void signOut()}
+              />
+            </>
+          )}
         </View>
       </SafeAreaView>
     );

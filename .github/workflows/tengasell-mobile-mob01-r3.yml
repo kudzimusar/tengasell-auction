@@ -1,0 +1,59 @@
+name: Tengasell Mobile MOB-01 R3 logout-continuity gates
+
+on:
+  push:
+    branches:
+      - fix/tengasell-mobile-mob01-r3-logout-continuity
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mob01-r3-session-gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact R3 candidate
+        uses: actions/checkout@v4
+      - name: Use Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Install locked dependencies
+        working-directory: mobile
+        run: npm ci
+      - name: R3 deterministic fault regression
+        working-directory: mobile
+        run: node --experimental-strip-types --test tests/logout-continuity.test.mjs
+      - name: NXS foundation enforcement
+        working-directory: mobile
+        run: node scripts/verify-nxs-foundation.mjs
+      - name: Dependency advisory gate
+        working-directory: mobile
+        run: |
+          npm audit --json > /tmp/mob01-r3-npm-audit.json || true
+          node scripts/verify-dependency-audit.mjs /tmp/mob01-r3-npm-audit.json
+      - name: Expo Doctor
+        working-directory: mobile
+        run: npx expo-doctor
+      - name: Expo lint
+        working-directory: mobile
+        run: npx expo lint
+      - name: Typecheck
+        working-directory: mobile
+        run: npx tsc --noEmit
+      - name: Android export
+        working-directory: mobile
+        run: npx expo export --platform android
+      - name: iOS export
+        working-directory: mobile
+        run: npx expo export --platform ios
+      - name: Git diff check
+        run: git diff --check
+      - name: Clean working tree
+        run: |
+          git status --short
+          test -z "$(git status --short)"

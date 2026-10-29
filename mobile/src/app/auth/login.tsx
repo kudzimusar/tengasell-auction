@@ -85,6 +85,31 @@ export default function LoginScreen() {
     );
   }
 
+  if (session.phase === "signout-pending" ||
+      session.phase === "signout-incomplete") {
+    return (
+      <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
+        <View style={styles.center}>
+          <Text style={styles.title} accessibilityRole="header">
+            {t("session.signoutPending")}
+          </Text>
+          {session.phase === "signout-incomplete" && (
+            <>
+              <Text style={styles.secondaryText} accessibilityRole="alert">
+                {t("session.signoutIncomplete")}
+              </Text>
+              <NxsButton
+                label={t("session.retrySignout")}
+                variant="destructive"
+                onPress={() => void session.retryLogout()}
+              />
+            </>
+          )}
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (session.phase === "network-degraded") {
     const recoveryMessage = localizeKnownRuntimeMessage(
       session.message,
@@ -139,6 +164,12 @@ export default function LoginScreen() {
               {t("login.title", { brand: BRAND })}
             </Text>
             <Text style={styles.secondaryText}>{t("login.intro")}</Text>
+
+            {session.phase === "signed-out-locally" && (
+              <View style={styles.warningBox} accessibilityRole="alert">
+                <Text style={styles.warningText}>{t("session.signoutLocalOnly")}</Text>
+              </View>
+            )}
 
             {session.phase === "session-invalid" && (
               <View style={styles.warningBox} accessibilityRole="alert">
