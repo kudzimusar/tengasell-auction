@@ -1,0 +1,100 @@
+name: Tengasell Mobile MOB-01 R3 DEP01 strict engineering gates
+
+on:
+  push:
+    branches:
+      - fix/tengasell-mobile-mob01-r3-sdk58-patch-alignment
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mob01-r3-dep01-gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact DEP01 candidate
+        uses: actions/checkout@v4
+      - name: Use Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Install locked dependencies
+        working-directory: mobile
+        run: npm ci
+      - name: Preserve all thirteen R3 fault regressions
+        working-directory: mobile
+        run: node --experimental-strip-types --test tests/logout-continuity.test.mjs
+      - name: NXS static foundation gate
+        working-directory: mobile
+        run: node scripts/verify-nxs-foundation.mjs
+      - name: Require exactly the authorized five direct package versions
+        working-directory: mobile
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const p = JSON.parse(fs.readFileSync('package.json','utf8'));
+          const expected = {
+            expo: '~58.0.21',
+            'expo-constants': '~58.0.14',
+            'expo-linking': '~58.0.15',
+            'expo-router': '~58.0.28',
+            'expo-system-ui': '~58.0.7',
+          };
+          for (const [name,value] of Object.entries(expected)) {
+            if(p.dependencies[name] !== value) throw Error(name+' mismatch: '+p.dependencies[name]);
+          }
+          if(p.dependencies['react-native'] !== '0.88.0') throw Error('Unapproved React Native upgrade');
+          console.log('FIVE APPROVED DEPENDENCY PATCHES VERIFIED; RN 0.88.0 PRESERVED');
+          NODE
+      - name: Security advisory assessment
+        working-directory: mobile
+        run: |
+          npm audit --json > /tmp/mob01-dep01-audit.json || true
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const a=JSON.parse(fs.readFileSync('/tmp/mob01-dep01-audit.json','utf8'));
+          const oldHigh=new Set(['expo','@expo/cli','zod']);
+          const errors=[];
+          for(const [name,v] of Object.entries(a.vulnerabilities??{})) {
+            console.log(name, v.severity, JSON.stringify(v.via));
+            if(v.severity==='critical'||(v.severity==='high'&&!oldHigh.has(name))) errors.push(name);
+          }
+          console.log('AUDIT_COUNTS',JSON.stringify(a.metadata?.vulnerabilities));
+          if(errors.length) throw Error('Untriaged high or critical advisories: '+errors.join(', '));
+          const z=a.vulnerabilities?.zod;
+          if(z) {
+            const advisory=Array.isArray(z.via)?z.via.find(v=>typeof v==='object'):null;
+            if(advisory?.url!=='https://github.com/advisories/GHSA-mrhx-c7xc-m3w5')
+              throw Error('Known Zod advisory identity changed; triage required');
+            console.log('KNOWN_EXPO_TOOLING_ADVISORY remains present; no claim of resolution');
+          }
+          NODE
+      - name: Expo lint
+        working-directory: mobile
+        run: npx expo lint
+      - name: TypeScript
+        working-directory: mobile
+        run: npx tsc --noEmit
+      - name: Android export
+        working-directory: mobile
+        run: npx expo export --platform android
+      - name: iOS export
+        working-directory: mobile
+        run: npx expo export --platform ios
+      - name: Git diff check
+        run: git diff --check
+      - name: Git clean-tree check
+        run: |
+          git status --short
+          test -z "$(git status --short)"
+      - name: Expo SDK compatibility check - strict
+        working-directory: mobile
+        run: npx expo install --check
+      - name: Expo Doctor - strict
+        if: always()
+        working-directory: mobile
+        run: npx expo-doctor
