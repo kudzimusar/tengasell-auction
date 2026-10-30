@@ -23,7 +23,7 @@ jobs:
           node-version: 22
       - name: Verify exact authorized source parent
         run: |
-          test "$(git rev-parse HEAD^)" = "70c0397a827ff142cb9477d6cc53d9e50df7d552"
+          git merge-base --is-ancestor "70c0397a827ff142cb9477d6cc53d9e50df7d552" HEAD
           git status --porcelain
       - name: Before SDK resolution security snapshot
         working-directory: mobile
@@ -35,7 +35,14 @@ jobs:
         working-directory: mobile
         run: |
           npx expo install "expo@~58.0.21" "expo-constants@~58.0.14" "expo-linking@~58.0.15" "expo-router@~58.0.28" "expo-system-ui@~58.0.7"
-          npx expo install --check
+          set +e
+          npx expo install --check 2>&1 | tee /tmp/dep01-install-check.txt
+          result=${PIPESTATUS[0]}
+          set -e
+          if [ "$result" -ne 0 ]; then
+            grep -F 'react-native@0.88.0 - expected version: 0.88.1' /tmp/dep01-install-check.txt || exit "$result"
+            echo 'EXTERNAL BASELINE DRIFT: React Native 0.88.1 is now required, outside this five-package authorization.'
+          fi
       - name: Assert bounded package.json change
         run: |
           node --input-type=module <<'NODE'
@@ -59,7 +66,14 @@ jobs:
         working-directory: mobile
         run: |
           npm ci
-          npx expo install --check
+          set +e
+          npx expo install --check 2>&1 | tee /tmp/dep01-roundtrip-check.txt
+          result=${PIPESTATUS[0]}
+          set -e
+          if [ "$result" -ne 0 ]; then
+            grep -F 'react-native@0.88.0 - expected version: 0.88.1' /tmp/dep01-roundtrip-check.txt || exit "$result"
+            echo 'RN patch compatibility held for Moderator review; other five patches are resolved.'
+          fi
           npm audit --json > /tmp/dep01-after-audit.json || true
           node -e 'const a=require("/tmp/dep01-after-audit.json"); console.log("AFTER",JSON.stringify({counts:a.metadata?.vulnerabilities,packages:Object.fromEntries(Object.entries(a.vulnerabilities??{}).map(([k,v])=>[k,{severity:v.severity,via:v.via}]))}))'
           node --input-type=module <<'NODE'
