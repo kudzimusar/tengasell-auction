@@ -15,7 +15,7 @@ jobs:
       - name: Checkout dedicated branch
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
           persist-credentials: true
       - name: Set up Node 22
         uses: actions/setup-node@v4
