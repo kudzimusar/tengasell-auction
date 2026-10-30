@@ -69,7 +69,7 @@ export const englishStrings = {
   "account.restoringSession": "Restoring your secure session…",
   "account.unavailableTitle": "Account temporarily unavailable",
   "account.unavailableFallback":
-    "The canonical TrailBase authority cannot be reached.",
+    "We couldn't connect to TengaSell. Check your connection and try again.",
   "account.retrySession": "Retry session",
   "account.signOutDevice": "Sign out on this device",
   "account.signOutDeviceHint":
