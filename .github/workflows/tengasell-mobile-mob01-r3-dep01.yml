@@ -31,7 +31,7 @@ jobs:
       - name: NXS static foundation gate
         working-directory: mobile
         run: node scripts/verify-nxs-foundation.mjs
-      - name: Require exactly the authorized five direct package versions
+      - name: Require approved Expo patches and React Native 0.88.1
         working-directory: mobile
         run: |
           node --input-type=module <<'NODE'
@@ -47,8 +47,9 @@ jobs:
           for (const [name,value] of Object.entries(expected)) {
             if(p.dependencies[name] !== value) throw Error(name+' mismatch: '+p.dependencies[name]);
           }
-          if(p.dependencies['react-native'] !== '0.88.0') throw Error('Unapproved React Native upgrade');
-          console.log('FIVE APPROVED DEPENDENCY PATCHES VERIFIED; RN 0.88.0 PRESERVED');
+          if(p.dependencies['react-native'] !== '0.88.1') throw Error('React Native must be pinned exactly 0.88.1');
+          if(p.dependencies['react'] !== '19.3.0') throw Error('Unapproved React version change');
+          console.log('FIVE EXPO PATCHES AND REACT NATIVE 0.88.1 VERIFIED; REACT 19.3.0 PRESERVED');
           NODE
       - name: Security advisory assessment
         working-directory: mobile
