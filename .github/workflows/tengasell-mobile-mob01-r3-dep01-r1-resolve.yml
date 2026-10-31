@@ -1,0 +1,94 @@
+name: MOB-01 R3 DEP01 R1 RN 0.88.1 bounded resolver
+
+on:
+  push:
+    branches:
+      - fix/tengasell-mobile-mob01-r3-sdk58-patch-alignment
+    paths:
+      - .github/workflows/tengasell-mobile-mob01-r3-dep01-r1-resolve.yml
+
+permissions:
+  contents: write
+
+jobs:
+  resolve-only-react-native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout exact R1 resolver commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: true
+      - name: Use Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify exact authorized parent
+        run: |
+          test "$(git rev-parse HEAD^)" = "72321bbb7fa2a0c462125ac073d3ce6cde2e0bc0"
+          test -z "$(git status --porcelain)"
+      - name: Record pre-patch audit and install locked dependencies
+        working-directory: mobile
+        run: |
+          npm ci
+          npm audit --json > /tmp/mob01-r1-before-audit.json || true
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          const a=JSON.parse(fs.readFileSync("/tmp/mob01-r1-before-audit.json","utf8"));
+          console.log("BEFORE_AUDIT_COUNTS",JSON.stringify(a.metadata?.vulnerabilities));
+          console.log("BEFORE_AUDIT_PACKAGES",JSON.stringify(Object.fromEntries(Object.entries(a.vulnerabilities??{}).map(([n,v])=>[n,v.severity]))));
+          NODE
+      - name: Resolve exactly React Native 0.88.1 with Expo SDK 58 installer
+        working-directory: mobile
+        run: npx expo install react-native@0.88.1
+      - name: Validate bounded direct package update and lockfile
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          import {execFileSync} from "node:child_process";
+          const before=JSON.parse(execFileSync("git",["show","HEAD:mobile/package.json"],{encoding:"utf8"}));
+          const after=JSON.parse(fs.readFileSync("mobile/package.json","utf8"));
+          if(before.dependencies["react-native"]!=="0.88.0") throw Error("Unexpected parent React Native version");
+          if(after.dependencies["react-native"]!=="0.88.1") throw Error("React Native must be pinned exactly 0.88.1: "+after.dependencies["react-native"]);
+          before.dependencies["react-native"]="0.88.1";
+          if(JSON.stringify(before)!==JSON.stringify(after)) throw Error("Other direct manifest changes detected");
+          const lock=JSON.parse(fs.readFileSync("mobile/package-lock.json","utf8"));
+          if(lock.packages?.[""]?.dependencies?.["react-native"]!=="0.88.1") throw Error("Lockfile root React Native version mismatch");
+          if(lock.packages?.["node_modules/react-native"]?.version!=="0.88.1") throw Error("Lockfile React Native resolved version mismatch");
+          console.log("BOUNDARY PASS: one direct dependency, React Native 0.88.1, and corresponding lockfile graph");
+          NODE
+          git diff -- mobile/package.json
+          git diff --stat -- mobile/package-lock.json
+          git diff --check
+          test "$(git diff --name-only | sort)" = "$(printf 'mobile/package-lock.json\nmobile/package.json')"
+      - name: Reinstall from lock and evaluate before-after advisories
+        working-directory: mobile
+        run: |
+          npm ci
+          npm audit --json > /tmp/mob01-r1-after-audit.json || true
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          const before=JSON.parse(fs.readFileSync("/tmp/mob01-r1-before-audit.json","utf8"));
+          const after=JSON.parse(fs.readFileSync("/tmp/mob01-r1-after-audit.json","utf8"));
+          const old=new Set(Object.entries(before.vulnerabilities??{}).filter(([n,v])=>v.severity==="high"||v.severity==="critical").map(([n])=>n));
+          const newHigh=Object.entries(after.vulnerabilities??{}).filter(([n,v])=>(v.severity==="high"||v.severity==="critical")&&!old.has(n));
+          console.log("AFTER_AUDIT_COUNTS",JSON.stringify(after.metadata?.vulnerabilities));
+          console.log("AFTER_AUDIT_PACKAGES",JSON.stringify(Object.fromEntries(Object.entries(after.vulnerabilities??{}).map(([n,v])=>[n,v.severity]))));
+          console.log("NEW_HIGH_CRITICAL",JSON.stringify(newHigh.map(([n])=>n)));
+          if(newHigh.length) throw Error("New untriaged high/critical dependency finding");
+          NODE
+      - name: Expo SDK 58 compatibility and Doctor checks
+        working-directory: mobile
+        run: |
+          npx expo install --check
+          npx expo-doctor
+      - name: Commit and push only authorized manifest and lockfile
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- mobile/package.json mobile/package-lock.json
+          git diff --cached --check
+          test "$(git diff --cached --name-only | sort)" = "$(printf 'mobile/package-lock.json\nmobile/package.json')"
+          git commit -m "chore(mobile): align React Native to SDK58 patch 0.88.1"
+          git push origin HEAD:refs/heads/fix/tengasell-mobile-mob01-r3-sdk58-patch-alignment
