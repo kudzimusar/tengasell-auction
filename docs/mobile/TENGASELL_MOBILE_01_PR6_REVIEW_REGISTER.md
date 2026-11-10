@@ -5,10 +5,10 @@ the incremental patch. PR #6 introduces the entire TengaSell mobile application;
 it is not an SDK dependency change.
 
 **Base:** `main` @ `98a607c3`
-**Measured at:** `916eed1` — the LR03 code freeze on this branch.
-**Size at that revision:** 52 files, +17877, −0 (matches the GitHub diff).
+**Measured at:** `937fcc3` — the ICR02 freeze on this branch.
+**Size at that revision:** 55 files, +18,584, −0 (matches `git diff --numstat origin/main...937fcc3`).
 
-> Counts in this register are pinned to `916eed1` so they cannot drift while the
+> Counts in this register are pinned to `937fcc3` so they cannot drift while the
 > document is edited. A later documentation-only commit changes only the rows
 > for documentation and the total by the same delta; GitHub's diff view at the
 > current PR head is authoritative.
@@ -25,17 +25,17 @@ it is not an SDK dependency change.
 | **D — new gates** | mobile PR CI, RACE01/ACK/BID suites, conflict-marker gate, release-secret gate, provenance recorder | the enforcement layer |
 
 A reviewer who reads only B would conclude “a dependency bump with a login fix”.
-That would understate the candidate by roughly 17.9k lines of application code.
+That would understate the candidate by roughly 18.6k lines of application code.
 
 ## 2. Source ownership
 
 | area | owned by | notes |
 | --- | --- | --- |
 | App routes (`src/app/**`) | MOB-02 | **three screens plus the root layout**: home (`index.tsx`), account (`account/index.tsx`), sign-in (`auth/login.tsx`), router shell (`_layout.tsx`). Item detail, categories, search, orders arrive in PR #7. |
-| Session and authentication (`src/auth/**`) | MOB-01 / R3 / RACE01 | generation-checked persistence, logout transaction, pre-auth barrier, stale-write cleanup |
+| Session and authentication (`src/auth/**`) | MOB-01 / R3 / RACE01 / ICR02 | generation-checked persistence, logout transaction, pre-auth barrier; credential operations serialized behind one queue, provider publication extracted to `session-orchestrator.ts` |
 | Transport and domain (`src/lib/**`) | MOB-01 (+ MOB-03 in #8) | TrailBase read client; socket client and bid contract land in #8 |
 | NXS design system (`src/nxs/**`) | MOB-01 | tokens, provider, English launch catalogue, text runtime |
-| Regression suites (`tests/**`) | per unit | R3 13, RACE01 13 (10 barrier + 3 stale-write) |
+| Regression suites (`tests/**`) | per unit | R3 13, RACE01 13 (10 barrier + 3 stale-write), ICR02 14 (9 storage concurrency + 5 orchestration) |
 | Engineering gates (`scripts/**`) | MOB-01 | NXS static audit, advisory policy, release-secret scan |
 | CI (`.github/workflows/**`) | MOB-01 | one blocking mobile gate; three legacy workflows retired to dispatch-only |
 
@@ -43,58 +43,61 @@ That would understate the candidate by roughly 17.9k lines of application code.
 
 | area | file | + | − |
 | --- | --- | --- | --- |
-| App routes (UI) | `mobile/src/app/_layout.tsx` | 43 | 0 |
-| App routes (UI) | `mobile/src/app/account/index.tsx` | 361 | 0 |
-| App routes (UI) | `mobile/src/app/auth/login.tsx` | 345 | 0 |
-| App routes (UI) | `mobile/src/app/index.tsx` | 607 | 0 |
-| Session and authentication | `mobile/src/auth/login-barrier.ts` | 57 | 0 |
-| Session and authentication | `mobile/src/auth/logout-transaction.ts` | 70 | 0 |
-| Session and authentication | `mobile/src/auth/session-context.tsx` | 468 | 0 |
-| Session and authentication | `mobile/src/auth/session-storage-logic.ts` | 127 | 0 |
-| Session and authentication | `mobile/src/auth/session-storage.ts` | 29 | 0 |
-| Transport and domain | `mobile/src/lib/format.ts` | 184 | 0 |
-| Transport and domain | `mobile/src/lib/trailbase.ts` | 280 | 0 |
-| Transport and domain | `mobile/src/lib/types.ts` | 322 | 0 |
-| NXS design system and localisation | `mobile/src/nxs/components/NxsButton.tsx` | 97 | 0 |
-| NXS design system and localisation | `mobile/src/nxs/context/NxsProvider.tsx` | 228 | 0 |
-| NXS design system and localisation | `mobile/src/nxs/localization/catalog.ts` | 218 | 0 |
-| NXS design system and localisation | `mobile/src/nxs/localization/runtimeMessages.ts` | 71 | 0 |
-| NXS design system and localisation | `mobile/src/nxs/localization/useNxsText.ts` | 19 | 0 |
-| NXS design system and localisation | `mobile/src/nxs/tokens/index.ts` | 153 | 0 |
-| Regression suites | `mobile/tests/login-barrier.test.mjs` | 258 | 0 |
-| Regression suites | `mobile/tests/logout-continuity.test.mjs` | 240 | 0 |
-| Regression suites | `mobile/tests/race01-stale-write.test.mjs` | 74 | 0 |
-| Engineering gates | `mobile/scripts/verify-dependency-audit.mjs` | 70 | 0 |
-| Engineering gates | `mobile/scripts/verify-no-release-secrets.mjs` | 60 | 0 |
-| Engineering gates | `mobile/scripts/verify-nxs-foundation.mjs` | 178 | 0 |
-| CI workflows | `.github/workflows/tengasell-mobile-mob01-r3-dep01.yml` | 100 | 0 |
-| CI workflows | `.github/workflows/tengasell-mobile-mob01-r3.yml` | 76 | 0 |
-| CI workflows | `.github/workflows/tengasell-mobile-mob01.yml` | 67 | 0 |
-| CI workflows | `.github/workflows/tengasell-mobile-pr.yml` | 158 | 0 |
-| Dependencies | `mobile/package-lock.json` | 11436 | 0 |
-| Dependencies | `mobile/package.json` | 38 | 0 |
-| Configuration | `.dockerignore` | 3 | 0 |
-| Configuration | `mobile/.gitignore` | 41 | 0 |
-| Configuration | `mobile/AGENTS.md` | 41 | 0 |
-| Configuration | `mobile/app.json` | 44 | 0 |
-| Configuration | `mobile/eslint.config.js` | 9 | 0 |
-| Configuration | `mobile/nxs-experience-manifest.yaml` | 51 | 0 |
-| Configuration | `mobile/tsconfig.json` | 7 | 0 |
-| Assets | `mobile/assets/adaptive-icon.png` | binary | - |
-| Assets | `mobile/assets/android-icon-background.png` | binary | - |
-| Assets | `mobile/assets/android-icon-foreground.png` | binary | - |
-| Assets | `mobile/assets/android-icon-monochrome.png` | binary | - |
-| Assets | `mobile/assets/favicon.png` | binary | - |
-| Assets | `mobile/assets/icon.png` | binary | - |
-| Assets | `mobile/assets/splash-icon.png` | binary | - |
-| Programme documentation | `docs/mobile/TENGASELL_MOBILE_01_NXS_FOUNDATION.md` | 132 | 0 |
-| Programme documentation | `docs/mobile/TENGASELL_MOBILE_01_PR6_REVIEW_REGISTER.md` | 158 | 0 |
-| Programme documentation | `docs/mobile/TENGASELL_MOBILE_01_PROGRAMME.md` | 508 | 0 |
-| Programme documentation | `docs/mobile/TENGASELL_MOBILE_01_R2_ACCEPTANCE.md` | 77 | 0 |
-| Programme documentation | `docs/mobile/TENGASELL_MOBILE_01_R2_DEPENDENCY_SECURITY.md` | 49 | 0 |
-| Programme documentation | `docs/mobile/TENGASELL_MOBILE_01_R3_DEP01.md` | 51 | 0 |
-| Programme documentation | `docs/mobile/TENGASELL_MOBILE_01_R3_SESSION_CONTINUITY.md` | 61 | 0 |
-| Programme documentation | `docs/mobile/TENGASELL_MOBILE_UNBLOCK_01_LR02_INTEGRATION.md` | 211 | 0 |
+| Configuration | `-` | binary | mobile/assets/adaptive-icon.png |
+| Configuration | `-` | binary | mobile/assets/android-icon-background.png |
+| Configuration | `-` | binary | mobile/assets/android-icon-foreground.png |
+| Configuration | `-` | binary | mobile/assets/android-icon-monochrome.png |
+| Configuration | `-` | binary | mobile/assets/favicon.png |
+| Configuration | `-` | binary | mobile/assets/icon.png |
+| Configuration | `-` | binary | mobile/assets/splash-icon.png |
+| Configuration | `100` | 0 | .github/workflows/tengasell-mobile-mob01-r3-dep01.yml |
+| Configuration | `100` | 0 | mobile/tests/session-orchestrator.test.mjs |
+| Configuration | `11436` | 0 | mobile/package-lock.json |
+| Configuration | `132` | 0 | docs/mobile/TENGASELL_MOBILE_01_NXS_FOUNDATION.md |
+| Configuration | `153` | 0 | mobile/src/nxs/tokens/index.ts |
+| Configuration | `160` | 0 | .github/workflows/tengasell-mobile-pr.yml |
+| Configuration | `167` | 0 | docs/mobile/TENGASELL_MOBILE_01_PR6_REVIEW_REGISTER.md |
+| Configuration | `178` | 0 | mobile/scripts/verify-nxs-foundation.mjs |
+| Configuration | `184` | 0 | mobile/src/lib/format.ts |
+| Configuration | `19` | 0 | mobile/src/nxs/localization/useNxsText.ts |
+| Configuration | `210` | 0 | mobile/src/auth/session-storage-logic.ts |
+| Configuration | `218` | 0 | mobile/src/nxs/localization/catalog.ts |
+| Configuration | `228` | 0 | mobile/src/nxs/context/NxsProvider.tsx |
+| Configuration | `240` | 0 | mobile/tests/logout-continuity.test.mjs |
+| Configuration | `255` | 0 | mobile/tests/storage-concurrency.test.mjs |
+| Configuration | `258` | 0 | mobile/tests/login-barrier.test.mjs |
+| Configuration | `280` | 0 | mobile/src/lib/trailbase.ts |
+| Configuration | `29` | 0 | mobile/src/auth/session-storage.ts |
+| Configuration | `3` | 0 | .dockerignore |
+| Configuration | `322` | 0 | mobile/src/lib/types.ts |
+| Configuration | `345` | 0 | mobile/src/app/auth/login.tsx |
+| Configuration | `361` | 0 | mobile/src/app/account/index.tsx |
+| Configuration | `38` | 0 | mobile/package.json |
+| Configuration | `41` | 0 | mobile/.gitignore |
+| Configuration | `41` | 0 | mobile/AGENTS.md |
+| Configuration | `411` | 0 | docs/mobile/TENGASELL_MOBILE_UNBLOCK_01_LR02_INTEGRATION.md |
+| Configuration | `43` | 0 | mobile/src/app/_layout.tsx |
+| Configuration | `44` | 0 | mobile/app.json |
+| Configuration | `472` | 0 | mobile/src/auth/session-context.tsx |
+| Configuration | `49` | 0 | docs/mobile/TENGASELL_MOBILE_01_R2_DEPENDENCY_SECURITY.md |
+| Configuration | `508` | 0 | docs/mobile/TENGASELL_MOBILE_01_PROGRAMME.md |
+| Configuration | `51` | 0 | docs/mobile/TENGASELL_MOBILE_01_R3_DEP01.md |
+| Configuration | `51` | 0 | mobile/nxs-experience-manifest.yaml |
+| Configuration | `54` | 0 | mobile/src/auth/session-orchestrator.ts |
+| Configuration | `57` | 0 | mobile/src/auth/login-barrier.ts |
+| Configuration | `60` | 0 | mobile/scripts/verify-no-release-secrets.mjs |
+| Configuration | `607` | 0 | mobile/src/app/index.tsx |
+| Configuration | `61` | 0 | docs/mobile/TENGASELL_MOBILE_01_R3_SESSION_CONTINUITY.md |
+| Configuration | `67` | 0 | .github/workflows/tengasell-mobile-mob01.yml |
+| Configuration | `7` | 0 | mobile/tsconfig.json |
+| Configuration | `70` | 0 | mobile/scripts/verify-dependency-audit.mjs |
+| Configuration | `70` | 0 | mobile/src/auth/logout-transaction.ts |
+| Configuration | `71` | 0 | mobile/src/nxs/localization/runtimeMessages.ts |
+| Configuration | `74` | 0 | mobile/tests/race01-stale-write.test.mjs |
+| Configuration | `76` | 0 | .github/workflows/tengasell-mobile-mob01-r3.yml |
+| Configuration | `77` | 0 | docs/mobile/TENGASELL_MOBILE_01_R2_ACCEPTANCE.md |
+| Configuration | `9` | 0 | mobile/eslint.config.js |
+| Configuration | `97` | 0 | mobile/src/nxs/components/NxsButton.tsx |
 
 ## 4. Principal security assumptions
 
@@ -110,7 +113,10 @@ against this list:
    written to logs.
 4. **Generation ownership.** Login takes ownership synchronously before its
    first await; logout increments the generation before any await; persistence
-   and publication both re-check; a stale write is deleted by its owner.
+   and publication both re-check. Credential mutations are serialized in the
+   storage authority, so a stale cleanup cannot interleave with a newer login's
+   write, and an unverifiable cleanup sets the durable marker instead of
+   trusting the store.
 5. **Fail-closed restoration.** A restoration that cannot prove its own
    freshness surfaces `session-invalid` rather than an authenticated shell.
 6. **Logout precedence.** A pending credential write is awaited, then the clear

@@ -409,3 +409,93 @@ Owner decisions outstanding: (1) required-check roll-out per 12.6; (2) physical
 UAT scheduling; (3) merge order and whether the stack lands as three PRs;
 (4) disposition of inherited web lint debt; (5) whether an external human
 security reviewer is required beyond the independent agent review in 12.3.
+
+---
+
+# 14. ICR02 — atomic credential ownership (final security gate)
+
+**Assignment:** MOB-LR03-ICR02. **Disposition:** REMEDIATE → corrected → independent
+ACCEPT.
+**Accepted custody:** `385490c` / `d92f230` / `e7030c3`, each verified as an
+ancestor of the branch head before any mutation. Work continued on those branches;
+no force-push, no rebase, no new stack.
+
+## 14.1 The defect, reproduced before it was fixed
+
+The LR03 stale cleanup was a compare-and-delete split across awaits:
+
+```ts
+const current = await driver.read(AUTH_TOKEN_KEY);   // ownership check
+if (current !== tokens.authToken) return false;
+await clearStoredSession();                          // delete both slots
+```
+
+A newer login could persist a valid pair between those statements and have it
+erased. STORE-01 reproduced it against the production storage logic with an
+injected asynchronous driver, before any change was made:
+
+```text
+AssertionError: the newer login's auth token was deleted by the stale cleanup
+  actual:   undefined
+  expected: 'login-b'
+```
+
+## 14.2 Root causes and correction
+
+| id | defect | correction |
+| --- | --- | --- |
+| ICR02-D1 | compare-then-delete window erased a newer login's pair | credential operations run on one serialized queue inside the storage authority; read, compare, mutate and verify are indivisible |
+| ICR02-D2 | pair write used `Promise.all`: the first rejection ended the queued operation while the sibling write was still pending, so it escaped the queue and could pair one account's auth token with another's refresh token | both writes settle via `allSettled` before the operation decides; no write outlives its queue slot |
+| ICR02-D3 | a failed write whose cleanup also faulted left a restorable partial pair | the durable sign-out marker is set before rethrowing, so restoration fails closed |
+
+**The sign-out marker is deliberately not queued.** R3 requires the intent to be
+writable and observable while a credential write is paused — that is how "intent
+wins over late persistence" works. Queueing it deadlocked R3-07 during
+development; the boundary is credential slots only.
+
+**Publication is now testable.** `applyAuthenticated` moved to
+`src/auth/session-orchestrator.ts`; `SessionProvider` delegates to it, so
+STORE-08 drives the production ordering rather than a twin.
+
+## 14.3 Tests added
+
+| suite | tests | ids |
+| --- | --- | --- |
+| storage concurrency | 9 | STORE-01…07, STORE-09, STORE-10 |
+| provider orchestration | 5 | STORE-08 (published / superseded / already-lost / malformed / cleanup-failure) |
+
+STORE-09 and STORE-10 were each verified to fail against the pre-fix form and
+pass against the correction, so they are reproductions rather than restatements.
+STORE-01 likewise fails against the LR03 implementation.
+
+## 14.4 Independent review history
+
+| source | verdict | finding |
+| --- | --- | --- |
+| `bb151da` | REMEDIATE | `Promise.all` pair write let a sibling write escape the queue; mixed pair restorable (ICR02-D2) |
+| `0de0123` | ACCEPT + residual note | failed write with faulted cleanup left a restorable partial pair (ICR02-D3) |
+| `937fcc3` | **ACCEPT, no defects** | residual closed; no write outlives its operation; no queue cycle; 79/79 |
+
+## 14.5 Evidence at the ICR02 freeze
+
+| PR | source head | base head | tested merge | run | job | tests |
+| --- | --- | --- | --- | --- | --- | --- |
+| #6 | `937fcc3` | `98a607c3` | `db1f75a1` | 42804523279 | 129790163016 | 40 |
+| #7 | `1e6fc9a` | `937fcc3` | `8b44e073` | 42804531155 | 129790189830 | 47 |
+| #8 | `d064e0d` | `1e6fc9a` | `4b601a29` | 42804534045 | 129790199376 | 79 |
+
+All success. Full battery 79/79 locally; lint 0 errors; `tsc` 0; doctor 20/20;
+Android and iOS export pass; release-secret scan 45 files clean.
+
+## 14.6 Residual gaps
+
+- The `SessionProvider` wrapper that tracks the in-flight write (`session-context.tsx`)
+  is not itself tested; the orchestration it calls is. Disclosed, not claimed.
+- Everything above is an in-memory driver. **No native SecureStore evidence** is
+  claimed, and none of it substitutes for physical certification.
+
+## 14.7 Unchanged boundaries
+
+Merge, Play upload, signing enrolment and production remain unauthorized and
+unperformed. Branch protection remains an Owner action (§12.6). Physical
+certification remains blocked (§12.7).
