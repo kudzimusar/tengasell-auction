@@ -99,6 +99,25 @@ Each PR is independently green on its own head, not only at the top of the
 stack. The three are ancestry-verified: `main` → #6 → #7 → #8, no force-push,
 no rewritten history.
 
+## 4b. Enforcement status — open item
+
+`main` has **no branch protection and no rulesets** (`GET
+/branches/main/protection` → 404; `GET /rulesets` → `[]`). The mobile workflow
+fails the job honestly, but at merge level it is advisory: a reviewer can merge
+past a red gate.
+
+Enforcement was deliberately **not** switched on in this assignment, because it
+would damage unrelated work:
+
+1. `mobile/` does not exist on `main`; the workflow's early steps need it.
+2. Two open PRs target `main` (#1 web authority barrier, #6 this stack).
+   Requiring `mobile-gates` would leave the unrelated web PR permanently pending
+   on a check that cannot run against a tree without `mobile/`.
+
+Correct sequence: land #6 so `mobile/` exists on the base, then add a required
+status check for `mobile-gates` on `main`. Recorded as **LR02-D9**, owner
+action, not implementer action.
+
 ## 5. Tests (local, on the integrated candidate)
 
 | Suite | Result |
@@ -125,6 +144,9 @@ no rewritten history.
 | LR02-D6 | P2 | Gate ran MOB-02/03 suites on the foundation PR | fixed (conditional) |
 | LR02-D7 | P2 | Advisory policy keyed on package names | fixed (root-cause) |
 | LR02-D8 | P2 | Item-screen conflict between touch fix and bid panel | resolved by superset merge |
+| LR02-D9 | P1 | `main` unprotected — the gate reports but cannot block a merge | sequencing documented (§4b); owner action after #6 lands |
+| LR02-D10 | P2 | Merge shipped unresolved conflict markers (`d179afe`) | fixed in `a59674e`; marker gate added to CI |
+| LR02-D11 | P2 | MOB-02 head carried render-time `Date.now()` and sync `setState` | fixed in `ed8ef7f` |
 
 ## 7. REL-002 / REL-004 separation (INT-06)
 
