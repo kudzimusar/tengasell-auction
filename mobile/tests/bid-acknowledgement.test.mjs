@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { presentBidOutcome } from "../src/lib/bid-copy.ts";
+import { parseBidAck } from "../src/lib/bid-ack.ts";
 
 const money = (value) => `US$${value.toLocaleString("en-US")}`;
 
@@ -96,4 +97,45 @@ test("ACK-08 timeout is uncertain, not a rejection and not a success", () => {
   assert.doesNotMatch(result.text, /not accepted|rejected|failed/i);
   assert.doesNotMatch(result.text, /leading bidder/i);
   assert.match(result.text, /may still have reached/i);
+});
+
+test("ACK-09 an acknowledgement without a boolean ok is uncertain, not a rejection", () => {
+  const missing = parseBidAck(undefined);
+  const noFlag = parseBidAck({ amount: 700 });
+  const notBoolean = parseBidAck({ ok: "true", amount: 700 });
+
+  for (const parsed of [missing, noFlag, notBoolean]) {
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.uncertain, true);
+    assert.equal(parsed.reason, "malformed");
+
+    const shown = presentBidOutcome(parsed, money);
+    assert.equal(shown.tone, "unknown");
+    assert.equal(shown.reconcile, true);
+    assert.doesNotMatch(shown.text, /not accepted|rejected/i);
+  }
+});
+
+test("ACK-10 the parser preserves explicit flags and invents none", () => {
+  const explicit = parseBidAck({ ok: true, winning: true, outbid: false, amount: 700 });
+  assert.equal(explicit.ok, true);
+  assert.equal(explicit.winning, true);
+  assert.equal(explicit.outbid, undefined, "outbid=false is not a coverage event");
+  assert.equal(explicit.amount, 700);
+
+  const covered = parseBidAck({ ok: true, outbid: true, amount: 750 });
+  assert.equal(covered.outbid, true);
+  assert.equal(covered.winning, undefined);
+
+  const silent = parseBidAck({ ok: true });
+  assert.equal(silent.ok, true);
+  assert.equal(silent.winning, undefined);
+  assert.equal(silent.outbid, undefined);
+  assert.equal(silent.amount, undefined);
+  assert.equal(presentBidOutcome(silent, money).tone, "unknown");
+
+  const rejected = parseBidAck({ ok: false, error: "Auction closed." });
+  assert.equal(rejected.ok, false);
+  assert.equal(rejected.uncertain, undefined);
+  assert.equal(presentBidOutcome(rejected, money).tone, "error");
 });

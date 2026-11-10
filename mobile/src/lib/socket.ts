@@ -9,6 +9,7 @@ import { io, type Socket } from "socket.io-client";
 
 import { getCanonicalBaseUrl } from "./trailbase";
 import { ConnectionEpoch } from "./connection-epoch";
+import { parseBidAck, type BidOutcome } from "./bid-ack";
 
 let socket: Socket | null = null;
 const ownership = new ConnectionEpoch();
@@ -55,22 +56,7 @@ export function disconnectBidding(): void {
   }
 }
 
-export interface BidOutcome {
-  ok: boolean;
-  amount?: number;
-  error?: string;
-  /** True when the engine's standing auto-bid immediately covered this bid. */
-  outbid?: boolean;
-  /** True when the bidder is now the leading bidder. */
-  winning?: boolean;
-  /**
-   * True when the outcome is genuinely unknown (timeout, or the socket dropped
-   * mid-command). `ok` is false in this case, but it does NOT mean the engine
-   * rejected the bid: the command may already have been processed.
-   */
-  uncertain?: boolean;
-  reason?: "timeout" | "disconnected";
-}
+export type { BidOutcome } from "./bid-ack";
 
 /** Ownership token for the live connection; see ConnectionEpoch. */
 export function biddingOwnershipToken(): number {
@@ -119,21 +105,7 @@ export function placeBid(auctionId: number, maxAmount: number, timeoutMs = 9000)
     };
 
     s.emit("bid:place", { auctionId, maxAmount }, (res: unknown) => {
-      if (settled) return;
-      const payload = (res ?? {}) as {
-        ok?: boolean;
-        amount?: number;
-        error?: string;
-        outbid?: boolean;
-        winning?: boolean;
-      };
-      finish({
-        ok: Boolean(payload.ok),
-        amount: payload.amount,
-        error: payload.error,
-        outbid: payload.outbid,
-        winning: payload.winning,
-      });
+      finish(parseBidAck(res));
     });
   });
 }

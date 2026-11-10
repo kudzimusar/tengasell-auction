@@ -43,6 +43,9 @@ export default function ItemScreen() {
   } | null>(null);
   const [engineUp, setEngineUp] = useState(false);
   const mountedRef = useRef(true);
+  // The session object captured by this render cannot observe a later account
+  // switch. Read identity through a ref that tracks the latest snapshot.
+  const identityRef = useRef<string | null>(session.identity?.id ?? null);
 
 
   const load = useCallback(async () => {
@@ -103,6 +106,10 @@ export default function ItemScreen() {
       mountedRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    identityRef.current = session.identity?.id ?? null;
+  }, [session.identity?.id]);
 
   useEffect(() => {
     // Deferred one tick so the first paint is not blocked by a synchronous
@@ -306,13 +313,13 @@ export default function ItemScreen() {
                     await runGuardedBid({
                       guard: {
                         sessionGeneration: () => session.sessionGeneration(),
-                        identityId: () => session.identity?.id ?? null,
+                        identityId: () => identityRef.current,
                         isConnectionCurrent: (epoch) => biddingOwnershipToken() === epoch,
                         isMounted: () => mountedRef.current,
                       },
                       takeOwnership: () => ({
                         sessionGeneration: session.sessionGeneration(),
-                        identityId: session.identity?.id ?? null,
+                        identityId: identityRef.current,
                         connectionEpoch: biddingOwnershipToken(),
                       }),
                       place: () => placeBid(item.id, amount),
