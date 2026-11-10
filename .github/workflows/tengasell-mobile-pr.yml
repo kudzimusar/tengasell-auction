@@ -1,0 +1,102 @@
+name: Tengasell Mobile — PR gates
+
+# Canonical mobile PR gate. Blocking by design: no continue-on-error, no `|| true`
+# except the advisory-parsing step, which reads npm audit's exit status and then
+# enforces an independent policy decision.
+
+on:
+  pull_request:
+    branches:
+      - main
+      - "fix/tengasell-mobile-*"
+      - "feat/tengasell-mobile-*"
+  push:
+    branches:
+      - "fix/tengasell-mobile-*"
+      - "feat/tengasell-mobile-*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-gates-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mobile-gates:
+    name: mobile-gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prove exact head
+        run: |
+          set -euo pipefail
+          echo "expected: ${{ github.sha }}"
+          echo "actual:   $(git rev-parse HEAD)"
+          test "$(git rev-parse HEAD)" = "${{ github.sha }}"
+
+      - name: Use Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: NXS foundation static checks
+        run: node scripts/verify-nxs-foundation.mjs
+
+      - name: Dependency security assessment
+        run: |
+          set -euo pipefail
+          # npm audit exits non-zero when findings exist; parse first, then
+          # enforce the policy decision independently.
+          npm audit --json > audit.json || true
+          node scripts/verify-dependency-audit.mjs audit.json
+
+      - name: Expo install compatibility
+        run: npx expo install --check
+
+      - name: Expo Doctor
+        run: npx expo-doctor
+
+      - name: Expo lint
+        run: npm run lint
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: Session security regressions (R3 + RACE01)
+        run: |
+          node --experimental-strip-types --test \
+            tests/logout-continuity.test.mjs \
+            tests/login-barrier.test.mjs
+
+      - name: Navigation contract (MOB-02)
+        run: node --experimental-strip-types --test tests/navigation-contract.test.mjs
+
+      - name: Bidding and socket safety (MOB-03)
+        run: node --experimental-strip-types --test tests/socket-lifecycle.test.mjs
+
+      - name: Android export
+        run: npx expo export --platform android
+
+      - name: iOS export
+        run: npx expo export --platform ios
+
+      - name: Clean working tree
+        run: |
+          set -euo pipefail
+          git status --short
+          test -z "$(git status --short)"

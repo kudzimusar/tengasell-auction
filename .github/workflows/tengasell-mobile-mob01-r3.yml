@@ -1,9 +1,8 @@
 name: Tengasell Mobile MOB-01 R3 logout-continuity gates
 
 on:
-  push:
-    branches:
-      - fix/tengasell-mobile-mob01-r3-logout-continuity
+  # Superseded by .github/workflows/tengasell-mobile-pr.yml (MOB-UNBLOCK-01-LR02).
+  # Retained for historical exact-head evidence; manual dispatch only.
   workflow_dispatch:
 
 permissions:
