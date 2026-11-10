@@ -27,7 +27,7 @@ export default function ItemScreen() {
   const [item, setItem] = useState<AuctionView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState<number>(() => Date.now());
   const [hero, setHero] = useState(0);
 
   useEffect(() => {
@@ -54,7 +54,10 @@ export default function ItemScreen() {
   }, [id]);
 
   useEffect(() => {
-    void load();
+    const task = setTimeout(() => {
+      void load();
+    }, 0);
+    return () => clearTimeout(task);
   }, [load]);
 
   const styles = useMemo(() => makeStyles(), []);

@@ -15,7 +15,7 @@ export default function CategoriesScreen() {
   const [items, setItems] = useState<AuctionView[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState<number>(() => Date.now());
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30_000);
