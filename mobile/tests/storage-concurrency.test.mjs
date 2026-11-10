@@ -190,3 +190,54 @@ test("STORE-07 a legitimate fresh login works after a completed logout", async (
   await storage.writeStoredSession(B);
   assert.deepEqual(await storage.readStoredSession(), B);
 });
+
+test("STORE-09 a write that fails cannot outlive its operation and mix pairs", async () => {
+  // Login A's auth write is slow; its refresh write fails immediately. If the
+  // operation ends on the first rejection, A's auth write lands after login B's
+  // pair and the store holds {A-auth, B-refresh} — restorable as a valid session.
+  const slots = new Map();
+  let releaseSlowWrite;
+  const slow = new Promise((resolve) => {
+    releaseSlowWrite = resolve;
+  });
+
+  const storage = createGuardedSessionStorage({
+    read: async (key) => (slots.has(key) ? slots.get(key) : null),
+    write: async (key, value) => {
+      if (value === A.authToken) {
+        await slow;
+        slots.set(key, value);
+        return;
+      }
+      if (key === REFRESH_KEY && value === A.refreshToken) {
+        throw new Error("refresh write fault");
+      }
+      slots.set(key, value);
+    },
+    remove: async (key) => {
+      slots.delete(key);
+    },
+  });
+
+  const failing = storage.writeStoredSession(A).catch((error) => error);
+  await tick(2);
+
+  const newer = storage.writeStoredSession(B);
+  await tick(3);
+
+  assert.equal(
+    slots.has(AUTH_KEY),
+    false,
+    "login B must not start while login A's write is still in flight",
+  );
+
+  releaseSlowWrite();
+  const failure = await failing;
+  assert.ok(failure instanceof Error, "the failed login must reject");
+
+  await newer;
+
+  const stored = await storage.readStoredSession();
+  assert.deepEqual(stored, B);
+  assert.equal(storage.concurrencyHighWaterMark(), 1);
+});
