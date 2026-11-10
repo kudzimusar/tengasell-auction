@@ -201,8 +201,10 @@ mobile programme. It is recorded as debt with an owner decision outstanding.
 ## 11. Independent review still required
 
 1. RACE01 source and security acceptance.
-2. Full-scope review of PR #6 (37 commits, 49 files, +17,447 lines — see the
-   A/B/C/D scope table in the PR body; review A, not the incremental patch).
+2. Full-scope review of PR #6 (49 files, +17,447 lines — see the A/B/C/D scope
+   table in the PR body; review A, not the incremental patch). The commit count
+   is not a stable measure here: the stack is reconciled by merge commits, so it
+   grows as units land.
 3. Physical-device certification (SecureStore, assistive tech, text scaling, pseudolocales).
 4. NXS touch/adaptation evidence on hardware.
 5. Merge-strategy approval for the three-PR stack.
