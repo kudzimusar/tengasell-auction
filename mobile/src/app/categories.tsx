@@ -15,11 +15,7 @@ export default function CategoriesScreen() {
   const [items, setItems] = useState<AuctionView[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-<<<<<<< HEAD
-  const [now, setNow] = useState(() => Date.now());
-=======
   const [now, setNow] = useState<number>(() => Date.now());
->>>>>>> feat/tengasell-mobile-mob02-item-detail
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30_000);
