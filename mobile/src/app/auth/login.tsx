@@ -56,6 +56,9 @@ export default function LoginScreen() {
   }, [session.phase]);
 
   const submit = async () => {
+    // A second submit while the first is in flight would take a newer session
+    // generation and supersede the first, surfacing a raw superseded error.
+    if (submitting) return;
     if (!identifier.trim() || !password) {
       setError(t("login.enterCredentials"));
       return;
@@ -217,7 +220,9 @@ export default function LoginScreen() {
                 autoComplete="current-password"
                 textContentType="password"
                 accessibilityLabel={t("login.password")}
-                onSubmitEditing={() => void submit()}
+                onSubmitEditing={() => {
+                  if (!submitting) void submit();
+                }}
                 returnKeyType="go"
               />
               <NxsButton

@@ -138,13 +138,44 @@ for (const path of sourceFiles) {
   }
 }
 
-const interactiveFiles = sourceFiles.filter((path) => read(path).includes("<Pressable"));
+// Strip comments before geometry checks: a gate that a comment can satisfy is
+// not a gate. Review demonstrated the old checks passing with hitSlop and the
+// semantic minimums replaced by comments and a 24x24 Pressable.
+function codeOnly(source) {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+}
+
+const interactiveFiles = sourceFiles.filter((path) => codeOnly(read(path)).includes("<Pressable"));
+if (interactiveFiles.length === 0) {
+  fail("no interactive sources were found; refusing to pass vacuously");
+}
+
+const HIT_SLOP = /hitSlop\s*=\s*\{\s*(\d+)\s*\}/;
+
 for (const path of interactiveFiles) {
-  const source = read(path);
-  if (path.includes("src/app/") && !source.includes("hitSlop={4}")) {
-    fail(`custom Pressable lacks bounded hitSlop review in ${relative(".", path)}`);
+  const source = codeOnly(read(path));
+
+  // Every Pressable must declare a tap-target expansion. Counting occurrences
+  // rather than bare inclusion stops one hitSlop from covering several
+  // pressables.
+  const pressables = (source.match(/<Pressable\b/g) ?? []).length;
+  const slops = [...source.matchAll(/hitSlop\s*=\s*(\{[^}]*\}|\d+)/g)];
+  if (slops.length < pressables) {
+    fail(
+      `custom Pressable lacks an explicit hitSlop in ${relative(".", path)} ` +
+        `(${slops.length} hitSlop for ${pressables} Pressable)`,
+    );
+  }
+  for (const match of slops) {
+    const numbers = [...match[1].matchAll(/(\d+)/g)].map((m) => Number(m[1]));
+    if (numbers.length === 0 || numbers.some((value) => value < 4)) {
+      fail(`hitSlop below the 4pt review floor in ${relative(".", path)}`);
+    }
   }
 
+  // Numeric floor applies to declared minimums everywhere in an interactive file.
   for (const match of source.matchAll(/min(?:Height|Width):\s*(\d+)/g)) {
     const value = Number(match[1]);
     if (value < 48) {
@@ -153,18 +184,33 @@ for (const path of interactiveFiles) {
       );
     }
   }
+
+  // Fixed dimensions are only a violation on the Pressable's own style: a 46pt
+  // decorative badge inside a full-size tile is not a touch target, and flagging
+  // it would push reviewers to "fix" art instead of affordances.
+  const styleNames = [...source.matchAll(/<Pressable[^>]*?style=\{styles\.([A-Za-z0-9_]+)\}/gs)].map(
+    (m) => m[1],
+  );
+  for (const name of new Set(styleNames)) {
+    const block = source.match(new RegExp(`\\b${name}:\\s*\\{([\\s\\S]*?)\\n\\s*\\},`));
+    if (!block) continue;
+    for (const match of block[1].matchAll(/\b(?:height|width):\s*(\d+)\b/g)) {
+      const value = Number(match[1]);
+      if (value < 48) {
+        fail(
+          `Pressable style ${name} is ${value}pt, below the NXS 48 floor, in ${relative(".", path)}`,
+        );
+      }
+    }
+  }
 }
 
-requireText(
-  "src/nxs/components/NxsButton.tsx",
-  "minHeight: tokens.touch.minimum",
-  "NxsButton no longer consumes the semantic touch floor",
-);
-requireText(
-  "src/nxs/components/NxsButton.tsx",
-  "minWidth: tokens.touch.minimum",
-  "NxsButton no longer consumes the semantic touch floor",
-);
+if (!codeOnly(read("src/nxs/components/NxsButton.tsx")).includes("minHeight: tokens.touch.minimum")) {
+  fail("NxsButton no longer consumes the semantic touch floor");
+}
+if (!codeOnly(read("src/nxs/components/NxsButton.tsx")).includes("minWidth: tokens.touch.minimum")) {
+  fail("NxsButton no longer consumes the semantic touch floor");
+}
 
 for (const path of sourceFiles) {
   const source = read(path);
