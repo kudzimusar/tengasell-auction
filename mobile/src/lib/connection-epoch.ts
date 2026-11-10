@@ -19,6 +19,11 @@ export class ConnectionEpoch {
     this.epoch += 1;
   }
 
+  /** The current owner token. */
+  current(): number {
+    return this.epoch;
+  }
+
   /** True only for the most recent owner. */
   isCurrent(token: number): boolean {
     return token === this.epoch;

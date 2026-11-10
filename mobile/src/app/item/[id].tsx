@@ -4,7 +4,7 @@
 // through the Socket.IO trade engine, never a direct record write.
 
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -20,8 +20,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { BottomNav } from "../../components/BottomNav";
 import { formatDateTime, formatRemaining, formatUSD, minNextBid, remainingSeverity } from "../../lib/format";
 import { fetchAuction } from "../../lib/trailbase";
-import { connectBidding, disconnectBidding, placeBid } from "../../lib/socket";
+import { biddingOwnershipToken, connectBidding, disconnectBidding, placeBid } from "../../lib/socket";
 import { presentBidOutcome } from "../../lib/bid-copy";
+import { runGuardedBid } from "../../bids/bid-completion";
 import { useSession } from "../../auth/session-context";
 import { toAuctionView, type AuctionView } from "../../lib/types";
 
@@ -36,8 +37,12 @@ export default function ItemScreen() {
   const session = useSession();
   const [bidAmount, setBidAmount] = useState("");
   const [bidding, setBidding] = useState(false);
-  const [bidNote, setBidNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const [bidNote, setBidNote] = useState<{
+    tone: "success" | "warning" | "error" | "unknown";
+    text: string;
+  } | null>(null);
   const [engineUp, setEngineUp] = useState(false);
+  const mountedRef = useRef(true);
 
 
   const load = useCallback(async () => {
@@ -91,6 +96,13 @@ export default function ItemScreen() {
     return () => clearInterval(t);
   }, []);
 
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     // Deferred one tick so the first paint is not blocked by a synchronous
@@ -264,7 +276,15 @@ export default function ItemScreen() {
                     />
                   </View>
                   {bidNote && (
-                    <Text style={[styles.bidNote, bidNote.ok ? styles.bidNoteOk : styles.bidNoteBad]}>
+                    <Text
+                      style={[
+                        styles.bidNote,
+                        bidNote.tone === "success" && styles.bidNoteOk,
+                        bidNote.tone === "warning" && styles.bidNoteWarn,
+                        bidNote.tone === "error" && styles.bidNoteBad,
+                        bidNote.tone === "unknown" && styles.bidNoteUnknown,
+                      ]}
+                    >
                       {bidNote.text}
                     </Text>
                   )}
@@ -275,18 +295,41 @@ export default function ItemScreen() {
                   onPress={async () => {
                     const amount = Number(bidAmount);
                     if (!Number.isFinite(amount) || amount <= 0) {
-                      setBidNote({ ok: false, text: "Enter a bid amount." });
+                      setBidNote({ tone: "error", text: "Enter a bid amount." });
                       return;
                     }
                     setBidding(true);
                     setBidNote(null);
-                    const outcome = await placeBid(item.id, amount);
-                    setBidding(false);
-                    const presented = presentBidOutcome(outcome, formatUSD);
-                    if (presented) {
-                      setBidNote({ ok: presented.tone === "success", text: presented.text });
-                    }
-                    if (outcome.ok) void load();
+
+                    // CLOSE-02: the completion is published only while this
+                    // screen, this session and this connection still own it.
+                    await runGuardedBid({
+                      guard: {
+                        sessionGeneration: () => session.sessionGeneration(),
+                        identityId: () => session.identity?.id ?? null,
+                        isConnectionCurrent: (epoch) => biddingOwnershipToken() === epoch,
+                        isMounted: () => mountedRef.current,
+                      },
+                      takeOwnership: () => ({
+                        sessionGeneration: session.sessionGeneration(),
+                        identityId: session.identity?.id ?? null,
+                        connectionEpoch: biddingOwnershipToken(),
+                      }),
+                      place: () => placeBid(item.id, amount),
+                      publish: (outcome) => {
+                        const presented = presentBidOutcome(outcome, formatUSD);
+                        setBidNote({ tone: presented.tone, text: presented.text });
+                        setBidding(false);
+                        // CLOSE-01: an unconfirmed acknowledgement is reconciled
+                        // against canonical auction state, never assumed.
+                        if (outcome.ok || presented.reconcile) void load();
+                      },
+                      onDiscarded: () => {
+                        // No result is claimed. The screen may still be mounted
+                        // after an account switch, so release the busy state.
+                        if (mountedRef.current) setBidding(false);
+                      },
+                    });
                   }}
                   accessibilityRole="button"
                   accessibilityState={{ disabled: bidding || !engineUp }}
@@ -450,6 +493,8 @@ function makeStyles() {
     bidNote: { fontSize: 10.5, marginTop: 2 },
     bidNoteOk: { color: "#1E7A4B" },
     bidNoteBad: { color: "#C0392B" },
+    bidNoteWarn: { color: "#8A5A00" },
+    bidNoteUnknown: { color: "#4A5A66" },
     ctaText: { color: "#FFFFFF", fontWeight: "800", fontSize: 13.5 },
   });
 }

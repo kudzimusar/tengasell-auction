@@ -63,6 +63,18 @@ export interface BidOutcome {
   outbid?: boolean;
   /** True when the bidder is now the leading bidder. */
   winning?: boolean;
+  /**
+   * True when the outcome is genuinely unknown (timeout, or the socket dropped
+   * mid-command). `ok` is false in this case, but it does NOT mean the engine
+   * rejected the bid: the command may already have been processed.
+   */
+  uncertain?: boolean;
+  reason?: "timeout" | "disconnected";
+}
+
+/** Ownership token for the live connection; see ConnectionEpoch. */
+export function biddingOwnershipToken(): number {
+  return ownership.current();
 }
 
 /** Place a proxy bid; resolves with the engine's ack or a timeout. */
@@ -74,16 +86,40 @@ export function placeBid(auctionId: number, maxAmount: number, timeoutMs = 9000)
       return;
     }
     let settled = false;
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      resolve({ ok: false, error: "The auction engine did not respond. Please retry." });
-    }, timeoutMs);
-
-    s.emit("bid:place", { auctionId, maxAmount }, (res: unknown) => {
+    const finish = (outcome: BidOutcome) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      offDisconnect();
+      resolve(outcome);
+    };
+
+    // A timeout is not a rejection: the command may already be at the engine.
+    const timer = setTimeout(() => {
+      finish({
+        ok: false,
+        uncertain: true,
+        reason: "timeout",
+        error: "The auction engine did not respond.",
+      });
+    }, timeoutMs);
+
+    // Losing the socket before the ack is also not a rejection.
+    const onDisconnect = () => {
+      finish({
+        ok: false,
+        uncertain: true,
+        reason: "disconnected",
+        error: "The connection to the auction engine was lost.",
+      });
+    };
+    s.once("disconnect", onDisconnect);
+    const offDisconnect = () => {
+      s.off("disconnect", onDisconnect);
+    };
+
+    s.emit("bid:place", { auctionId, maxAmount }, (res: unknown) => {
+      if (settled) return;
       const payload = (res ?? {}) as {
         ok?: boolean;
         amount?: number;
@@ -91,7 +127,7 @@ export function placeBid(auctionId: number, maxAmount: number, timeoutMs = 9000)
         outbid?: boolean;
         winning?: boolean;
       };
-      resolve({
+      finish({
         ok: Boolean(payload.ok),
         amount: payload.amount,
         error: payload.error,
