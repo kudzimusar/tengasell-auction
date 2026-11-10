@@ -163,8 +163,8 @@ authority packet. No keystore, password or secret is committed; custody is
 - Emulator (Pixel_8, Android 16) evidence exists for the earlier candidate
   `5011c35`: home, categories, item detail, sign-in, a live bid (auction 1015 →
   US$700, bid 445 active), account, SOLD band.
-- **Not re-run on the current head** `6d6d486`/`7d6ade5`: no APK was rebuilt in
-  this assignment (the owner deferred APK work to keep building functionality).
+- **Not re-run on the delivered head** `0a4a0de`: no APK was rebuilt in this
+  assignment (the owner deferred APK work to keep building functionality).
 - **Physical device: BLOCKED** — no hardware available. SecureStore durability,
   VoiceOver/TalkBack, 200% text, pseudolocales and contrast remain unproven on
   hardware and are reserved to the independent reviewer.
@@ -201,7 +201,8 @@ mobile programme. It is recorded as debt with an owner decision outstanding.
 ## 11. Independent review still required
 
 1. RACE01 source and security acceptance.
-2. Full-scope review of PR #6 (32 commits, 45+ files, ~16.8k lines).
+2. Full-scope review of PR #6 (37 commits, 49 files, +17,447 lines — see the
+   A/B/C/D scope table in the PR body; review A, not the incremental patch).
 3. Physical-device certification (SecureStore, assistive tech, text scaling, pseudolocales).
 4. NXS touch/adaptation evidence on hardware.
 5. Merge-strategy approval for the three-PR stack.
