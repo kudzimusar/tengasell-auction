@@ -4,7 +4,7 @@
 // through the Socket.IO trade engine, never a direct record write.
 
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -12,18 +12,13 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BottomNav } from "../../components/BottomNav";
-import { formatDateTime, formatRemaining, formatUSD, minNextBid, remainingSeverity } from "../../lib/format";
+import { formatDateTime, formatRemaining, formatUSD, remainingSeverity } from "../../lib/format";
 import { fetchAuction } from "../../lib/trailbase";
-import { biddingOwnershipToken, connectBidding, disconnectBidding, placeBid } from "../../lib/socket";
-import { presentBidOutcome } from "../../lib/bid-copy";
-import { runGuardedBid } from "../../bids/bid-completion";
-import { useSession } from "../../auth/session-context";
 import { toAuctionView, type AuctionView } from "../../lib/types";
 
 export default function ItemScreen() {
@@ -34,19 +29,11 @@ export default function ItemScreen() {
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState<number>(() => Date.now());
   const [hero, setHero] = useState(0);
-  const session = useSession();
-  const [bidAmount, setBidAmount] = useState("");
-  const [bidding, setBidding] = useState(false);
-  const [bidNote, setBidNote] = useState<{
-    tone: "success" | "warning" | "error" | "unknown";
-    text: string;
-  } | null>(null);
-  const [engineUp, setEngineUp] = useState(false);
-  const mountedRef = useRef(true);
-  // The session object captured by this render cannot observe a later account
-  // switch. Read identity through a ref that tracks the latest snapshot.
-  const identityRef = useRef<string | null>(session.identity?.id ?? null);
 
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -57,9 +44,7 @@ export default function ItemScreen() {
         setError("This listing could not be found.");
         setItem(null);
       } else {
-        const view = toAuctionView(record);
-        setItem(view);
-        setBidAmount((current) => current || String(minNextBid(view.current_price, view.bid_count)));
+        setItem(toAuctionView(record));
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not reach the marketplace.");
@@ -68,58 +53,7 @@ export default function ItemScreen() {
     }
   }, [id]);
 
-  // Live engine connection (MOB-03): token from the session, socket to :3002.
   useEffect(() => {
-    let cancelled = false;
-    if (session.phase !== "authenticated") {
-      disconnectBidding();
-      // Deferred: resetting the flag synchronously inside the effect would
-      // cascade a render. The CTA must not stay enabled once the session is gone.
-      const reset = setTimeout(() => {
-        if (!cancelled) setEngineUp(false);
-      }, 0);
-      return () => {
-        cancelled = true;
-        clearTimeout(reset);
-      };
-    }
-    void session
-      .withAuthenticatedToken(async (token) => {
-        const s = connectBidding(token);
-        s.on("connect", () => !cancelled && setEngineUp(true));
-        s.on("disconnect", () => !cancelled && setEngineUp(false));
-        s.on("auction:update", (payload: { auction?: { id: number } }) => {
-          if (!cancelled && payload?.auction?.id === Number(id)) void load();
-        });
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-      disconnectBidding();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.phase, session.identity?.id, id]);
-
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(t);
-  }, []);
-
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    identityRef.current = session.identity?.id ?? null;
-  }, [session.identity?.id]);
-
-  useEffect(() => {
-    // Deferred one tick so the first paint is not blocked by a synchronous
-    // state update inside the effect.
     const task = setTimeout(() => {
       void load();
     }, 0);
@@ -252,105 +186,20 @@ export default function ItemScreen() {
           </ScrollView>
 
           <View style={styles.ctaBar}>
-            {sold ? (
-              <View style={{ flex: 1, alignItems: "center" }}>
-                <Text style={styles.closed}>Auction closed · final {formatUSD(item.current_price)}</Text>
-              </View>
-            ) : session.phase !== "authenticated" ? (
-              <>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.ctaPrice}>{formatUSD(item.current_price)}</Text>
-                  <Text style={styles.ctaSub}>Next minimum {formatUSD(minNextBid(item.current_price, item.bid_count))}</Text>
-                </View>
-                <Pressable hitSlop={4}
-                  style={styles.cta}
-                  onPress={() => router.push("/auth/login" as never)}
-                  accessibilityRole="button"
-                >
-                  <Text style={styles.ctaText}>Sign in to bid</Text>
-                </Pressable>
-              </>
-            ) : (
-              <>
-                <View style={{ flex: 1, gap: 2 }}>
-                  <Text style={styles.ctaSub}>
-                    {engineUp ? "Live engine connected" : "Connecting to engine…"}
-                  </Text>
-                  <View style={styles.amountRow}>
-                    <Text style={styles.amountPrefix}>US$</Text>
-                    <TextInput
-                      value={bidAmount}
-                      onChangeText={setBidAmount}
-                      keyboardType="decimal-pad"
-                      style={styles.amountInput}
-                      accessibilityLabel="Your maximum bid"
-                      placeholder={String(minNextBid(item.current_price, item.bid_count))}
-                      placeholderTextColor="#9AA7AE"
-                    />
-                  </View>
-                  {bidNote && (
-                    <Text
-                      style={[
-                        styles.bidNote,
-                        bidNote.tone === "success" && styles.bidNoteOk,
-                        bidNote.tone === "warning" && styles.bidNoteWarn,
-                        bidNote.tone === "error" && styles.bidNoteBad,
-                        bidNote.tone === "unknown" && styles.bidNoteUnknown,
-                      ]}
-                    >
-                      {bidNote.text}
-                    </Text>
-                  )}
-                </View>
-                <Pressable hitSlop={4}
-                  disabled={bidding || !engineUp}
-                  style={[styles.cta, (bidding || !engineUp) && styles.ctaDisabled]}
-                  onPress={async () => {
-                    const amount = Number(bidAmount);
-                    if (!Number.isFinite(amount) || amount <= 0) {
-                      setBidNote({ tone: "error", text: "Enter a bid amount." });
-                      return;
-                    }
-                    setBidding(true);
-                    setBidNote(null);
-
-                    // CLOSE-02: the completion is published only while this
-                    // screen, this session and this connection still own it.
-                    await runGuardedBid({
-                      guard: {
-                        sessionGeneration: () => session.sessionGeneration(),
-                        identityId: () => identityRef.current,
-                        isConnectionCurrent: (epoch) => biddingOwnershipToken() === epoch,
-                        isMounted: () => mountedRef.current,
-                      },
-                      takeOwnership: () => ({
-                        sessionGeneration: session.sessionGeneration(),
-                        identityId: identityRef.current,
-                        connectionEpoch: biddingOwnershipToken(),
-                      }),
-                      place: () => placeBid(item.id, amount),
-                      publish: (outcome) => {
-                        const presented = presentBidOutcome(outcome, formatUSD);
-                        setBidNote({ tone: presented.tone, text: presented.text });
-                        setBidding(false);
-                        // CLOSE-01: an unconfirmed acknowledgement is reconciled
-                        // against canonical auction state, never assumed.
-                        if (outcome.ok || presented.reconcile) void load();
-                      },
-                      onDiscarded: () => {
-                        // No result is claimed. The screen may still be mounted
-                        // after an account switch, so release the busy state.
-                        if (mountedRef.current) setBidding(false);
-                      },
-                    });
-                  }}
-                  accessibilityRole="button"
-                  accessibilityState={{ disabled: bidding || !engineUp }}
-                >
-                  <Text style={styles.ctaText}>{bidding ? "Placing…" : "Place bid"}</Text>
-                </Pressable>
-              </>
-            )}
+            <View style={{ flex: 1 }}>
+              <Text style={styles.ctaPrice}>{formatUSD(item.current_price)}</Text>
+              <Text style={styles.ctaSub}>
+                {sold ? "Auction closed" : `Next bid ${formatUSD(item.current_price + 1)}`}
+              </Text>
+            </View>
+            <Pressable hitSlop={4}
+              disabled
+              style={[styles.cta, styles.ctaDisabled]}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: true }}
+            >
+              <Text style={styles.ctaText}>{sold ? "Closed" : "Bidding in MOB-03"}</Text>
+            </Pressable>
           </View>
         </>
       )}
@@ -488,26 +337,6 @@ function makeStyles() {
     ctaSub: { fontSize: 11, color: "#6B7A82" },
     cta: { paddingHorizontal: 18, minHeight: 48, justifyContent: "center", borderRadius: 12, backgroundColor: "#19717B" },
     ctaDisabled: { backgroundColor: "#9FB3B8" },
-    amountRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-    amountPrefix: { fontSize: 15, fontWeight: "800", color: "#8A5F0B" },
-    amountInput: {
-      minWidth: 96,
-      minHeight: 48,
-      paddingVertical: 10,
-      paddingHorizontal: 10,
-      borderWidth: 1.5,
-      borderColor: "#19717B",
-      borderRadius: 8,
-      fontSize: 15,
-      fontWeight: "700",
-      color: "#101619",
-      backgroundColor: "#FFFFFF",
-    },
-    bidNote: { fontSize: 10.5, marginTop: 2 },
-    bidNoteOk: { color: "#1E7A4B" },
-    bidNoteBad: { color: "#C0392B" },
-    bidNoteWarn: { color: "#8A5A00" },
-    bidNoteUnknown: { color: "#4A5A66" },
     ctaText: { color: "#FFFFFF", fontWeight: "800", fontSize: 13.5 },
   });
 }
