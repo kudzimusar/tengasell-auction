@@ -62,8 +62,8 @@ jobs:
           set -euo pipefail
           # npm audit exits non-zero when findings exist; parse first, then
           # enforce the policy decision independently.
-          npm audit --json > audit.json || true
-          node scripts/verify-dependency-audit.mjs audit.json
+          npm audit --json > "$RUNNER_TEMP/audit.json" || true
+          node scripts/verify-dependency-audit.mjs "$RUNNER_TEMP/audit.json"
 
       - name: Expo install compatibility
         run: npx expo install --check
