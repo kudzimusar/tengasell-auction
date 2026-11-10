@@ -12,13 +12,16 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BottomNav } from "../../components/BottomNav";
-import { formatDateTime, formatRemaining, formatUSD, remainingSeverity } from "../../lib/format";
+import { formatDateTime, formatRemaining, formatUSD, minNextBid, remainingSeverity } from "../../lib/format";
 import { fetchAuction } from "../../lib/trailbase";
+import { connectBidding, disconnectBidding, getBiddingSocket, placeBid } from "../../lib/socket";
+import { useSession } from "../../auth/session-context";
 import { toAuctionView, type AuctionView } from "../../lib/types";
 
 export default function ItemScreen() {
@@ -29,6 +32,38 @@ export default function ItemScreen() {
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(Date.now());
   const [hero, setHero] = useState(0);
+  const session = useSession();
+  const [bidAmount, setBidAmount] = useState("");
+  const [bidding, setBidding] = useState(false);
+  const [bidNote, setBidNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const [engineUp, setEngineUp] = useState(false);
+
+  // Live engine connection (MOB-03): token from the session, socket to :3002.
+  useEffect(() => {
+    let cancelled = false;
+    if (session.phase !== "authenticated") {
+      disconnectBidding();
+      setEngineUp(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+    void session
+      .withAuthenticatedToken(async (token) => {
+        const s = connectBidding(token);
+        s.on("connect", () => !cancelled && setEngineUp(true));
+        s.on("disconnect", () => !cancelled && setEngineUp(false));
+        s.on("auction:update", (payload: { auction?: { id: number } }) => {
+          if (!cancelled && payload?.auction?.id === Number(id)) void load();
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+      disconnectBidding();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.phase, id]);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30_000);
@@ -44,7 +79,9 @@ export default function ItemScreen() {
         setError("This listing could not be found.");
         setItem(null);
       } else {
-        setItem(toAuctionView(record));
+        const view = toAuctionView(record);
+        setItem(view);
+        setBidAmount((current) => current || String(minNextBid(view.current_price, view.bid_count)));
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not reach the marketplace.");
@@ -183,20 +220,87 @@ export default function ItemScreen() {
           </ScrollView>
 
           <View style={styles.ctaBar}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.ctaPrice}>{formatUSD(item.current_price)}</Text>
-              <Text style={styles.ctaSub}>
-                {sold ? "Auction closed" : `Next bid ${formatUSD(item.current_price + 1)}`}
-              </Text>
-            </View>
-            <Pressable
-              disabled
-              style={[styles.cta, styles.ctaDisabled]}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: true }}
-            >
-              <Text style={styles.ctaText}>{sold ? "Closed" : "Bidding in MOB-03"}</Text>
-            </Pressable>
+            {sold ? (
+              <View style={{ flex: 1, alignItems: "center" }}>
+                <Text style={styles.closed}>Auction closed · final {formatUSD(item.current_price)}</Text>
+              </View>
+            ) : session.phase !== "authenticated" ? (
+              <>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.ctaPrice}>{formatUSD(item.current_price)}</Text>
+                  <Text style={styles.ctaSub}>Next minimum {formatUSD(minNextBid(item.current_price, item.bid_count))}</Text>
+                </View>
+                <Pressable
+                  style={styles.cta}
+                  onPress={() => router.push("/auth/login" as never)}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.ctaText}>Sign in to bid</Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={styles.ctaSub}>
+                    {engineUp ? "Live engine connected" : "Connecting to engine…"}
+                  </Text>
+                  <View style={styles.amountRow}>
+                    <Text style={styles.amountPrefix}>US$</Text>
+                    <TextInput
+                      value={bidAmount}
+                      onChangeText={setBidAmount}
+                      keyboardType="decimal-pad"
+                      style={styles.amountInput}
+                      accessibilityLabel="Your maximum bid"
+                      placeholder={String(minNextBid(item.current_price, item.bid_count))}
+                      placeholderTextColor="#9AA7AE"
+                    />
+                  </View>
+                  {bidNote && (
+                    <Text style={[styles.bidNote, bidNote.ok ? styles.bidNoteOk : styles.bidNoteBad]}>
+                      {bidNote.text}
+                    </Text>
+                  )}
+                </View>
+                <Pressable
+                  disabled={bidding || !engineUp}
+                  style={[styles.cta, (bidding || !engineUp) && styles.ctaDisabled]}
+                  onPress={async () => {
+                    const amount = Number(bidAmount);
+                    if (!Number.isFinite(amount) || amount <= 0) {
+                      setBidNote({ ok: false, text: "Enter a bid amount." });
+                      return;
+                    }
+                    setBidding(true);
+                    setBidNote(null);
+                    const outcome = await placeBid(item.id, amount);
+                    setBidding(false);
+                    if (outcome.ok) {
+                      // The engine covers an instantly-beaten bid from a standing
+                      // auto-bid; say so instead of claiming the lead.
+                      setBidNote(
+                        outcome.outbid
+                          ? {
+                              ok: false,
+                              text: `You were outbid — the standing bid is ${formatUSD(outcome.amount ?? amount)}.`,
+                            }
+                          : {
+                              ok: true,
+                              text: `You're the leading bidder at ${formatUSD(outcome.amount ?? amount)}.`,
+                            },
+                      );
+                      void load();
+                    } else {
+                      setBidNote({ ok: false, text: outcome.error ?? "The bid was not accepted." });
+                    }
+                  }}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: bidding || !engineUp }}
+                >
+                  <Text style={styles.ctaText}>{bidding ? "Placing…" : "Place bid"}</Text>
+                </Pressable>
+              </>
+            )}
           </View>
         </>
       )}
@@ -334,6 +438,23 @@ function makeStyles() {
     ctaSub: { fontSize: 11, color: "#6B7A82" },
     cta: { paddingHorizontal: 18, paddingVertical: 12, borderRadius: 12, backgroundColor: "#19717B" },
     ctaDisabled: { backgroundColor: "#9FB3B8" },
+    amountRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+    amountPrefix: { fontSize: 15, fontWeight: "800", color: "#8A5F0B" },
+    amountInput: {
+      minWidth: 96,
+      paddingVertical: 4,
+      paddingHorizontal: 8,
+      borderWidth: 1.5,
+      borderColor: "#19717B",
+      borderRadius: 8,
+      fontSize: 15,
+      fontWeight: "700",
+      color: "#101619",
+      backgroundColor: "#FFFFFF",
+    },
+    bidNote: { fontSize: 10.5, marginTop: 2 },
+    bidNoteOk: { color: "#1E7A4B" },
+    bidNoteBad: { color: "#C0392B" },
     ctaText: { color: "#FFFFFF", fontWeight: "800", fontSize: 13.5 },
   });
 }
