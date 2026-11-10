@@ -127,8 +127,13 @@ export default function ItemScreen() {
   }, [load]);
 
   const styles = useMemo(() => makeStyles(), []);
-  const sold = item ? ["sold", "ended", "cancelled"].includes(item.status) : false;
   const remainingMs = item ? Date.parse(item.ends_at) - now : 0;
+  // The record status can lag the clock. An auction past its end time is closed
+  // here too, otherwise the detail screen offers a bid on an ended lot while the
+  // card already says it is closed.
+  const sold = item
+    ? ["sold", "ended", "cancelled"].includes(item.status) || remainingMs <= 0
+    : false;
   const severity = item ? remainingSeverity(remainingMs) : "normal";
 
   return (
@@ -303,12 +308,23 @@ export default function ItemScreen() {
                   )}
                 </View>
                 <Pressable hitSlop={4}
-                  disabled={bidding || !engineUp}
-                  style={[styles.cta, (bidding || !engineUp) && styles.ctaDisabled]}
+                  disabled={bidding || !engineUp || sold}
+                  style={[styles.cta, (bidding || !engineUp || sold) && styles.ctaDisabled]}
                   onPress={async () => {
                     const amount = Number(bidAmount);
                     if (!Number.isFinite(amount) || amount <= 0) {
                       setBidNote({ tone: "error", text: "Enter a bid amount." });
+                      return;
+                    }
+                    // The field is prefilled from the tiered minimum, but typing
+                    // is free: refuse locally rather than round-tripping a bid
+                    // the engine will reject.
+                    const minimum = minNextBid(item.current_price, item.bid_count);
+                    if (amount < minimum) {
+                      setBidNote({
+                        tone: "error",
+                        text: `Your maximum must be at least ${formatUSD(minimum)}.`,
+                      });
                       return;
                     }
                     setBidding(true);
@@ -345,9 +361,11 @@ export default function ItemScreen() {
                     });
                   }}
                   accessibilityRole="button"
-                  accessibilityState={{ disabled: bidding || !engineUp }}
+                  accessibilityState={{ disabled: bidding || !engineUp || sold }}
                 >
-                  <Text style={styles.ctaText}>{bidding ? "Placing…" : "Place bid"}</Text>
+                  <Text style={styles.ctaText}>
+                    {sold ? "Auction closed" : bidding ? "Placing…" : "Place bid"}
+                  </Text>
                 </Pressable>
               </>
             )}
