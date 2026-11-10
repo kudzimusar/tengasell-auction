@@ -84,9 +84,13 @@ jobs:
             tests/login-barrier.test.mjs
 
       - name: Navigation contract (MOB-02)
+        # Runs only where the MOB-02 screens exist; the foundation PR predates them.
+        if: ${{ hashFiles('mobile/tests/navigation-contract.test.mjs') != '' }}
         run: node --experimental-strip-types --test tests/navigation-contract.test.mjs
 
       - name: Bidding and socket safety (MOB-03)
+        # Runs only where the MOB-03 socket modules exist.
+        if: ${{ hashFiles('mobile/tests/socket-lifecycle.test.mjs') != '' }}
         run: node --experimental-strip-types --test tests/socket-lifecycle.test.mjs
 
       - name: Android export
