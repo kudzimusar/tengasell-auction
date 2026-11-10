@@ -87,6 +87,18 @@ root is `GHSA-mrhx-c7xc-m3w5` (zod via the Expo CLI graph). Package-name
 allow-listing was removed: it would hide future unrelated findings behind a
 familiar label.
 
+## 4a. Delivery state at handoff
+
+| branch | head | PR | mobile gate |
+| --- | --- | --- | --- |
+| `fix/tengasell-mobile-r2-sdk58-patch-refresh` | `7847167` | #6 → `main` | **success** |
+| `feat/tengasell-mobile-mob02-item-detail` | `a38b6ad` | #7 → #6 | **success** |
+| `feat/tengasell-mobile-mob03-bidding-and-release` | `fd9301b` | #8 → #7 | **success** |
+
+Each PR is independently green on its own head, not only at the top of the
+stack. The three are ancestry-verified: `main` → #6 → #7 → #8, no force-push,
+no rewritten history.
+
 ## 5. Tests (local, on the integrated candidate)
 
 | Suite | Result |
@@ -142,10 +154,33 @@ authority packet. No keystore, password or secret is committed; custody is
 - RACE01 security closure: implementer evidence only; **cannot self-certify.**
 - MOB-04: scope and dependency preparation only (see handoff), no financial activation.
 
-## 10. Independent review still required
+## 10. Root web CI classification (INT-10)
+
+The repository-level `CI` workflow reports two jobs on the PR #6 head:
+
+| job | result | meaning |
+| --- | --- | --- |
+| `Build and smoke test` | **success** | production build and endpoint probes pass |
+| `Lint and typecheck (baseline debt — non-blocking)` | failure, `continue-on-error` | **inherited debt** |
+
+Classification: **inherited, not introduced.** Evidence:
+
+1. The job is declared `continue-on-error: true` on `main` already
+   (`ci.yml`, “baseline debt — non-blocking”), so it never gates the merge.
+2. Zero root application sources change in this PR. The complete set of
+   non-`mobile/`, non-`docs/`, non-`.github/` changes is `.dockerignore`.
+3. Current head reports `1101 problems (20 errors, 1081 warnings)`, which is
+   therefore the state of `main` itself.
+
+Not remediated here. Fixing 20 web errors inside a mobile PR would widen the
+diff past what a reviewer can attribute, and the Moderator’s scope is the
+mobile programme. It is recorded as debt with an owner decision outstanding.
+
+## 11. Independent review still required
 
 1. RACE01 source and security acceptance.
 2. Full-scope review of PR #6 (32 commits, 45+ files, ~16.8k lines).
 3. Physical-device certification (SecureStore, assistive tech, text scaling, pseudolocales).
 4. NXS touch/adaptation evidence on hardware.
 5. Merge-strategy approval for the three-PR stack.
+6. Disposition of the inherited web lint debt (§10) — separate change, not this one.
