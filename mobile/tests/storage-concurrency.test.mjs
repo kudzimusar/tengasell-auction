@@ -241,3 +241,15 @@ test("STORE-09 a write that fails cannot outlive its operation and mix pairs", a
   assert.deepEqual(stored, B);
   assert.equal(storage.concurrencyHighWaterMark(), 1);
 });
+
+test("STORE-10 an unverifiable cleanup after a failed write blocks restoration", async () => {
+  // The refresh write fails and both removals fault. The store may still hold a
+  // partial pair, so it must not be restorable: the durable marker is set.
+  const h = makeDriver({}, { failWrites: [REFRESH_KEY], failRemoves: [AUTH_KEY, REFRESH_KEY] });
+  const storage = createGuardedSessionStorage(h.driver);
+
+  await assert.rejects(() => storage.writeStoredSession(A));
+
+  assert.equal(h.slots.get(INTENT_KEY), "pending-v1");
+  await assert.rejects(() => storage.readStoredSession(), /sign-out needs to be completed/i);
+});

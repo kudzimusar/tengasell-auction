@@ -140,8 +140,15 @@ export function createGuardedSessionStorage(driver: SecureSlotDriver) {
       try {
         await clearStoredSession();
       } catch {
-        // Fail the login; caller must not publish authenticated state.
-        // Native crash durability with simultaneous storage faults is not provable.
+        // Deletion could not be verified, so a partial pair may still be
+        // restorable. Block restoration with the durable sign-out marker
+        // instead of trusting the store. Fail the login either way: the caller
+        // must not publish authenticated state.
+        try {
+          await markLogoutIntent();
+        } catch {
+          // Marker write is best effort; the original failure still surfaces.
+        }
       }
       throw error;
     }
