@@ -105,7 +105,7 @@ export default function AccountScreen() {
 
   if (session.phase === "booting") {
     return (
-      <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
+      <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>
         <View style={styles.center} accessible accessibilityLiveRegion="polite">
           <ActivityIndicator color={theme.state.loading} size="large" />
           <Text style={styles.secondaryText}>{t("account.restoringSession")}</Text>
@@ -117,7 +117,7 @@ export default function AccountScreen() {
   if (session.phase === "signout-pending" ||
       session.phase === "signout-incomplete") {
     return (
-      <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
+      <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>
         <View style={styles.center}>
           <Text style={styles.title} accessibilityRole="header">
             {session.phase === "signout-pending"
@@ -149,7 +149,7 @@ export default function AccountScreen() {
     );
 
     return (
-      <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
+      <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>
         <View style={styles.center}>
           <Text style={styles.title} accessibilityRole="header">
             {t("account.unavailableTitle")}
@@ -176,7 +176,7 @@ export default function AccountScreen() {
 
   if (session.phase !== "authenticated" || !session.identity) {
     return (
-      <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
+      <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>
         <View style={styles.center} accessible accessibilityLiveRegion="polite">
           <ActivityIndicator color={theme.state.loading} />
           <Text style={styles.secondaryText}>{t("account.returningToSignIn")}</Text>
@@ -186,7 +186,7 @@ export default function AccountScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
+    <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.panel}>
           <Text style={styles.title} accessibilityRole="header">
