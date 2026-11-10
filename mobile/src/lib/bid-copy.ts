@@ -59,8 +59,12 @@ export function presentBidOutcome(
   if (!outcome.ok) {
     return {
       tone: "error",
+      // The engine's failure acknowledgement can arrive after it has recorded
+      // the bid (audit hold, delegated decision), and it does not mark those.
+      // So a rejection is reported, but never as proof that nothing happened:
+      // the caller re-reads canonical state before the user acts again.
       text: outcome.error ?? "The bid was not accepted.",
-      reconcile: false,
+      reconcile: true,
     };
   }
 

@@ -163,7 +163,10 @@ test("ACK-11 an engine rejection that is uncertain stays uncertain", () => {
 test("ACK-12 a plain engine rejection is still a rejection", () => {
   const parsed = parseBidAck({ ok: false, error: "Bid below the minimum." });
   assert.equal(parsed.uncertain, undefined);
-  assert.equal(presentBidOutcome(parsed, money).tone, "error");
+  const shown = presentBidOutcome(parsed, money);
+  assert.equal(shown.tone, "error");
+  // The engine's rejection can follow a commit, so it still reconciles.
+  assert.equal(shown.reconcile, true);
 });
 
 test("ACK-13 an unrecognised uncertain reason is not trusted", () => {

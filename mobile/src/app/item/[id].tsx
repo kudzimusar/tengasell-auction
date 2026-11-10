@@ -85,6 +85,9 @@ export default function ItemScreen() {
     }
     void session
       .withAuthenticatedToken(async (token) => {
+        // The token refresh can resolve after this effect was torn down; a
+        // connect at that point would dispose whatever socket now owns bidding.
+        if (cancelled) return;
         const s = connectBidding(token);
         s.on("connect", () => !cancelled && setEngineUp(true));
         s.on("disconnect", () => !cancelled && setEngineUp(false));
