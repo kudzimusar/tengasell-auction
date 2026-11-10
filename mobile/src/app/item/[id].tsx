@@ -20,7 +20,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { BottomNav } from "../../components/BottomNav";
 import { formatDateTime, formatRemaining, formatUSD, minNextBid, remainingSeverity } from "../../lib/format";
 import { fetchAuction } from "../../lib/trailbase";
-import { connectBidding, disconnectBidding, getBiddingSocket, placeBid } from "../../lib/socket";
+import { connectBidding, disconnectBidding, placeBid } from "../../lib/socket";
+import { presentBidOutcome } from "../../lib/bid-copy";
 import { useSession } from "../../auth/session-context";
 import { toAuctionView, type AuctionView } from "../../lib/types";
 
@@ -63,7 +64,7 @@ export default function ItemScreen() {
       disconnectBidding();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.phase, id]);
+  }, [session.phase, session.identity?.id, id]);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30_000);
@@ -102,7 +103,7 @@ export default function ItemScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.topBar}>
-        <Pressable onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Back" style={styles.backBtn}>
+        <Pressable hitSlop={4} onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Back" style={styles.backBtn}>
           <Text style={styles.backGlyph}>‹</Text>
         </Pressable>
         <Text style={styles.topTitle} numberOfLines={1}>
@@ -119,7 +120,7 @@ export default function ItemScreen() {
         <View style={styles.center}>
           <Text style={styles.errorTitle}>Not available</Text>
           <Text style={styles.errorBody}>{error ?? "This listing is no longer published."}</Text>
-          <Pressable style={styles.retry} onPress={() => void load()} accessibilityRole="button">
+          <Pressable hitSlop={4} style={styles.retry} onPress={() => void load()} accessibilityRole="button">
             <Text style={styles.retryText}>Try again</Text>
           </Pressable>
         </View>
@@ -230,7 +231,7 @@ export default function ItemScreen() {
                   <Text style={styles.ctaPrice}>{formatUSD(item.current_price)}</Text>
                   <Text style={styles.ctaSub}>Next minimum {formatUSD(minNextBid(item.current_price, item.bid_count))}</Text>
                 </View>
-                <Pressable
+                <Pressable hitSlop={4}
                   style={styles.cta}
                   onPress={() => router.push("/auth/login" as never)}
                   accessibilityRole="button"
@@ -262,7 +263,7 @@ export default function ItemScreen() {
                     </Text>
                   )}
                 </View>
-                <Pressable
+                <Pressable hitSlop={4}
                   disabled={bidding || !engineUp}
                   style={[styles.cta, (bidding || !engineUp) && styles.ctaDisabled]}
                   onPress={async () => {
@@ -275,24 +276,11 @@ export default function ItemScreen() {
                     setBidNote(null);
                     const outcome = await placeBid(item.id, amount);
                     setBidding(false);
-                    if (outcome.ok) {
-                      // The engine covers an instantly-beaten bid from a standing
-                      // auto-bid; say so instead of claiming the lead.
-                      setBidNote(
-                        outcome.outbid
-                          ? {
-                              ok: false,
-                              text: `You were outbid — the standing bid is ${formatUSD(outcome.amount ?? amount)}.`,
-                            }
-                          : {
-                              ok: true,
-                              text: `You're the leading bidder at ${formatUSD(outcome.amount ?? amount)}.`,
-                            },
-                      );
-                      void load();
-                    } else {
-                      setBidNote({ ok: false, text: outcome.error ?? "The bid was not accepted." });
+                    const presented = presentBidOutcome(outcome, formatUSD);
+                    if (presented) {
+                      setBidNote({ ok: presented.tone === "success", text: presented.text });
                     }
+                    if (outcome.ok) void load();
                   }}
                   accessibilityRole="button"
                   accessibilityState={{ disabled: bidding || !engineUp }}
@@ -351,7 +339,7 @@ function makeStyles() {
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: "#DCE4E8",
     },
-    backBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
+    backBtn: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
     backGlyph: { fontSize: 26, color: "#19717B", lineHeight: 28 },
     topTitle: { flex: 1, textAlign: "center", fontSize: 13, fontWeight: "700", color: "#101619" },
 
@@ -436,14 +424,15 @@ function makeStyles() {
     },
     ctaPrice: { fontSize: 18, fontWeight: "900", color: "#8A5F0B" },
     ctaSub: { fontSize: 11, color: "#6B7A82" },
-    cta: { paddingHorizontal: 18, paddingVertical: 12, borderRadius: 12, backgroundColor: "#19717B" },
+    cta: { paddingHorizontal: 18, minHeight: 48, justifyContent: "center", borderRadius: 12, backgroundColor: "#19717B" },
     ctaDisabled: { backgroundColor: "#9FB3B8" },
     amountRow: { flexDirection: "row", alignItems: "center", gap: 4 },
     amountPrefix: { fontSize: 15, fontWeight: "800", color: "#8A5F0B" },
     amountInput: {
       minWidth: 96,
-      paddingVertical: 4,
-      paddingHorizontal: 8,
+      minHeight: 48,
+      paddingVertical: 10,
+      paddingHorizontal: 10,
       borderWidth: 1.5,
       borderColor: "#19717B",
       borderRadius: 8,

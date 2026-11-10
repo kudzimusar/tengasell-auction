@@ -1,9 +1,8 @@
 name: Tengasell Mobile MOB-01 R3 DEP01 strict engineering gates
 
 on:
-  push:
-    branches:
-      - fix/tengasell-mobile-mob01-r3-sdk58-patch-alignment
+  # Superseded by .github/workflows/tengasell-mobile-pr.yml (MOB-UNBLOCK-01-LR02).
+  # Retained for historical exact-head evidence; manual dispatch only.
   workflow_dispatch:
 
 permissions:

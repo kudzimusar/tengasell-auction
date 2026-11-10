@@ -55,7 +55,7 @@ export default function CategoriesScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>{selected ? selected.name : "Categories"}</Text>
         {selected && (
-          <Pressable onPress={() => setSelected(null)} accessibilityRole="button">
+          <Pressable hitSlop={4} onPress={() => setSelected(null)} accessibilityRole="button">
             <Text style={styles.back}>All</Text>
           </Pressable>
         )}
@@ -70,7 +70,7 @@ export default function CategoriesScreen() {
       ) : (
         <ScrollView contentContainerStyle={styles.grid}>
           {categories.map((c) => (
-            <Pressable
+            <Pressable hitSlop={4}
               key={c.id}
               style={({ pressed }) => [styles.tile, pressed && { opacity: 0.85 }]}
               onPress={() => void open(c)}

@@ -8,8 +8,10 @@
 import { io, type Socket } from "socket.io-client";
 
 import { getCanonicalBaseUrl } from "./trailbase";
+import { ConnectionEpoch } from "./connection-epoch";
 
 let socket: Socket | null = null;
+const ownership = new ConnectionEpoch();
 
 export function connectBidding(token: string | null): Socket {
   const base = getCanonicalBaseUrl();
@@ -19,6 +21,7 @@ export function connectBidding(token: string | null): Socket {
     socket.disconnect();
     socket = null;
   }
+  const attempt = ownership.next();
   socket = io(`${base}/?XTransformPort=3002`, {
     transports: ["websocket", "polling"],
     auth: token ? { token } : {},
@@ -27,6 +30,15 @@ export function connectBidding(token: string | null): Socket {
     reconnectionDelay: 1500,
     timeout: 8000,
   });
+  // A completion that arrives after logout/account-switch/unmount must not
+  // resurrect bidding capability for a session that no longer owns it.
+  socket.on("connect", () => {
+    if (ownership.isCurrent(attempt)) return;
+    socket?.removeAllListeners();
+    socket?.disconnect();
+    socket = null;
+  });
+
   return socket;
 }
 
@@ -35,6 +47,7 @@ export function getBiddingSocket(): Socket | null {
 }
 
 export function disconnectBidding(): void {
+  ownership.invalidate();
   if (socket) {
     socket.removeAllListeners();
     socket.disconnect();

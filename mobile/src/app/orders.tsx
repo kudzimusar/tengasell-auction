@@ -29,7 +29,7 @@ export default function OrdersScreen() {
             : "Your bids, wins and delivery status live behind your account."}
         </Text>
         {!signedIn && (
-          <Pressable style={styles.cta} onPress={() => router.push("/auth/login" as never)} accessibilityRole="button">
+          <Pressable hitSlop={4} style={styles.cta} onPress={() => router.push("/auth/login" as never)} accessibilityRole="button">
             <Text style={styles.ctaText}>Sign in</Text>
           </Pressable>
         )}

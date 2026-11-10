@@ -65,7 +65,7 @@ export default function SearchScreen() {
           style={styles.input}
           accessibilityLabel="Search auctions"
         />
-        <Pressable style={styles.go} onPress={() => void run(query)} accessibilityRole="button" accessibilityLabel="Search">
+        <Pressable hitSlop={4} style={styles.go} onPress={() => void run(query)} accessibilityRole="button" accessibilityLabel="Search">
           <Text style={styles.goText}>Search</Text>
         </Pressable>
       </View>
@@ -75,7 +75,7 @@ export default function SearchScreen() {
           <Text style={styles.suggestTitle}>Browse by category</Text>
           <View style={styles.chips}>
             {categories.slice(0, 8).map((c) => (
-              <Pressable key={c.id} style={styles.chip} onPress={() => { setQuery(c.name); void run(c.name); }}>
+              <Pressable hitSlop={4} key={c.id} style={styles.chip} onPress={() => { setQuery(c.name); void run(c.name); }}>
                 <Text style={styles.chipText}>{c.name}</Text>
               </Pressable>
             ))}
@@ -114,8 +114,8 @@ function makeStyles() {
     },
     input: {
       flex: 1,
-      height: 42,
-      borderRadius: 21,
+      height: 48,
+      borderRadius: 24,
       borderWidth: 1.5,
       borderColor: "#19717B",
       paddingHorizontal: 14,
@@ -123,12 +123,12 @@ function makeStyles() {
       color: "#101619",
       backgroundColor: "#FFFFFF",
     },
-    go: { backgroundColor: "#19717B", paddingHorizontal: 16, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center" },
+    go: { backgroundColor: "#19717B", paddingHorizontal: 16, height: 48, minHeight: 48, borderRadius: 24, alignItems: "center", justifyContent: "center" },
     goText: { color: "#FFFFFF", fontWeight: "800", fontSize: 13 },
     suggestWrap: { padding: 14, gap: 10 },
     suggestTitle: { fontSize: 12.5, fontWeight: "800", color: "#101619" },
     chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-    chip: { borderWidth: 1, borderColor: "#DCE4E8", backgroundColor: "#FFFFFF", borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
+    chip: { borderWidth: 1, borderColor: "#DCE4E8", backgroundColor: "#FFFFFF", borderRadius: 999, paddingHorizontal: 14, minHeight: 48, justifyContent: "center" },
     chipText: { fontSize: 12, color: "#33424A", fontWeight: "600" },
     center: { flex: 1, alignItems: "center", justifyContent: "center" },
   });

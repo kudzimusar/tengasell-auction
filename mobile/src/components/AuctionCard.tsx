@@ -25,7 +25,7 @@ export function AuctionCard({ item, width, now, onPress }: Props) {
   const urgent = !sold && remainingMs > 0 && remainingMs < 3600_000;
 
   return (
-    <Pressable
+    <Pressable hitSlop={4}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`${item.title}, ${formatUSD(item.current_price)}${
@@ -140,7 +140,7 @@ function makeStyles(width: number) {
     urgentText: { color: "#FFFFFF", fontSize: 10, fontWeight: "700" },
 
     body: { paddingHorizontal: 9, paddingTop: 8, paddingBottom: 10, gap: 3 },
-    title: { fontSize: 12.5, lineHeight: 17, color: "#101619", minHeight: 34 },
+    title: { fontSize: 12.5, lineHeight: 17, color: "#101619" },
     priceRow: { flexDirection: "row", alignItems: "baseline", gap: 6, marginTop: 2 },
     price: { fontSize: 17, fontWeight: "800", color: "#8A5F0B", letterSpacing: -0.4 },
     priceSold: { color: "#7A848A", textDecorationLine: "line-through" },
