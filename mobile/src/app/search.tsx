@@ -42,9 +42,14 @@ export default function SearchScreen() {
     try {
       const rows = await fetchAuctions({ search: term, limit: 40 });
       setItems(rows.map(toAuctionView));
+      setError(null);
       setSearched(true);
     } catch {
-      setError("Search is unavailable right now.");
+      // Never leave the previous query's rows under a failure message: the user
+      // would read stale results as the answer to this search.
+      setItems([]);
+      setSearched(true);
+      setError("Search is unavailable right now. Try again.");
     } finally {
       setBusy(false);
     }

@@ -22,17 +22,26 @@ export default function CategoriesScreen() {
     return () => clearInterval(t);
   }, []);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        setCategories(await fetchCategories());
-      } catch {
-        setError("Could not load categories.");
-      } finally {
-        setLoading(false);
-      }
-    })();
+  const loadCategories = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setCategories(await fetchCategories());
+    } catch {
+      setError("Could not load categories. Check your connection and try again.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    // Deferred one tick: the fetch itself sets loading synchronously, which
+    // would otherwise cascade a render during the effect.
+    const task = setTimeout(() => {
+      void loadCategories();
+    }, 0);
+    return () => clearTimeout(task);
+  }, [loadCategories]);
 
   const open = useCallback(async (c: Category) => {
     setSelected(c);
@@ -64,6 +73,13 @@ export default function CategoriesScreen() {
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator color="#19717B" />
+        </View>
+      ) : error && !selected ? (
+        <View style={styles.center}>
+          <Text style={styles.errorTitle}>{error}</Text>
+          <Pressable hitSlop={4} onPress={() => void loadCategories()} accessibilityRole="button">
+            <Text style={styles.retry}>Try again</Text>
+          </Pressable>
         </View>
       ) : selected ? (
         <ListingGrid items={items} now={now} empty={error ?? "No listings in this category yet."} />
@@ -107,7 +123,9 @@ function makeStyles() {
     },
     title: { fontSize: 17, fontWeight: "800", color: "#101619" },
     back: { fontSize: 13, fontWeight: "700", color: "#19717B" },
-    center: { flex: 1, alignItems: "center", justifyContent: "center" },
+    center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24, gap: 10 },
+    errorTitle: { fontSize: 14, color: "#5C6B72", textAlign: "center" },
+    retry: { fontSize: 14, fontWeight: "800", color: "#19717B" },
     grid: {
       flexDirection: "row",
       flexWrap: "wrap",
