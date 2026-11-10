@@ -32,6 +32,7 @@ import {
   writeStoredSession,
 } from "./session-storage";
 import { applyAuthenticatedSession } from "./session-orchestrator";
+import { runProtectedRequest } from "./protected-request";
 import {
   settleLogout,
   type LogoutEvidence,
@@ -361,83 +362,30 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const withAuthenticatedToken = useCallback(
     async <T,>(operation: (authToken: string) => Promise<T>): Promise<T> => {
-      const operationGeneration = generationRef.current;
-      let tokens = tokensRef.current;
-      if (!tokens || snapshot.phase !== "authenticated") {
-        throw new TrailBaseError(
-          "session-invalid",
-          "Protected request attempted without an authenticated session.",
-        );
-      }
-
-      const identity = identityFromAuthToken(tokens.authToken);
-      if (
-        !identity ||
-        (identity.expiresAt !== undefined && identity.expiresAt <= Date.now() + 30_000)
-      ) {
-        try {
-          tokens = await refreshSession();
-        } catch (error) {
-          if (isNetworkOrConfiguration(error)) {
-            tokensRef.current = null;
-            setSnapshot({
-              phase: "network-degraded",
-              identity: null,
-              message:
-                error instanceof Error
-                  ? error.message
-                  : "Session refresh is temporarily unavailable.",
-            });
-          } else {
-            await clearLocalSession("session-invalid", "Your session has expired. Sign in again.");
-          }
-          throw error;
-        }
-      }
-
-      try {
-        const result = await operation(tokens.authToken);
-        if (generationRef.current !== operationGeneration) {
-          throw new TrailBaseError(
-            "session-invalid",
-            "Protected response was discarded because the session changed.",
-          );
-        }
-        return result;
-      } catch (error) {
-        if (!(error instanceof TrailBaseError) || error.kind !== "session-invalid") throw error;
-        if (generationRef.current !== operationGeneration) throw error;
-
-        try {
-          const refreshed = await refreshSession();
-          const result = await operation(refreshed.authToken);
-          if (generationRef.current !== operationGeneration) {
-            throw new TrailBaseError(
-              "session-invalid",
-              "Protected response was discarded because the session changed.",
-            );
-          }
-          return result;
-        } catch (refreshError) {
-          if (isNetworkOrConfiguration(refreshError)) {
-            tokensRef.current = null;
-            setSnapshot({
-              phase: "network-degraded",
-              identity: null,
-              message:
-                refreshError instanceof Error
-                  ? refreshError.message
-                  : "Session refresh is temporarily unavailable.",
-            });
-          } else if (generationRef.current === operationGeneration) {
-            await clearLocalSession(
-              "session-invalid",
-              "Your session is no longer valid. Sign in again.",
-            );
-          }
-          throw refreshError;
-        }
-      }
+      // ICR03: the ordering lives in the production orchestrator so the failure
+      // path — including a logout and fresh login during a refresh — is
+      // testable. A stale operation may discard its own result but must never
+      // clear durable state or publish degraded UI for the newer session.
+      const result = await runProtectedRequest<T>({
+        currentGeneration: () => generationRef.current,
+        tokens: tokensRef.current,
+        authenticated: snapshot.phase === "authenticated",
+        identityFromAuthToken,
+        refresh: refreshSession,
+        isNetworkOrConfiguration,
+        clearLocalSession: () =>
+          clearLocalSession("session-invalid", "Your session is no longer valid. Sign in again."),
+        onDegraded: (message) => {
+          tokensRef.current = null;
+          setSnapshot({ phase: "network-degraded", identity: null, message });
+        },
+        onRefreshed: (tokens) => {
+          tokensRef.current = tokens;
+        },
+        run: operation,
+        makeSessionInvalid: (message) => new TrailBaseError("session-invalid", message),
+      });
+      return result;
     },
     [clearLocalSession, refreshSession, snapshot.phase],
   );
