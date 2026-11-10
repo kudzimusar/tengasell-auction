@@ -57,6 +57,14 @@ interface SessionContextValue extends SessionSnapshot {
   retryLogout: () => Promise<LogoutEvidence>;
   retrySessionRecovery: () => Promise<void>;
   withAuthenticatedToken: <T>(operation: (authToken: string) => Promise<T>) => Promise<T>;
+  /**
+   * Read the current session generation (RACE01 ownership counter).
+   *
+   * Exposed so asynchronous commercial operations can prove they still belong
+   * to the session that started them. It is a read of the existing owner ref —
+   * not a second session authority, and not a React state value.
+   */
+  sessionGeneration: () => number;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -440,6 +448,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       retryLogout,
       retrySessionRecovery,
       withAuthenticatedToken,
+      sessionGeneration: () => generationRef.current,
     }),
     [login, logout, retryLogout, retrySessionRecovery, snapshot, withAuthenticatedToken],
   );
