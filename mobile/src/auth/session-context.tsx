@@ -93,13 +93,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const clearLocalSession = useCallback(
     async (phase: SessionPhase, message: string | null) => {
-      generationRef.current += 1;
+      const expectedGeneration = ++generationRef.current;
       tokensRef.current = null;
       refreshPromiseRef.current = null;
       try {
         await clearStoredSession();
       } finally {
-        setSnapshot({ phase, identity: null, message });
+        if (generationRef.current === expectedGeneration) {
+          setSnapshot({ phase, identity: null, message });
+        }
       }
     },
     [],
@@ -159,12 +161,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const refreshSession = useCallback(async (): Promise<TrailBaseTokens> => {
     if (refreshPromiseRef.current) return refreshPromiseRef.current;
 
+    const expectedGeneration = generationRef.current;
     const existing = tokensRef.current ?? (await readStoredSession());
+    if (generationRef.current !== expectedGeneration) {
+      throw new TrailBaseError("session-invalid", "Session changed before refresh.");
+    }
+    if (refreshPromiseRef.current) return refreshPromiseRef.current;
     if (!existing) {
       throw new TrailBaseError("session-invalid", "No stored TrailBase session is available.");
     }
-
-    const expectedGeneration = generationRef.current;
     const refreshPromise = (async () => {
       const authToken = await refreshTrailBase(existing.refreshToken);
       const next = { authToken, refreshToken: existing.refreshToken };

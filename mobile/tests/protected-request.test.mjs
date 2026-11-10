@@ -145,3 +145,17 @@ test("ICR03-09 an unauthenticated request never reaches the operation", async ()
   await assert.rejects(() => runProtectedRequest(deps), /without an authenticated session/i);
   assert.equal(state.calls, 0);
 });
+
+test("ICR03-10 a refresh resolving after logout does not publish its tokens", async () => {
+  const { state, deps } = harness();
+  deps.identityFromAuthToken = () => ({ expiresAt: 0 });
+  deps.refresh = async () => {
+    state.generation += 1; // logout lands while the refresh is in flight
+    return LATER;
+  };
+
+  await assert.rejects(() => runProtectedRequest(deps), /discarded/i);
+  assert.deepEqual(state.refreshed, [], "stale tokens must not reach the session");
+  assert.equal(state.cleared, 0);
+  assert.deepEqual(state.degraded, []);
+});

@@ -89,6 +89,14 @@ export async function runProtectedRequest<T>(
   if (expiring) {
     try {
       tokens = await deps.refresh();
+      // ICR03-D2: a refresh that resolves after the session moved must not
+      // publish its tokens. Writing them into the live token ref would let a
+      // logged-out or superseded session reappear as authenticated.
+      if (deps.currentGeneration() !== generation) {
+        throw deps.makeSessionInvalid(
+          "Protected response was discarded because the session changed.",
+        );
+      }
       deps.onRefreshed(tokens);
     } catch (error) {
       return applyFailure(error);
@@ -115,6 +123,11 @@ export async function runProtectedRequest<T>(
 
     try {
       const refreshed = await deps.refresh();
+      if (deps.currentGeneration() !== generation) {
+        throw deps.makeSessionInvalid(
+          "Protected response was discarded because the session changed.",
+        );
+      }
       deps.onRefreshed(refreshed);
       return discardIfStale(await deps.run(refreshed.authToken));
     } catch (refreshError) {
