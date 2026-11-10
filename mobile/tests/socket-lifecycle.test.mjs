@@ -79,7 +79,24 @@ test("SOCK-09 engine rejection is an error with the engine message", () => {
 test("SOCK-10 source: disconnect invalidates ownership and late connects are dropped", () => {
   assert.match(socketSource, /ownership\.invalidate\(\)/, "disconnect must invalidate the epoch");
   assert.match(socketSource, /ownership\.isCurrent\(attempt\)/, "connect handler must check ownership");
-  assert.match(socketSource, /socket\?\.disconnect\(\)/, "late connect must be torn down");
+  // ICR03: the guard must dispose the attempt's own socket and only clear the
+  // module slot if that attempt still owns it. Tearing down `socket` blindly
+  // would close a newer, valid connection.
+  assert.match(
+    socketSource,
+    /const attemptSocket = io\(/,
+    "the attempt must hold its own socket reference",
+  );
+  assert.match(
+    socketSource,
+    /attemptSocket\.disconnect\(\)/,
+    "late connect must be torn down",
+  );
+  assert.match(
+    socketSource,
+    /if \(socket === attemptSocket\) socket = null/,
+    "a stale attempt must not clear a newer attempt's slot",
+  );
 });
 
 test("SOCK-11 source: no token is logged or echoed in errors", () => {

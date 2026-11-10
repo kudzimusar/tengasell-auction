@@ -41,6 +41,8 @@ export function parseBidAck(res: unknown): BidOutcome {
     error?: unknown;
     outbid?: unknown;
     winning?: unknown;
+    uncertain?: unknown;
+    reason?: unknown;
   };
 
   if (typeof payload.ok !== "boolean") {
@@ -53,8 +55,20 @@ export function parseBidAck(res: unknown): BidOutcome {
   }
 
   if (!payload.ok) {
+    // The engine can answer ok:false after it has already recorded the bid
+    // (audit holds, delegated decisions). If it says the outcome is uncertain,
+    // that must survive parsing — reporting a rejection would invite a retry
+    // that re-bids against the same maximum.
+    const uncertain = payload.uncertain === true;
+    const allowed = ["timeout", "disconnected", "malformed"] as const;
+    const reason =
+      typeof payload.reason === "string" && (allowed as readonly string[]).includes(payload.reason)
+        ? (payload.reason as (typeof allowed)[number])
+        : undefined;
     return {
       ok: false,
+      uncertain: uncertain ? true : undefined,
+      reason,
       error: typeof payload.error === "string" ? payload.error : "The bid was not accepted.",
     };
   }

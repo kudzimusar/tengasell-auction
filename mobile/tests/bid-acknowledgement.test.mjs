@@ -139,3 +139,36 @@ test("ACK-10 the parser preserves explicit flags and invents none", () => {
   assert.equal(rejected.uncertain, undefined);
   assert.equal(presentBidOutcome(rejected, money).tone, "error");
 });
+
+test("ACK-11 an engine rejection that is uncertain stays uncertain", () => {
+  // The engine can answer ok:false after recording the bid (audit hold). A
+  // rejection claim here would invite a retry against the same maximum.
+  const parsed = parseBidAck({
+    ok: false,
+    uncertain: true,
+    reason: "timeout",
+    error: "Result not confirmed",
+  });
+
+  assert.equal(parsed.ok, false);
+  assert.equal(parsed.uncertain, true);
+  assert.equal(parsed.reason, "timeout");
+
+  const shown = presentBidOutcome(parsed, money);
+  assert.equal(shown.tone, "unknown");
+  assert.equal(shown.reconcile, true);
+  assert.doesNotMatch(shown.text, /not accepted/i);
+});
+
+test("ACK-12 a plain engine rejection is still a rejection", () => {
+  const parsed = parseBidAck({ ok: false, error: "Bid below the minimum." });
+  assert.equal(parsed.uncertain, undefined);
+  assert.equal(presentBidOutcome(parsed, money).tone, "error");
+});
+
+test("ACK-13 an unrecognised uncertain reason is not trusted", () => {
+  const parsed = parseBidAck({ ok: false, uncertain: true, reason: "garbage" });
+  assert.equal(parsed.uncertain, true);
+  assert.equal(parsed.reason, undefined);
+  assert.equal(presentBidOutcome(parsed, money).tone, "unknown");
+});

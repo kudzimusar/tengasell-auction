@@ -73,8 +73,14 @@ export default function ItemScreen() {
     let cancelled = false;
     if (session.phase !== "authenticated") {
       disconnectBidding();
+      // Deferred: resetting the flag synchronously inside the effect would
+      // cascade a render. The CTA must not stay enabled once the session is gone.
+      const reset = setTimeout(() => {
+        if (!cancelled) setEngineUp(false);
+      }, 0);
       return () => {
         cancelled = true;
+        clearTimeout(reset);
       };
     }
     void session

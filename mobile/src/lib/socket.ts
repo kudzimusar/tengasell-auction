@@ -23,7 +23,7 @@ export function connectBidding(token: string | null): Socket {
     socket = null;
   }
   const attempt = ownership.next();
-  socket = io(`${base}/?XTransformPort=3002`, {
+  const attemptSocket = io(`${base}/?XTransformPort=3002`, {
     transports: ["websocket", "polling"],
     auth: token ? { token } : {},
     reconnection: true,
@@ -31,16 +31,20 @@ export function connectBidding(token: string | null): Socket {
     reconnectionDelay: 1500,
     timeout: 8000,
   });
+  socket = attemptSocket;
+
   // A completion that arrives after logout/account-switch/unmount must not
-  // resurrect bidding capability for a session that no longer owns it.
-  socket.on("connect", () => {
+  // resurrect bidding capability for a session that no longer owns it. Dispose
+  // THIS attempt's socket: a newer attempt may already own the module slot, and
+  // tearing that one down would close a valid connection.
+  attemptSocket.on("connect", () => {
     if (ownership.isCurrent(attempt)) return;
-    socket?.removeAllListeners();
-    socket?.disconnect();
-    socket = null;
+    attemptSocket.removeAllListeners();
+    attemptSocket.disconnect();
+    if (socket === attemptSocket) socket = null;
   });
 
-  return socket;
+  return attemptSocket;
 }
 
 export function getBiddingSocket(): Socket | null {
