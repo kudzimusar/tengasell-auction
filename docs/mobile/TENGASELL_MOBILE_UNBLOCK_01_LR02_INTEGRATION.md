@@ -87,7 +87,11 @@ root is `GHSA-mrhx-c7xc-m3w5` (zod via the Expo CLI graph). Package-name
 allow-listing was removed: it would hide future unrelated findings behind a
 familiar label.
 
-## 4a. Delivery state at handoff
+## 4a. Delivery state at the LR02 handoff — HISTORIC CHECKPOINT
+
+> These are the heads as delivered by LR02. They are kept for history and are
+> **not** current. The authoritative register for the closeout is §12; consult it
+> before quoting any SHA from this table.
 
 | branch | head | PR | mobile gate |
 | --- | --- | --- | --- |
@@ -99,7 +103,7 @@ Each PR is independently green on its own head, not only at the top of the
 stack. The three are ancestry-verified: `main` → #6 → #7 → #8, no force-push,
 no rewritten history.
 
-## 4b. Enforcement status — open item
+## 4b. Enforcement status — open item (superseded by §12.6)
 
 `main` has **no branch protection and no rulesets** (`GET
 /branches/main/protection` → 404; `GET /rulesets` → `[]`). The mobile workflow
@@ -209,3 +213,199 @@ mobile programme. It is recorded as debt with an owner decision outstanding.
 4. NXS touch/adaptation evidence on hardware.
 5. Merge-strategy approval for the three-PR stack.
 6. Disposition of the inherited web lint debt (§10) — separate change, not this one.
+
+---
+
+# 12. LR03 — engineering closeout
+
+**Assignment:** MOB-UNBLOCK-01-LR03 (bounded closeout; no restart, no MOB-04).
+**Disposition:** REMEDIATE — corrections delivered, independent review performed,
+merge and release remain Owner decisions.
+
+## 12.1 Custody at LR03 start
+
+| unit | stated SHA | observed | result |
+| --- | --- | --- | --- |
+| PR #6 | `59d72ec4` | `59d72ec4` | match |
+| PR #7 | `29d27c35` | `29d27c35` | match |
+| PR #8 | `4e7e3853` | `4e7e3853` | match |
+
+Ancestry `main → #6 → #7 → #8` verified with `git merge-base --is-ancestor`.
+Working tree clean; no unrelated local work. Two stashes inspected, not deleted:
+`stash@{0}` “audit policy” is byte-identical to the committed gate script;
+`stash@{1}` “LR02 work split” is based on `5011c35` (an ancestor) and every delta
+is superseded by accepted work — its largest deletions are the pre-SDK-58
+`package-lock.json` and the pre-fix `item/[id].tsx`.
+
+## 12.2 Corrections delivered in LR03
+
+| checkpoint | change | commit |
+| --- | --- | --- |
+| CLOSE-01 | ack truthfulness: four-state presenter; missing `winning` never means lead; missing/invalid amount never rendered; contradictory flags → unknown; timeout/disconnect/malformed → uncertain and reconciled, never “rejected”, never retried | `aae9151`, `182369b` |
+| CLOSE-02 | session-safe completion: `runGuardedBid` takes session generation + identity + connection epoch synchronously and publishes only if all three still hold | `aae9151` |
+| CLOSE-03 | independent review performed (see 12.3); D1 and two further defects found and fixed | `916eed1`, `182369b` |
+| CLOSE-04 | CI provenance: source head, base head, tested merge SHA and workflow head recorded per run | `f1c0aab` |
+| CLOSE-05 | gates preserved and extended (18 steps), advisory policy root-cause based | `f1c0aab`, `916eed1` |
+| CLOSE-06 | this receipt, corrected against the actual heads | — |
+| CLOSE-07 | full PR #6 review register, 52-file register pinned to `916eed1` | `f1c0aab` |
+| CLOSE-08 | governance finding + exact owner action (12.6) | — |
+| CLOSE-09 | physical classification (12.7) | — |
+| CLOSE-10 | release-secret gate; release records kept, no secret in source | `f1c0aab` |
+
+## 12.3 Independent review outcome
+
+Two independent reviews were performed against source (not against this
+receipt), by a reviewer that did not author the changes.
+
+**RACE01 security review — verdict REMEDIATE, then remediated.**
+
+| item | verdict |
+| --- | --- |
+| stale login can no longer publish | PASS |
+| ownership acquired before first await | PASS |
+| logout invalidates the older operation | PASS |
+| credential persistence rejects stale ownership | **FAIL → fixed** |
+| authenticated publication rejects stale ownership | PASS |
+| restoration is fail-closed | PASS |
+| SecureStore failures not converted into a safe state | PASS |
+| fresh login still works after logout | PASS |
+| no equivalent switching race introduced | PASS |
+
+Defect **D1**: `applyAuthenticated` wrote the credential pair, then re-checked
+generation ownership and threw — leaving the bytes stored. Had the newer owner
+been a login that later failed, the next cold start would have restored the
+superseded account. Fixed in `916eed1`: the stale branch deletes its own write,
+keyed on the auth token it wrote, so a newer owner's credentials are never
+discarded and a logout (which clears independently) is unaffected. Covered by
+RACE01-11…13.
+
+Residual gap, disclosed: the RACE01 suite drives the production barrier module
+and the production storage driver, but no test renders `SessionProvider`; the
+provider wiring is reviewed by inspection only.
+
+**Bid-state review — verdict REMEDIATE, then remediated.**
+
+| item | verdict |
+| --- | --- |
+| `ok` alone never yields a success message | PASS |
+| missing `winning` not treated as true | PASS |
+| missing amount never rendered as US$0 | PASS |
+| contradictory flags never succeed | PASS |
+| malformed ack yields an explicit unknown state | **FAIL → fixed** |
+| timeout/drop uncertain, not rejection, not retried | PASS |
+| stale completion cannot publish into current UI | PASS |
+| guard reuses existing authorities, no second session authority | PASS |
+| busy state cannot deadlock after a discard | PASS |
+| PR #6 register actually presents the full candidate | PASS |
+
+Defect: `placeBid` collapsed a reply without a boolean `ok` into `ok:false`
+(`Boolean(undefined)`), which the presenter then rendered as “The bid was not
+accepted.” for a command the engine may already have executed. Fixed in
+`182369b` by extracting the contract into `src/lib/bid-ack.ts`: a non-boolean
+`ok` is uncertain/malformed; non-boolean flags stay unknown. Second finding:
+the item screen read `session.identity` from the press-time closure, so the
+identity guard could not see a later switch; it now reads a live ref.
+
+## 12.4 Test register
+
+| suite | tests | where it runs |
+| --- | --- | --- |
+| R3 logout continuity | 13 | all layers |
+| RACE01 barrier | 10 | all layers |
+| RACE01 stale-write cleanup | 3 | all layers |
+| MOB-02 navigation | 7 | #7, #8 |
+| MOB-03 socket/bidding | 13 | #8 |
+| CLOSE-01 acknowledgement | 10 | #8 |
+| CLOSE-02 completion ownership | 9 | #8 |
+| **per layer** | **#6 26 · #7 33 · #8 65** | |
+
+All passing on the recorded runs (12.5). This exceeds the previous 43.
+
+## 12.5 CI provenance (the four identities)
+
+Measured at the LR03 code freeze. On a `pull_request` event the tested tree is
+GitHub's generated merge commit, which is **not** the branch source head:
+
+| PR | source head | base head | tested merge | run | job | tests | status |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| #6 | `916eed1` | `98a607c3` | `b326adb7` | 42787961705 | 129733851830 | 26 | success |
+| #7 | `6d06da0` | `916eed1` | `368eda37` | 42787969250 | 129733877163 | 33 | success |
+| #8 | `2edfe70` | `6d06da0` | `78f96a03` | 42787976410 | 129733905569 | 65 | success |
+
+Workflow head equals the tested merge SHA in every run. The earlier gate
+compared `git rev-parse HEAD` with `github.sha`, which proved the merge commit
+was checked out while reading as if it proved the source head; the four values
+are now recorded separately and published to the job summary.
+
+## 12.6 Governance — required checks
+
+Measured: `GET /branches/main/protection` → 404; `GET /rulesets` → `[]`;
+`GET /rules/branches/main` → `[]`. **`main` has no protection of any kind.** The
+mobile gate is therefore *blocking by design* (no `continue-on-error`) but
+*advisory in effect*: a reviewer can merge past a red run. PR #6 also reports
+`mergeable_state: unstable` solely because of the non-blocking web lint job.
+
+Exact Owner action, in this order:
+
+1. Land PR #6, so `mobile/` exists on the base.
+2. Make the workflow safe for non-mobile PRs — today it would fail on a tree
+   without `mobile/package-lock.json`. Add a always-running `scope` job that
+   detects whether the PR touches `mobile/**`, and a small `mobile-gates`
+   aggregator job that succeeds for non-mobile PRs and otherwise requires the
+   full job. Without this step, requiring the check would strand the unrelated
+   web PRs (#1–#5).
+3. Create a ruleset for `main` requiring the aggregator check plus one review,
+   with no admin bypass:
+
+```bash
+gh api -X POST repos/kudzimusar/tengasell-auction/rulesets \
+  -f name="main-protection" -f target=branch -f enforcement=active \
+  -f 'conditions[ref_name][include][]=~DEFAULT_BRANCH' \
+  -f 'rules[][type]=pull_request' \
+  -f 'rules[][type]=required_status_checks'
+```
+
+(Parameter shape must be confirmed with `gh api` dry-run before execution; the
+repository admin owns this change.)
+
+Not performed here: repository-wide governance is outside this assignment, and
+absence of required checks is not a reason to merge early.
+
+## 12.7 Physical evidence
+
+Unchanged and not inferable from CI:
+
+```text
+PHYSICAL ANDROID — BLOCKED
+PHYSICAL IOS — BLOCKED
+NATIVE SECURESTORE — NOT CERTIFIED
+VOICEOVER/TALKBACK — NOT CERTIFIED
+NXS PHYSICAL ADAPTATION — NOT CERTIFIED
+```
+
+Emulator evidence from `5011c35` (bid US$700 on auction 1015) belongs to that
+candidate only. No APK was rebuilt in LR03 (Owner pause). Android and iOS
+*bundle exports* succeed in CI, which is build-level evidence, not device
+evidence.
+
+## 12.8 Release authority
+
+REL-002/REL-004 remain a separate domain carried in PR #8 documentation:
+keystore custody outside the repository, no secret in source, no signed artefact
+claimed for the current source, no Play upload or signing enrolment. The
+`verify-no-release-secrets` gate now fails a PR that introduces a key block,
+a `storePassword`/`keyPassword` literal, a keystore reference or a
+`TGS_KEYSTORE_PASSWORD` assignment into `src`, `app`, `scripts`, `tests` or CI.
+
+## 12.9 Merge readiness and Owner decisions
+
+| PR | engineering | merge |
+| --- | --- | --- |
+| #6 | complete; gate green (26 tests) | requires full-scope review + required-check decision |
+| #7 | complete; gate green (33 tests) | requires #6 acceptance |
+| #8 | complete; gate green (65 tests) | requires #6/#7 acceptance and commercial review |
+
+Owner decisions outstanding: (1) required-check roll-out per 12.6; (2) physical
+UAT scheduling; (3) merge order and whether the stack lands as three PRs;
+(4) disposition of inherited web lint debt; (5) whether an external human
+security reviewer is required beyond the independent agent review in 12.3.
