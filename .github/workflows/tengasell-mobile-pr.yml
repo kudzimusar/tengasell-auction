@@ -127,6 +127,7 @@ jobs:
             tests/race01-stale-write.test.mjs \
             tests/storage-concurrency.test.mjs \
             tests/session-orchestrator.test.mjs \
+            tests/protected-request.test.mjs \
             tests/login-barrier.test.mjs
 
       - name: Navigation contract (MOB-02)

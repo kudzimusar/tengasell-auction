@@ -147,10 +147,16 @@ test("R3-07 sign-out intent wins over late in-flight credential persistence", as
 });
 
 test("R3-08 stale protected profile results are rejected by generation checks", async () => {
-  const source = readFileSync("src/auth/session-context.tsx", "utf8");
-  assert.match(source, /const operationGeneration = generationRef.current/);
-  assert.match(source, /if \(generationRef.current !== operationGeneration\)/);
-  assert.match(source, /Protected response was discarded because the session changed/);
+  // ICR03 moved the generation-guarded request flow into a production module.
+  // Assert both halves: the provider delegates, and the module it delegates to
+  // still discards a response whose generation moved.
+  const provider = readFileSync("src/auth/session-context.tsx", "utf8");
+  assert.match(provider, /runProtectedRequest/);
+  assert.match(provider, /currentGeneration: \(\) => generationRef\.current/);
+  const orchestrator = readFileSync("src/auth/protected-request.ts", "utf8");
+  assert.match(orchestrator, /const generation = deps\.currentGeneration\(\)/);
+  assert.match(orchestrator, /if \(deps\.currentGeneration\(\) !== generation\)/);
+  assert.match(orchestrator, /Protected response was discarded because the session changed/);
   // Deterministic generation-race model, not a native UI integration test.
   let generation = 3;
   const operationGeneration = generation;

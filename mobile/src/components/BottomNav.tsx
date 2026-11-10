@@ -23,8 +23,11 @@ export function BottomNav({ active }: { active?: TabKey } = {}) {
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(insets.bottom), [insets.bottom]);
 
-  const current: TabKey =
+  const current: TabKey | null =
     active ??
+    (pathname.startsWith("/item/")
+      ? null
+      : 
     (pathname === "/categories"
       ? "categories"
       : pathname === "/search"
@@ -33,7 +36,7 @@ export function BottomNav({ active }: { active?: TabKey } = {}) {
           ? "orders"
           : pathname === "/you"
             ? "you"
-            : "home");
+            : "home"));
 
   return (
     <View style={styles.bar}>

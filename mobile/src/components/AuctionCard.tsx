@@ -20,8 +20,14 @@ export function AuctionCard({ item, width, now, onPress }: Props) {
   const { theme } = useNxs();
   const styles = useMemo(() => makeStyles(width), [width]);
 
-  const sold = item.status === "sold" || item.status === "ended" || item.status === "cancelled";
   const remainingMs = Date.parse(item.ends_at) - now;
+  // Status can lag the clock: a live record past its end time is closed, not
+  // "Ends 0s". The card must never present an expired auction as biddable.
+  const sold =
+    item.status === "sold" ||
+    item.status === "ended" ||
+    item.status === "cancelled" ||
+    remainingMs <= 0;
   const urgent = !sold && remainingMs > 0 && remainingMs < 3600_000;
 
   return (
