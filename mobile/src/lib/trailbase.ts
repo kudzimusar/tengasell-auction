@@ -244,6 +244,7 @@ export async function fetchCategories(): Promise<Category[]> {
 export interface AuctionQuery {
   status?: string;
   category?: string;
+  search?: string;
   order?: string;
   limit?: number;
 }
@@ -252,6 +253,7 @@ export async function fetchAuctions(q: AuctionQuery = {}): Promise<Auction[]> {
   const data = await publicRequest<RecordsResponse<Auction>>("/api/records/v1/auctions", {
     "filter[status][$eq]": q.status ?? "live",
     ...(q.category ? { "filter[category][$eq]": q.category } : {}),
+    ...(q.search ? { "filter[title][$like]": `%${q.search}%` } : {}),
     order: q.order ?? "ends_at",
     limit: q.limit ?? 20,
   });

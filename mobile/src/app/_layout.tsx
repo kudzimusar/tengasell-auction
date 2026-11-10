@@ -23,6 +23,11 @@ function NativeStack() {
         }}
       >
         <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen name="categories" options={{ headerShown: false }} />
+        <Stack.Screen name="search" options={{ headerShown: false }} />
+        <Stack.Screen name="orders" options={{ headerShown: false }} />
+        <Stack.Screen name="you" options={{ headerShown: false }} />
+        <Stack.Screen name="item/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="auth/login" options={{ title: t("nav.signIn") }} />
         <Stack.Screen name="account/index" options={{ title: t("nav.account") }} />
       </Stack>

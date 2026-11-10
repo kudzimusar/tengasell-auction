@@ -1,4 +1,4 @@
-import { Link } from "expo-router";
+import { Link, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -11,11 +11,14 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useWindowDimensions } from "react-native";
 
 import { useSession } from "../auth/session-context";
 import { formatRemaining, formatUSD, remainingSeverity } from "../lib/format";
 import { fetchAuctions, fetchCategories, probeCanonical } from "../lib/trailbase";
 import { toAuctionView, type AuctionView, type Category } from "../lib/types";
+import { AuctionCard } from "../components/AuctionCard";
+import { BottomNav } from "../components/BottomNav";
 import { NxsButton } from "../nxs/components/NxsButton";
 import { useNxs } from "../nxs/context/NxsProvider";
 import { localizeKnownRuntimeMessage } from "../nxs/localization/runtimeMessages";
@@ -39,6 +42,8 @@ function errorMessage(error: unknown, t: NxsTranslator): string {
 
 export default function HomeScreen() {
   const session = useSession();
+  const router = useRouter();
+  const { width } = useWindowDimensions();
   const { theme, screenPadding, windowClass, writingDirection } = useNxs();
   const t = useNxsText();
   const styles = useMemo(
@@ -48,6 +53,7 @@ export default function HomeScreen() {
   const [authorityState, setAuthorityState] = useState<AuthorityState>("checking");
   const [categories, setCategories] = useState<Category[]>([]);
   const [auctions, setAuctions] = useState<AuctionView[]>([]);
+  const [sold, setSold] = useState<AuctionView[]>([]);
   const [category, setCategory] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [listLoading, setListLoading] = useState(false);
@@ -65,12 +71,14 @@ export default function HomeScreen() {
   const boot = useCallback(async () => {
     try {
       await probeCanonical();
-      const [nextCategories, nextAuctions] = await Promise.all([
+      const [nextCategories, nextAuctions, nextSold] = await Promise.all([
         fetchCategories(),
         fetchAuctions({ limit: 20 }),
+        fetchAuctions({ status: "sold", limit: 6 }).catch(() => [] as AuctionView[]),
       ]);
       setCategories(nextCategories);
       setAuctions(nextAuctions.map(toAuctionView));
+      setSold(nextSold.map(toAuctionView));
       setAuthorityState("live");
       setError(null);
     } catch (bootError) {
@@ -326,6 +334,8 @@ export default function HomeScreen() {
           <FlatList
             data={auctions}
             keyExtractor={(item) => String(item.id)}
+            numColumns={2}
+            columnWrapperStyle={{ gap: 10, paddingHorizontal: 10 }}
             contentContainerStyle={styles.list}
             ListEmptyComponent={
               <View style={styles.emptyState}>
@@ -338,63 +348,37 @@ export default function HomeScreen() {
                 {emptyAction}
               </View>
             }
-            renderItem={({ item }) => {
-              const remainingMs = now === null ? null : Date.parse(item.ends_at) - now;
-              const remaining =
-                remainingMs === null
-                  ? t("home.updatingTime")
-                  : formatRemaining(remainingMs);
-              const severity =
-                remainingMs === null ? "normal" : remainingSeverity(remainingMs);
-              const price = formatUSD(item.current_price);
-
-              return (
-                <View
-                  style={styles.card}
-                  accessible
-                  accessibilityLabel={t("home.auctionA11y", {
-                    title: item.title,
-                    price,
-                    bidCount: item.bid_count,
-                    remaining,
-                  })}
-                >
-                  {item.imageList[0] ? (
-                    <Image
-                      source={{ uri: item.imageList[0] }}
-                      style={styles.cardImg}
-                      resizeMode="cover"
-                      accessible={false}
-                    />
-                  ) : (
-                    <View style={[styles.cardImg, styles.cardImgFallback]} />
-                  )}
-                  <View style={styles.cardBody}>
-                    <Text style={styles.cardTitle}>{item.title}</Text>
-                    <Text style={styles.cardMeta}>
-                      {t("home.auctionMeta", {
-                        price,
-                        bidCount: item.bid_count,
-                        seller: item.seller_username,
-                      })}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.cardTimer,
-                        severity === "urgent" && styles.urgentTimer,
-                      ]}
-                    >
-                      {item.endingSoon
-                        ? t("home.endingSoon", { remaining })
-                        : t("home.timeRemaining", { remaining })}
-                    </Text>
+            renderItem={({ item }) => (
+              <AuctionCard
+                item={item}
+                width={Math.floor((width - 10 * 2 - 10) / 2)}
+                now={now ?? Date.now()}
+                onPress={() => router.push(`/item/${item.id}` as never)}
+              />
+            )}
+            ListFooterComponent={
+              sold.length > 0 ? (
+                <View style={{ paddingTop: 6 }}>
+                  <Text style={styles.soldTitle}>Recently sold</Text>
+                  <View style={styles.soldWrap}>
+                    {sold.map((row) => (
+                      <AuctionCard
+                        key={`sold-${row.id}`}
+                        item={row}
+                        width={Math.floor((width - 10 * 2 - 10) / 2)}
+                        now={now ?? Date.now()}
+                        onPress={() => router.push(`/item/${row.id}` as never)}
+                      />
+                    ))}
                   </View>
                 </View>
-              );
-            }}
+              ) : undefined
+            }
           />
+
         </>
       )}
+      <BottomNav active="home" />
     </SafeAreaView>
   );
 }
@@ -573,7 +557,15 @@ function createStyles(
       gap: 12,
       paddingVertical: 32,
     },
-    card: {
+    soldTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: theme.text.primary,
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+  },
+  soldWrap: { flexDirection: "row", flexWrap: "wrap", gap: 10, paddingHorizontal: 10 },
+  card: {
       flexDirection: rowDirection,
       backgroundColor: theme.surface.raised,
       borderRadius: 14,
