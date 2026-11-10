@@ -13,11 +13,12 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BottomNav } from "../../components/BottomNav";
-import { formatDateTime, formatRemaining, formatUSD, remainingSeverity } from "../../lib/format";
+import { formatDateTime, formatRemaining, formatUSD, minNextBid, remainingSeverity } from "../../lib/format";
 import { fetchAuction } from "../../lib/trailbase";
 import { toAuctionView, type AuctionView } from "../../lib/types";
 
@@ -60,9 +61,15 @@ export default function ItemScreen() {
     return () => clearTimeout(task);
   }, [load]);
 
-  const styles = useMemo(() => makeStyles(), []);
-  const sold = item ? ["sold", "ended", "cancelled"].includes(item.status) : false;
+  const { width } = useWindowDimensions();
+  const heroWidth = Math.max(width, 320);
+  const styles = useMemo(() => makeStyles(heroWidth), [heroWidth]);
   const remainingMs = item ? Date.parse(item.ends_at) - now : 0;
+  // The record status can lag the clock: an auction past ends_at is closed here
+  // too so detail matches the listing card.
+  const sold = item
+    ? ["sold", "ended", "cancelled"].includes(item.status) || remainingMs <= 0
+    : false;
   const severity = item ? remainingSeverity(remainingMs) : "normal";
 
   return (
@@ -189,7 +196,9 @@ export default function ItemScreen() {
             <View style={{ flex: 1 }}>
               <Text style={styles.ctaPrice}>{formatUSD(item.current_price)}</Text>
               <Text style={styles.ctaSub}>
-                {sold ? "Auction closed" : `Next bid ${formatUSD(item.current_price + 1)}`}
+                {sold
+                  ? "Auction closed"
+                  : `Next bid ${formatUSD(minNextBid(item.current_price, item.bid_count))}`}
               </Text>
             </View>
             <Pressable hitSlop={4}
@@ -238,7 +247,7 @@ const rowStyle = StyleSheet.create({
   v: { fontSize: 13, color: "#101619", fontWeight: "600" },
 });
 
-function makeStyles() {
+function makeStyles(heroWidth: number) {
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: "#F6F9FA" },
     topBar: {
@@ -257,12 +266,22 @@ function makeStyles() {
     center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24, gap: 8 },
     errorTitle: { fontSize: 18, fontWeight: "800", color: "#101619" },
     errorBody: { fontSize: 13, color: "#5C6B72", textAlign: "center" },
-    retry: { marginTop: 10, backgroundColor: "#19717B", paddingHorizontal: 18, paddingVertical: 10, borderRadius: 10 },
+    retry: {
+      marginTop: 10,
+      backgroundColor: "#19717B",
+      paddingHorizontal: 18,
+      paddingVertical: 10,
+      minHeight: 48,
+      minWidth: 48,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 10,
+    },
     retryText: { color: "#FFFFFF", fontWeight: "700", fontSize: 13 },
 
     scroll: { paddingBottom: 24 },
     heroWrap: { backgroundColor: "#FFFFFF" },
-    hero: { width: 390, height: 390 },
+    hero: { width: heroWidth, height: heroWidth },
     heroImg: { width: "100%", height: "100%" },
     soldVeil: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(10,13,16,0.35)" },
     soldBandWrap: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center" },

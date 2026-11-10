@@ -1,6 +1,6 @@
 // Categories tab — grid of marketplace categories, tap to browse.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -43,18 +43,23 @@ export default function CategoriesScreen() {
     return () => clearTimeout(task);
   }, [loadCategories]);
 
+  const categoryRequestRef = useRef(0);
+
   const loadCategory = useCallback(async (c: Category) => {
+    const request = ++categoryRequestRef.current;
     setLoading(true);
     setError(null);
     try {
       const rows = await fetchAuctions({ category: c.slug, limit: 40 });
+      if (request !== categoryRequestRef.current) return;
       setItems(rows.map(toAuctionView));
     } catch {
+      if (request !== categoryRequestRef.current) return;
       // Do not leave another category's rows under a failure message.
       setItems([]);
       setError("Could not load this category. Try again.");
     } finally {
-      setLoading(false);
+      if (request === categoryRequestRef.current) setLoading(false);
     }
   }, []);
 
@@ -73,7 +78,18 @@ export default function CategoriesScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>{selected ? selected.name : "Categories"}</Text>
         {selected && (
-          <Pressable hitSlop={4} onPress={() => setSelected(null)} accessibilityRole="button">
+          <Pressable
+            hitSlop={4}
+            style={styles.backBtn}
+            onPress={() => {
+              categoryRequestRef.current += 1;
+              setSelected(null);
+              setItems([]);
+              setError(null);
+              setLoading(false);
+            }}
+            accessibilityRole="button"
+          >
             <Text style={styles.back}>All</Text>
           </Pressable>
         )}
@@ -86,7 +102,7 @@ export default function CategoriesScreen() {
       ) : error && !selected ? (
         <View style={styles.center}>
           <Text style={styles.errorTitle}>{error}</Text>
-          <Pressable hitSlop={4} onPress={() => void loadCategories()} accessibilityRole="button">
+          <Pressable hitSlop={4} style={styles.retryBtn} onPress={() => void loadCategories()} accessibilityRole="button">
             <Text style={styles.retry}>Try again</Text>
           </Pressable>
         </View>
@@ -95,6 +111,7 @@ export default function CategoriesScreen() {
           <Text style={styles.errorTitle}>{error}</Text>
           <Pressable
             hitSlop={4}
+            style={styles.retryBtn}
             onPress={() => {
               if (selected) void loadCategory(selected);
             }}
@@ -144,9 +161,11 @@ function makeStyles() {
       borderBottomColor: "#DCE4E8",
     },
     title: { fontSize: 17, fontWeight: "800", color: "#101619" },
+    backBtn: { minHeight: 48, minWidth: 48, paddingHorizontal: 8, justifyContent: "center", alignItems: "flex-end" },
     back: { fontSize: 13, fontWeight: "700", color: "#19717B" },
     center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24, gap: 10 },
     errorTitle: { fontSize: 14, color: "#5C6B72", textAlign: "center" },
+    retryBtn: { minHeight: 48, minWidth: 48, paddingHorizontal: 16, justifyContent: "center", alignItems: "center" },
     retry: { fontSize: 14, fontWeight: "800", color: "#19717B" },
     grid: {
       flexDirection: "row",

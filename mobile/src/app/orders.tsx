@@ -62,6 +62,16 @@ const styles = StyleSheet.create({
   iconGlyph: { fontSize: 24, color: "#19717B" },
   heading: { fontSize: 16, fontWeight: "800", color: "#101619", textAlign: "center" },
   body: { fontSize: 13, color: "#5C6B72", textAlign: "center", lineHeight: 19 },
-  cta: { marginTop: 12, backgroundColor: "#19717B", paddingHorizontal: 22, paddingVertical: 11, borderRadius: 12 },
+  cta: {
+    marginTop: 12,
+    backgroundColor: "#19717B",
+    paddingHorizontal: 22,
+    paddingVertical: 11,
+    minHeight: 48,
+    minWidth: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+  },
   ctaText: { color: "#FFFFFF", fontWeight: "800", fontSize: 13.5 },
 });
