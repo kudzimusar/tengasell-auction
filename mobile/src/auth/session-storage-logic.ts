@@ -123,10 +123,17 @@ export function createGuardedSessionStorage(driver: SecureSlotDriver) {
   async function writeStoredSession(tokens: TrailBaseTokens): Promise<void> {
     if (await hasLogoutIntent()) throw new SessionRestorationBlockedError();
     try {
-      await Promise.all([
+      // Both writes must settle inside this operation. Promise.all rejects on
+      // the first failure and lets the sibling write run on after the queued
+      // operation has ended — that write then lands under a later login's
+      // operation and can pair one account's auth token with another's refresh
+      // token. Awaiting allSettled keeps every write inside the queue.
+      const writes = await Promise.allSettled([
         driver.write(AUTH_TOKEN_KEY, tokens.authToken),
         driver.write(REFRESH_TOKEN_KEY, tokens.refreshToken),
       ]);
+      const failed = writes.find((result) => result.status === "rejected");
+      if (failed && failed.status === "rejected") throw failed.reason;
       // A concurrent sign-out can have set its marker during persistence.
       if (await hasLogoutIntent()) throw new SessionRestorationBlockedError();
     } catch (error) {
