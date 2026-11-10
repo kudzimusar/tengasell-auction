@@ -41,7 +41,7 @@ export function BottomNav({ active }: { active?: TabKey } = {}) {
         const on = tab.key === current;
         const color = on ? "#19717B" : "#6B7A82";
         return (
-          <Pressable
+          <Pressable hitSlop={4}
             key={tab.key}
             style={styles.item}
             onPress={() => router.push(tab.route as never)}
@@ -133,7 +133,7 @@ function makeStyles(bottomInset: number) {
       paddingTop: 6,
       paddingBottom: Math.max(bottomInset, 6),
     },
-    item: { flex: 1, alignItems: "center", justifyContent: "center", gap: 3, paddingVertical: 2 },
+    item: { flex: 1, minHeight: 48, alignItems: "center", justifyContent: "center", gap: 3, paddingVertical: 4 },
     iconWrap: { height: 22, alignItems: "center", justifyContent: "center" },
     label: { fontSize: 10.5, fontWeight: "600" },
     labelActive: { fontWeight: "800" },

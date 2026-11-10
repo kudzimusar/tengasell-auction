@@ -65,7 +65,7 @@ export default function ItemScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.topBar}>
-        <Pressable onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Back" style={styles.backBtn}>
+        <Pressable hitSlop={4} onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Back" style={styles.backBtn}>
           <Text style={styles.backGlyph}>‹</Text>
         </Pressable>
         <Text style={styles.topTitle} numberOfLines={1}>
@@ -82,7 +82,7 @@ export default function ItemScreen() {
         <View style={styles.center}>
           <Text style={styles.errorTitle}>Not available</Text>
           <Text style={styles.errorBody}>{error ?? "This listing is no longer published."}</Text>
-          <Pressable style={styles.retry} onPress={() => void load()} accessibilityRole="button">
+          <Pressable hitSlop={4} style={styles.retry} onPress={() => void load()} accessibilityRole="button">
             <Text style={styles.retryText}>Try again</Text>
           </Pressable>
         </View>
@@ -189,7 +189,7 @@ export default function ItemScreen() {
                 {sold ? "Auction closed" : `Next bid ${formatUSD(item.current_price + 1)}`}
               </Text>
             </View>
-            <Pressable
+            <Pressable hitSlop={4}
               disabled
               style={[styles.cta, styles.ctaDisabled]}
               accessibilityRole="button"
@@ -247,7 +247,7 @@ function makeStyles() {
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: "#DCE4E8",
     },
-    backBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
+    backBtn: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
     backGlyph: { fontSize: 26, color: "#19717B", lineHeight: 28 },
     topTitle: { flex: 1, textAlign: "center", fontSize: 13, fontWeight: "700", color: "#101619" },
 
@@ -332,7 +332,7 @@ function makeStyles() {
     },
     ctaPrice: { fontSize: 18, fontWeight: "900", color: "#8A5F0B" },
     ctaSub: { fontSize: 11, color: "#6B7A82" },
-    cta: { paddingHorizontal: 18, paddingVertical: 12, borderRadius: 12, backgroundColor: "#19717B" },
+    cta: { paddingHorizontal: 18, minHeight: 48, justifyContent: "center", borderRadius: 12, backgroundColor: "#19717B" },
     ctaDisabled: { backgroundColor: "#9FB3B8" },
     ctaText: { color: "#FFFFFF", fontWeight: "800", fontSize: 13.5 },
   });
