@@ -147,58 +147,81 @@ function codeOnly(source) {
     .replace(/(^|[^:])\/\/[^\n]*/g, "$1");
 }
 
+/** Extract JSX elements by tag, tracking brace/paren/bracket depth so an arrow
+ *  prop (`onPress={() => …}`) does not terminate the element early. */
+function jsxElements(source, tag) {
+  const elements = [];
+  let index = 0;
+  while ((index = source.indexOf(`<${tag}`, index)) !== -1) {
+    const after = source[index + tag.length + 1];
+    // `<PressableProps` is a type, not an element.
+    if (after && /[A-Za-z0-9_]/.test(after)) {
+      index += tag.length + 1;
+      continue;
+    }
+    let cursor = index + tag.length + 1;
+    let depth = 0;
+    for (; cursor < source.length; cursor += 1) {
+      const char = source[cursor];
+      if (char === "{" || char === "(" || char === "[") depth += 1;
+      else if (char === "}" || char === ")" || char === "]") depth -= 1;
+      else if (char === ">" && depth === 0) break;
+    }
+    elements.push(source.slice(index, cursor + 1));
+    index = cursor + 1;
+  }
+  return elements;
+}
+
+/** Resolve `name: { … }` style blocks from the same file. */
+function styleBlock(source, name) {
+  const match = source.match(new RegExp(`\\b${name}:\\s*\\{([\\s\\S]*?)\\n\\s*\\},`));
+  return match ? match[1] : null;
+}
+
+function hitSlopOf(element) {
+  const match = element.match(/hitSlop\s*=\s*(\{(?:[^{}]|\{[^{}]*\})*\}|\d+)/);
+  if (!match) return null;
+  const numbers = [...match[1].matchAll(/(\d+)/g)].map((m) => Number(m[1]));
+  return numbers.length ? Math.min(...numbers) : null;
+}
+
+function declaredSize(block) {
+  if (!block) return null;
+  const sizes = [...block.matchAll(/\b(?:minHeight|minWidth|height|width):\s*(\d+)\b/g)].map((m) =>
+    Number(m[1]),
+  );
+  return sizes.length ? Math.max(...sizes) : null;
+}
+
 const interactiveFiles = sourceFiles.filter((path) => codeOnly(read(path)).includes("<Pressable"));
 if (interactiveFiles.length === 0) {
   fail("no interactive sources were found; refusing to pass vacuously");
 }
 
-const HIT_SLOP = /hitSlop\s*=\s*\{\s*(\d+)\s*\}/;
-
 for (const path of interactiveFiles) {
   const source = codeOnly(read(path));
-
-  // Every Pressable must declare a tap-target expansion. Counting occurrences
-  // rather than bare inclusion stops one hitSlop from covering several
-  // pressables.
-  const pressables = (source.match(/<Pressable\b/g) ?? []).length;
-  const slops = [...source.matchAll(/hitSlop\s*=\s*(\{[^}]*\}|\d+)/g)];
-  if (slops.length < pressables) {
-    fail(
-      `custom Pressable lacks an explicit hitSlop in ${relative(".", path)} ` +
-        `(${slops.length} hitSlop for ${pressables} Pressable)`,
-    );
+  const elements = jsxElements(source, "Pressable");
+  if (elements.length === 0) {
+    fail(`Pressable references but no elements parsed in ${relative(".", path)}`);
   }
-  for (const match of slops) {
-    const numbers = [...match[1].matchAll(/(\d+)/g)].map((m) => Number(m[1]));
-    if (numbers.length === 0 || numbers.some((value) => value < 4)) {
-      fail(`hitSlop below the 4pt review floor in ${relative(".", path)}`);
+
+  for (const element of elements) {
+    const slop = hitSlopOf(element);
+    if (slop === null || slop < 4) {
+      fail(`custom Pressable lacks an explicit hitSlop >= 4 in ${relative(".", path)}`);
     }
-  }
 
-  // Numeric floor applies to declared minimums everywhere in an interactive file.
-  for (const match of source.matchAll(/min(?:Height|Width):\s*(\d+)/g)) {
-    const value = Number(match[1]);
-    if (value < 48) {
-      fail(
-        `custom interactive geometry below NXS floor (${value}) in ${relative(".", path)}`,
-      );
-    }
-  }
-
-  // Fixed dimensions are only a violation on the Pressable's own style: a 46pt
-  // decorative badge inside a full-size tile is not a touch target, and flagging
-  // it would push reviewers to "fix" art instead of affordances.
-  const styleNames = [...source.matchAll(/<Pressable[^>]*?style=\{styles\.([A-Za-z0-9_]+)\}/gs)].map(
-    (m) => m[1],
-  );
-  for (const name of new Set(styleNames)) {
-    const block = source.match(new RegExp(`\\b${name}:\\s*\\{([\\s\\S]*?)\\n\\s*\\},`));
-    if (!block) continue;
-    for (const match of block[1].matchAll(/\b(?:height|width):\s*(\d+)\b/g)) {
-      const value = Number(match[1]);
-      if (value < 48) {
+    // Effective target = declared element size + 2 * hitSlop. A 24pt control with
+    // 4pt slop is 32pt, not a 48pt target.
+    const styleNames = [...element.matchAll(/styles\.([A-Za-z0-9_]+)/g)].map((m) => m[1]);
+    for (const name of new Set(styleNames)) {
+      const size = declaredSize(styleBlock(source, name));
+      if (size === null) continue;
+      if (size + 2 * slop < 48) {
         fail(
-          `Pressable style ${name} is ${value}pt, below the NXS 48 floor, in ${relative(".", path)}`,
+          `Pressable style ${name} is ${size}pt with ${slop}pt hitSlop (${size + 2 * slop}pt target), ` +
+            `below the NXS 48 floor, in ${relative(".", path)}`,
         );
       }
     }

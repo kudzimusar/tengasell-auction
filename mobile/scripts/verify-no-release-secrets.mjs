@@ -18,7 +18,7 @@ const REQUIRED_ROOTS = [
   join(mobileRoot, "src"),
   join(mobileRoot, "scripts"),
   join(mobileRoot, "tests"),
-  join(repoRoot, ".github", "workflows"),
+  join(repoRoot, ".github"),
 ];
 
 const OPTIONAL_ROOTS = [join(mobileRoot, "app")];

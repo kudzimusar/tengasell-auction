@@ -69,6 +69,7 @@ export function NxsButton({
   return (
     <Pressable
       {...props}
+      hitSlop={4}
       disabled={blocked}
       accessibilityRole="button"
       accessibilityLabel={spokenLabel}
