@@ -57,7 +57,7 @@ export default function HomeScreen() {
   const [category, setCategory] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [listLoading, setListLoading] = useState(false);
-  const [now, setNow] = useState<number | null>(null);
+  const [now, setNow] = useState<number>(() => Date.now());
 
   useEffect(() => {
     const initialTick = setTimeout(() => setNow(Date.now()), 0);
@@ -352,7 +352,7 @@ export default function HomeScreen() {
               <AuctionCard
                 item={item}
                 width={Math.floor((width - 10 * 2 - 10) / 2)}
-                now={now ?? Date.now()}
+                now={now}
                 onPress={() => router.push(`/item/${item.id}` as never)}
               />
             )}
@@ -366,7 +366,7 @@ export default function HomeScreen() {
                         key={`sold-${row.id}`}
                         item={row}
                         width={Math.floor((width - 10 * 2 - 10) / 2)}
-                        now={now ?? Date.now()}
+                        now={now}
                         onPress={() => router.push(`/item/${row.id}` as never)}
                       />
                     ))}

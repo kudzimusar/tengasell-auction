@@ -31,7 +31,7 @@ export default function ItemScreen() {
   const [item, setItem] = useState<AuctionView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState<number>(() => Date.now());
   const [hero, setHero] = useState(0);
   const session = useSession();
   const [bidAmount, setBidAmount] = useState("");
@@ -39,12 +39,32 @@ export default function ItemScreen() {
   const [bidNote, setBidNote] = useState<{ ok: boolean; text: string } | null>(null);
   const [engineUp, setEngineUp] = useState(false);
 
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const record = await fetchAuction(Number(id));
+      if (!record) {
+        setError("This listing could not be found.");
+        setItem(null);
+      } else {
+        const view = toAuctionView(record);
+        setItem(view);
+        setBidAmount((current) => current || String(minNextBid(view.current_price, view.bid_count)));
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not reach the marketplace.");
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
   // Live engine connection (MOB-03): token from the session, socket to :3002.
   useEffect(() => {
     let cancelled = false;
     if (session.phase !== "authenticated") {
       disconnectBidding();
-      setEngineUp(false);
       return () => {
         cancelled = true;
       };
@@ -71,28 +91,14 @@ export default function ItemScreen() {
     return () => clearInterval(t);
   }, []);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const record = await fetchAuction(Number(id));
-      if (!record) {
-        setError("This listing could not be found.");
-        setItem(null);
-      } else {
-        const view = toAuctionView(record);
-        setItem(view);
-        setBidAmount((current) => current || String(minNextBid(view.current_price, view.bid_count)));
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not reach the marketplace.");
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
 
   useEffect(() => {
-    void load();
+    // Deferred one tick so the first paint is not blocked by a synchronous
+    // state update inside the effect.
+    const task = setTimeout(() => {
+      void load();
+    }, 0);
+    return () => clearTimeout(task);
   }, [load]);
 
   const styles = useMemo(() => makeStyles(), []);
