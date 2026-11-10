@@ -43,19 +43,28 @@ export default function CategoriesScreen() {
     return () => clearTimeout(task);
   }, [loadCategories]);
 
-  const open = useCallback(async (c: Category) => {
-    setSelected(c);
+  const loadCategory = useCallback(async (c: Category) => {
     setLoading(true);
+    setError(null);
     try {
       const rows = await fetchAuctions({ category: c.slug, limit: 40 });
       setItems(rows.map(toAuctionView));
-      setError(null);
     } catch {
-      setError("Could not load this category.");
+      // Do not leave another category's rows under a failure message.
+      setItems([]);
+      setError("Could not load this category. Try again.");
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const open = useCallback(
+    (c: Category) => {
+      setSelected(c);
+      void loadCategory(c);
+    },
+    [loadCategory],
+  );
 
   const styles = useMemo(() => makeStyles(), []);
 
@@ -81,8 +90,21 @@ export default function CategoriesScreen() {
             <Text style={styles.retry}>Try again</Text>
           </Pressable>
         </View>
+      ) : selected && error ? (
+        <View style={styles.center}>
+          <Text style={styles.errorTitle}>{error}</Text>
+          <Pressable
+            hitSlop={4}
+            onPress={() => {
+              if (selected) void loadCategory(selected);
+            }}
+            accessibilityRole="button"
+          >
+            <Text style={styles.retry}>Try again</Text>
+          </Pressable>
+        </View>
       ) : selected ? (
-        <ListingGrid items={items} now={now} empty={error ?? "No listings in this category yet."} />
+        <ListingGrid items={items} now={now} empty="No listings in this category yet." />
       ) : (
         <ScrollView contentContainerStyle={styles.grid}>
           {categories.map((c) => (

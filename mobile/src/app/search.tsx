@@ -1,6 +1,6 @@
 // Search tab — title search against the canonical records API.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -34,24 +34,31 @@ export default function SearchScreen() {
     fetchCategories().then(setCategories).catch(() => undefined);
   }, []);
 
+  const requestRef = useRef(0);
+
   const run = useCallback(async (q: string) => {
     const term = q.trim();
     if (!term) return;
+    // Every run owns a sequence number: an older response that resolves after a
+    // newer query (or a newer failure) must not write into the current state.
+    const request = ++requestRef.current;
     setBusy(true);
     setError(null);
     try {
       const rows = await fetchAuctions({ search: term, limit: 40 });
+      if (request !== requestRef.current) return;
       setItems(rows.map(toAuctionView));
       setError(null);
       setSearched(true);
     } catch {
+      if (request !== requestRef.current) return;
       // Never leave the previous query's rows under a failure message: the user
       // would read stale results as the answer to this search.
       setItems([]);
       setSearched(true);
       setError("Search is unavailable right now. Try again.");
     } finally {
-      setBusy(false);
+      if (request === requestRef.current) setBusy(false);
     }
   }, []);
 
