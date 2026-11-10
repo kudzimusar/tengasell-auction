@@ -191,7 +191,9 @@ function declaredSize(block) {
   const sizes = [...block.matchAll(/\b(?:minHeight|minWidth|height|width):\s*(\d+)\b/g)].map((m) =>
     Number(m[1]),
   );
-  return sizes.length ? Math.max(...sizes) : null;
+  // Check the smallest explicit axis so a wide-but-short control (e.g. 200x20)
+  // cannot pass the 48pt floor via its horizontal length.
+  return sizes.length ? Math.min(...sizes) : null;
 }
 
 const interactiveFiles = sourceFiles.filter((path) => codeOnly(read(path)).includes("<Pressable"));
