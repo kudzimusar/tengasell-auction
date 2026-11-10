@@ -74,6 +74,14 @@ jobs:
       - name: Expo lint
         run: npm run lint
 
+      - name: No unresolved merge conflict markers
+        run: |
+          set -euo pipefail
+          if grep -rnE '^(<<<<<<<|>>>>>>>) ' src tests 2>/dev/null; then
+            echo "unresolved conflict markers present" >&2
+            exit 1
+          fi
+
       - name: TypeScript
         run: npm run typecheck
 
