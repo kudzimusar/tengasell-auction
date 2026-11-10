@@ -31,6 +31,7 @@ import {
   SessionRestorationBlockedError,
   writeStoredSession,
 } from "./session-storage";
+import { applyAuthenticatedSession } from "./session-orchestrator";
 import {
   settleLogout,
   type LogoutEvidence,
@@ -105,48 +106,51 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const applyAuthenticated = useCallback(
     async (tokens: TrailBaseTokens, expectedGeneration: number) => {
-      if (generationRef.current !== expectedGeneration) {
+      // ICR02: the ordering lives in the production orchestrator so the same
+      // code path can be exercised by the storage-concurrency suite. This
+      // wrapper keeps custody of the in-flight write so logout can await it.
+      const outcome = await applyAuthenticatedSession({
+        tokens,
+        expectedGeneration,
+        currentGeneration: () => generationRef.current,
+        writeStoredSession: (value) => {
+          const write = writeStoredSession(value);
+          credentialWriteRef.current = write;
+          write.then(
+            () => {
+              if (credentialWriteRef.current === write) credentialWriteRef.current = null;
+            },
+            () => {
+              if (credentialWriteRef.current === write) credentialWriteRef.current = null;
+            },
+          );
+          return write;
+        },
+        clearStaleCredentialWrite,
+        clearLocalSession: () =>
+          clearLocalSession(
+            "session-invalid",
+            "TrailBase returned an auth token without a usable subject claim.",
+          ),
+        identityFromAuthToken,
+        publish: (identity) => {
+          tokensRef.current = tokens;
+          setSnapshot({ phase: "authenticated", identity, message: null });
+        },
+      });
+
+      if (outcome === "superseded") {
         throw new TrailBaseError(
           "session-invalid",
           "Session changed while authentication was completing.",
         );
       }
-
-      const identity = identityFromAuthToken(tokens.authToken);
-      if (!identity) {
-        await clearLocalSession(
-          "session-invalid",
-          "TrailBase returned an auth token without a usable subject claim.",
-        );
+      if (outcome === "malformed") {
         throw new TrailBaseError(
           "malformed-response",
           "TrailBase auth token did not contain a usable subject claim.",
         );
       }
-
-      const write = writeStoredSession(tokens);
-      credentialWriteRef.current = write;
-      try {
-        await write;
-      } finally {
-        if (credentialWriteRef.current === write) credentialWriteRef.current = null;
-      }
-      if (generationRef.current !== expectedGeneration) {
-        // RACE01-D1: this task's bytes are already in the secure store. They
-        // must not survive as a restorable session — if the newer owner is a
-        // login that later fails, a cold start would restore the superseded
-        // account. Remove only the write this task made; a newer owner's
-        // credentials are left untouched. Logout performs its own clear, so
-        // this is a no-op when logout is the new owner.
-        await clearStaleCredentialWrite(tokens).catch(() => undefined);
-        throw new TrailBaseError(
-          "session-invalid",
-          "Session changed while credentials were being persisted.",
-        );
-      }
-
-      tokensRef.current = tokens;
-      setSnapshot({ phase: "authenticated", identity, message: null });
     },
     [clearLocalSession],
   );
