@@ -1,9 +1,8 @@
 name: Tengasell Mobile MOB-01 R2 NXS gates
 
 on:
-  push:
-    branches:
-      - feat/tengasell-mobile-01-product-foundation
+  # Superseded by .github/workflows/tengasell-mobile-pr.yml (MOB-UNBLOCK-01-LR02).
+  # Retained for historical exact-head evidence; manual dispatch only.
   workflow_dispatch:
 
 permissions:

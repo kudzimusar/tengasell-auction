@@ -18,6 +18,7 @@ import {
   type TrailBaseIdentity,
   type TrailBaseTokens,
 } from "../lib/trailbase";
+import { runGuardedLogin } from "./login-barrier";
 import {
   clearLogoutIntent,
   clearStoredSession,
@@ -263,13 +264,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           snapshot.phase === "signout-pending") {
         throw new SessionRestorationBlockedError();
       }
-      // Guard the fresh sign-in path as well as automatic session restoration.
-      if (await hasLogoutIntent()) throw new SessionRestorationBlockedError();
-      const expectedGeneration = ++generationRef.current;
+      // RACE01: ownership is taken synchronously inside runGuardedLogin, before
+      // the logout-intent read. A logout that begins during any await below
+      // invalidates this login, so a stale response can neither persist
+      // credentials nor publish a session.
       tokensRef.current = null;
       refreshPromiseRef.current = null;
-      const tokens = await loginTrailBase(identifier.trim(), password);
-      await applyAuthenticated(tokens, expectedGeneration);
+      await runGuardedLogin({
+        begin: () => ++generationRef.current,
+        current: () => generationRef.current,
+        hasLogoutIntent,
+        authenticate: () => loginTrailBase(identifier.trim(), password),
+        apply: (tokens, generation) => applyAuthenticated(tokens, generation),
+      });
     },
     [applyAuthenticated, snapshot.phase],
   );
