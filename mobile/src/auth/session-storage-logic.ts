@@ -56,6 +56,24 @@ export function createGuardedSessionStorage(driver: SecureSlotDriver) {
     }
   }
 
+  /**
+   * Remove credentials written by a login that lost session ownership before it
+   * could publish (RACE01-D1).
+   *
+   * A stale owner must not leave restorable bytes behind: if the newer owner is
+   * a login that later fails, a cold start would restore the superseded account.
+   * The delete is keyed on the auth token this task wrote, so a newer owner's
+   * credentials are never discarded.
+   *
+   * Returns true when this call removed its own write.
+   */
+  async function clearStaleCredentialWrite(tokens: TrailBaseTokens): Promise<boolean> {
+    const current = await driver.read(AUTH_TOKEN_KEY);
+    if (current !== tokens.authToken) return false;
+    await clearStoredSession();
+    return true;
+  }
+
   async function readCredentials(): Promise<TrailBaseTokens | null> {
     const [authToken, refreshToken] = await Promise.all([
       driver.read(AUTH_TOKEN_KEY),
@@ -104,5 +122,6 @@ export function createGuardedSessionStorage(driver: SecureSlotDriver) {
     readStoredSession,
     readCredentialsForLogout: readCredentials,
     writeStoredSession,
+    clearStaleCredentialWrite,
   };
 }
