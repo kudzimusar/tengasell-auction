@@ -23,6 +23,7 @@ import {
   clearLogoutIntent,
   clearStoredSession,
   hasLogoutIntent,
+  clearStaleCredentialWrite,
   markLogoutIntent,
   readCredentialsForLogout,
   readStoredSession,
@@ -131,9 +132,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         if (credentialWriteRef.current === write) credentialWriteRef.current = null;
       }
       if (generationRef.current !== expectedGeneration) {
-        // The new owner of the generation is responsible for cleanup.
-        // In particular, logout waits for in-flight credential writes before
-        // verifying deletion; do not race that cleanup from this stale task.
+        // RACE01-D1: this task's bytes are already in the secure store. They
+        // must not survive as a restorable session — if the newer owner is a
+        // login that later fails, a cold start would restore the superseded
+        // account. Remove only the write this task made; a newer owner's
+        // credentials are left untouched. Logout performs its own clear, so
+        // this is a no-op when logout is the new owner.
+        await clearStaleCredentialWrite(tokens).catch(() => undefined);
         throw new TrailBaseError(
           "session-invalid",
           "Session changed while credentials were being persisted.",

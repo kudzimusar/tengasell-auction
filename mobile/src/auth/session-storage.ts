@@ -26,3 +26,4 @@ export const readStoredSession = storage.readStoredSession;
 export const readCredentialsForLogout = storage.readCredentialsForLogout;
 export const writeStoredSession = storage.writeStoredSession;
 export const clearStoredSession = storage.clearStoredSession;
+export const clearStaleCredentialWrite = storage.clearStaleCredentialWrite;
