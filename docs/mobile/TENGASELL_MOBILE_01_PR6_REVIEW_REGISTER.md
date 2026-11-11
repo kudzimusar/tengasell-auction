@@ -171,3 +171,40 @@ against this list:
   as residual coverage risk, not as passing evidence.
 - **Inherited web debt.** The root web lint job fails with 20 errors on `main`
   itself; no root application source changes in this PR.
+
+
+---
+
+## ICR03-LR01 Independent Certification Update (Code Freeze `395205a`)
+
+**Review unit:** `MOB-01-ICR03-LR01` (Independent Certification & Merge-Readiness Specialist)  
+**Historical baseline preserved above:** `937fcc3` (55 files, +18,584) · **Prior candidate:** `1131fac` → `688b7be` · **Remediated code freeze:** `395205a29a23814e5118b8b351e389abd0905fe0` (57 files vs `main` `98a607c326ca4bcf24062c045d4eaa35762a3aa5`, +19,048 / −0)
+
+### 1. Remediations Applied in `395205a`
+
+1. **`mobile/src/auth/protected-request.ts` + `mobile/tests/protected-request.test.mjs` (`ICR03-D2`, `ICR03-10`):** Ported the generation check before `deps.onRefreshed(...)` on both the proactive expiring-token refresh path and the reactive 401-retry refresh path (previously landed only on MOB-03 in `01dc953`), plus unit test `ICR03-10`.
+2. **`mobile/src/auth/session-context.tsx`:** Captured `expectedGeneration = ++generationRef.current` in `clearLocalSession` and guarded `setSnapshot(...)` in `finally` with `generationRef.current === expectedGeneration` so an in-flight clear cannot overwrite a concurrent `logout()` (`signout-pending`) or newer `login()`; moved `expectedGeneration` capture *before* `await readStoredSession()` in `refreshSession` and rejected cleanly on generation shift.
+3. **`mobile/scripts/verify-nxs-foundation.mjs`:** Switched `declaredSize` from `Math.max` to `Math.min` across explicit `minHeight`/`minWidth`/`height`/`width` declarations so a wide-but-short control cannot clear the 48pt floor via its horizontal length.
+
+### 2. Local Verification on `395205a`
+
+| Gate / Suite | Result |
+| --- | --- |
+| `npm run lint` (`expo lint`) | Exit 0 (0 errors, 0 warnings) |
+| `npm run typecheck` (`tsc --noEmit`) | Exit 0 |
+| `node scripts/verify-nxs-foundation.mjs` | Exit 0 (`2` interactive source files audited) |
+| `node scripts/verify-no-release-secrets.mjs .` | Exit 0 (`36` files scanned) |
+| `node scripts/verify-dependency-audit.mjs` | Exit 0 (`KNOWN_TOOLING_CHAIN_REQUIRES_EXPO_PATCH`: 0 critical, 1 high [`zod` / `GHSA-mrhx-c7xc-m3w5`], 10 moderate locally; Nov 10 CI run `42819932802` saw 12 moderate + 1 high) |
+| `npx expo install --check` & `npx expo-doctor` (`688b7be`) | Up to date; `20/20 checks passed` |
+| Auth test suites (`tests/*.test.mjs` on PR #6) | **50/50 pass** (RACE01-01..10 [10], R3-01..13 [13], ICR03-01..10 [10], RACE01-11..13 [3], STORE-08 [5], STORE-01..07/09/10 [9]) |
+
+### 3. Advisory Root Clarification (`npm ls zod`)
+
+Live lockfile and dependency inspection (`npm ls zod`) shows `zod@3.25.76` is introduced exclusively through the dev-only ESLint chain:
+`eslint-config-expo@58.0.4` → `eslint-plugin-react-hooks@7.1.1` → `zod-validation-error@4.0.2` / `zod@3.25.76`. It is not imported by mobile application runtime code. Earlier wording attributing `zod` to `@expo/cli` is superseded by this lockfile observation.
+
+### 4. Boundaries Unchanged
+
+- **Root web `Quality` job (`.github/workflows/ci.yml`):** Non-blocking (`continue-on-error: true`), inherited pre-existing web debt outside mobile merge scope.
+- **Branch protection & non-mobile PRs:** `main` currently has no active protection rules or rulesets (`404` / `[]`). Because `.github/workflows/tengasell-mobile-pr.yml` uses path filters (`mobile/**`, `docs/mobile/**`, `.github/workflows/tengasell-mobile-pr.yml`), requiring its check directly on `main` without an unconditional aggregator job would leave non-mobile PRs waiting indefinitely.
+- **Physical Device UAT:** **BLOCKED** (no physical Android/iOS device attached; only Android emulator `emulator-5554` exists locally). Native hardware SecureStore/Keychain, TalkBack/VoiceOver, and 200% scaling remain uncertified on physical devices.

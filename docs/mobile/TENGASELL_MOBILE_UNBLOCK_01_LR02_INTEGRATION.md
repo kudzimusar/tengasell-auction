@@ -499,3 +499,50 @@ Android and iOS export pass; release-secret scan 45 files clean.
 Merge, Play upload, signing enrolment and production remain unauthorized and
 unperformed. Branch protection remains an Owner action (§12.6). Physical
 certification remains blocked (§12.7).
+
+
+---
+
+## 15. `MOB-01-ICR03-LR01` — Three-PR Stack Certification & Merge-Readiness Addendum
+
+### 15.1 Stack Custody Remediation (PR #7 Leak & PR #8 Auto-Merge Incident)
+
+Prior to `ICR03-LR01`, while checking out `feat/tengasell-mobile-mob02-item-detail` (`07f5f60`), an unintended merge pulled `origin/feat/tengasell-mobile-mob03-bidding-and-release` into PR #7 (`d24a0bf`), followed by `acaf47b`, `f104e31`, and `67b3560`:
+
+- **Symptom 1:** PR #7 expanded to `22` files (`+2,542 / −56`) and executed MOB-03 bidding test suites (`bid-*`, `socket-*`).
+- **Symptom 2:** Because `feat/tengasell-mobile-mob03-bidding-and-release`'s remote head (`d24a0bf`) became an ancestor of PR #8's base branch (`feat/tengasell-mobile-mob02-item-detail`), GitHub automatically marked Draft PR #8 as **`MERGED`** at `2026-11-10T12:53:08Z` (`mergeCommit.oid = d24a0bfd27f60ec8ebfa47bdca256f00b45a780f`) even though `main` remained untouched at `98a607c3`.
+
+**Non-destructive resolution (zero force-push, zero history rewrite):**
+
+1. **PR #6 (`fix/tengasell-mobile-r2-sdk58-patch-refresh` → `main`):** Remediated at code commit `395205a` (+ doc sync follow-up) with `ICR03-D2`, `ICR03-10`, `clearLocalSession`/`refreshSession` generation hardening, and smallest-axis `verify-nxs-foundation.mjs` (`57` files vs `main`, `50/50` auth tests).
+2. **PR #7 (`feat/tengasell-mobile-mob02-item-detail` → `fix/tengasell-mobile-r2-sdk58-patch-refresh`):** Cleanly reverted the leaked MOB-03 merge (`git revert -m 2 d24a0bf` → `8c3be94`), merged PR #6 fixes forward, and resolved clean MOB-02 defects at `4660ffa`: expired live lots closed (`remainingMs <= 0`), `minNextBid` tiered next minimum displayed, responsive `useWindowDimensions()` hero width, `retry`/`All`/`Try again`/`Sign in` 48pt minimum touch targets, and `categories.tsx` `categoryRequestRef` sequencing (`12` clean files vs PR #6, `57/57` tests).
+3. **MOB-03 (`feat/tengasell-mobile-mob03-bidding-and-release` → `feat/tengasell-mobile-mob02-item-detail`, superseded into Draft PR #9):** Reconciled `8c3be94` with `-s ours` so MOB-03 files were preserved, merged PR #7 clean fixes (`16e3b21`), reset per-listing state cleanly on `id`/identity transitions, aligned `search.tsx` (`d42d8d4`), giving an exact `11`-file MOB-03 scope (`+1,380 / −28`) and **`92/92` passing tests** (`50` auth + `7` navigation + `13` ACK + `9` BID + `13` socket). Because GitHub cannot reopen a `MERGED` PR (#8), Draft PR #9 replaces PR #8 for final stack review.
+
+### 15.2 Advisory Reconciliation Summary
+
+| Observation Point | Critical | High | Moderate | Root Explanation |
+| --- | ---: | ---: | ---: | --- |
+| GitHub CI `42819932802` (`2026-11-10T12:56:47Z`) | 0 | 1 | 12 | `zod` (`GHSA-mrhx-c7xc-m3w5`); `glob`, `minimatch`, `@expo/cli`, `@expo/fingerprint`, `expo`, `@typescript-eslint/*`, `eslint-config-expo`, `eslint-plugin-expo` |
+| Local Verification (`2026-11-11`) | 0 | 1 | 10 | `npm ls zod`: `eslint-config-expo@58.0.4` → `eslint-plugin-react-hooks@7.1.1` → `zod@3.25.76` (dev/lint only); `eslint-config-expo`/`eslint-plugin-expo` advisories absent in current GitHub Advisory DB snapshot |
+
+### 15.3 Branch Protection Sequence (Do Not Enable Before Prep)
+
+Before enabling GitHub Branch Protection / Rulesets on `main`:
+
+1. Keep `.github/workflows/tengasell-mobile-pr.yml` non-bypassable for `mobile/**` PRs, **and** add an unconditional workflow/aggregator check (or split path-filter inside jobs) so non-mobile PRs to `main` still report a green required status instead of stalling at *"Expected — Waiting for status to be reported"*.
+2. Enable protection only with Owner sign-off: require PR before merging, require 1 approving review, require the unconditional status check(s), disallow force-push and branch deletion, and enforce ordered stack merge (**PR #6 → retarget PR #7 to `main` → PR #7 → retarget PR #9 to `main` → PR #9**).
+
+### 15.4 Controlled Merge & Rollback Protocol
+
+- Merge only when PR checks match exact current `HEAD` SHAs on GitHub Actions.
+- Keep all PRs **Draft** until Owner completes Physical UAT (below) or formally waives hardware blocks for internal beta/test track progression.
+- After merging PR #6 (`main` advances), retarget PR #7 base to `main`, merge `main` into PR #7 if needed (trivial fast-forward/merge since `PR #6` is already an ancestor), re-run CI to green, merge PR #7, then repeat for PR #9.
+- Rollback strategy: single-merge revert commit on `main` (`git revert -m 1 <merge_sha>`); keep Expo SDK 58 native runtime changes isolated from web root builds; never rebuild or promote APK/AAB until Owner resumes REL-004 build work.
+
+### 15.5 Owner-Executable Physical Device UAT Procedure (Outstanding Block)
+
+1. Provision a real Android handset (Android 12+) and a real iPhone (iOS 16+) pointed at staging/tunnel (never unapproved Production mutation).
+2. **Cold-start & Auth / Logout / Switch Matrix (`PR #6`):** Sign in (`@nyasha`), verify SecureStore/Keychain persistence across force-quit, tap Sign out offline & online, confirm logout barrier blocks stale token resurrection, switch to a second account (`@tendai`), confirm stale profile/refresh responses never appear.
+3. **Accessibility & Viewport (`PR #7`):** Enable **200% OS font size / Dynamic Type** + **TalkBack (Android) / VoiceOver (iOS)** across Home, Categories, Search, Item Detail, Orders, and Account; verify zero clipped prices/CTAs, zero horizontal overflow, responsive square hero image on narrow/tablet screens, and `>=48pt` tap targets on `All`, `Try again`, `Sign in`, `Back`.
+4. **Live Bidding (`PR #9`):** On an open staging lot, place an opening/challenger bid (`winning: true`), have `@tendai` hold a higher standing auto-bid (`outbid: true`), disconnect airplane mode mid-bid (`uncertain: true` -> state reconciliation), confirm closing countdown hits `Ends in 0s` -> `Auction closed` without restart.
+5. **MOB-04 Payments/Push Handoff:** Do **not** start MOB-04 until PR #6, PR #7, and PR #9 are merged cleanly to `main` and physical device UAT signs off auth/session isolation and bidding truthfulness (`bids` / `auctions` mutations remain exclusively behind Trade Engine Socket.IO `:3002`).
