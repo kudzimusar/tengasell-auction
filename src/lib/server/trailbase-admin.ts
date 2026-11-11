@@ -7,22 +7,39 @@
 //
 // Env vars (same as the trade engine):
 //   ADMIN_USERNAME  (default "admin")
-//   ADMIN_PASSWORD  (default "Tengasell#2025")
+//   ADMIN_PASSWORD  (required — fail closed when unset)
 
 const TRAILBASE = process.env.TRAILBASE_URL ?? "http://localhost:3001";
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME ?? "admin";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "Tengasell#2025";
+const getAdminPassword = (): string => process.env.ADMIN_PASSWORD ?? "";
 
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // TrailBase auth_token_ttl_sec: 86400
 
-let cached: { token: string; fetchedAt: number } | null = null;
+let cached: { token: string; fetchedAt: number; expMs: number } | null = null;
+let inFlightLogin: Promise<string> | null = null;
+
+function tokenExpMs(token: string): number {
+  try {
+    const part = token.split(".")[1] ?? "";
+    const payload = JSON.parse(Buffer.from(part, "base64url").toString("utf8")) as { exp?: unknown };
+    return typeof payload?.exp === "number" && Number.isFinite(payload.exp)
+      ? payload.exp * 1000
+      : Date.now() + TOKEN_TTL_MS;
+  } catch {
+    return Date.now() + TOKEN_TTL_MS;
+  }
+}
 
 /** POST /api/auth/v1/login → auth_token (same as the trade engine's tbLogin). */
 export async function tbLogin(): Promise<string> {
+  const password = getAdminPassword();
+  if (!password) {
+    throw new Error("ADMIN_PASSWORD environment variable is required");
+  }
   const res = await fetch(`${TRAILBASE}/api/auth/v1/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username: ADMIN_USERNAME, password: ADMIN_PASSWORD }),
+    body: JSON.stringify({ username: ADMIN_USERNAME, password }),
     signal: AbortSignal.timeout(8000),
   });
   if (!res.ok) throw new Error(`admin login failed: ${res.status}`);
@@ -31,22 +48,40 @@ export async function tbLogin(): Promise<string> {
   return data.auth_token;
 }
 
-/** Cached admin token — refreshed when older than 24h or after a 401. */
+/** Singleflight cached admin token — refreshed before expiry or after a 401/403. */
 export async function ensureAdminToken(force = false): Promise<string> {
-  const fresh = cached && Date.now() - cached.fetchedAt < TOKEN_TTL_MS;
-  if (force || !cached || !fresh) {
-    cached = { token: await tbLogin(), fetchedAt: Date.now() };
+  const now = Date.now();
+  const fresh =
+    cached &&
+    now - cached.fetchedAt < TOKEN_TTL_MS &&
+    cached.expMs - now > 30_000;
+  if (!force && fresh && cached) {
+    return cached.token;
   }
-  return cached.token;
+  if (!inFlightLogin) {
+    if (force) cached = null;
+    inFlightLogin = tbLogin()
+      .then((token) => {
+        cached = { token, fetchedAt: Date.now(), expMs: tokenExpMs(token) };
+        return token;
+      })
+      .finally(() => {
+        inFlightLogin = null;
+      });
+  }
+  return inFlightLogin;
 }
 
-function invalidate() {
-  cached = null;
+function invalidateIfCurrent(failedToken: string): void {
+  if (cached?.token === failedToken) {
+    cached = null;
+  }
 }
 
 /**
  * fetch() wrapper that attaches the admin Bearer token.
- * Retries once with a fresh token on 401 (token expired/invalidated).
+ * Retries once with a fresh token on 401/403 (TrailBase returns 403 as well
+ * as 401 when an admin bearer token expires on record routes).
  */
 export async function tbFetch(
   path: string,
@@ -62,6 +97,7 @@ export async function tbFetch(
   const run = async (token: string) =>
     fetch(url, {
       ...rest,
+      signal: rest.signal ?? AbortSignal.timeout(8000),
       headers: {
         ...(rest.body ? { "Content-Type": "application/json" } : {}),
         ...(rest.headers ?? {}),
@@ -69,10 +105,16 @@ export async function tbFetch(
       },
     });
 
-  let res = await run(await ensureAdminToken());
-  if (res.status === 401) {
-    invalidate();
-    res = await run(await ensureAdminToken(true));
+  const firstToken = await ensureAdminToken();
+  let res = await run(firstToken);
+  if (res.status === 401 || res.status === 403) {
+    invalidateIfCurrent(firstToken);
+    let refreshed = await ensureAdminToken(cached?.token === firstToken || !cached);
+    if (refreshed === firstToken) {
+      invalidateIfCurrent(firstToken);
+      refreshed = await ensureAdminToken(true);
+    }
+    res = await run(refreshed);
   }
   return res;
 }

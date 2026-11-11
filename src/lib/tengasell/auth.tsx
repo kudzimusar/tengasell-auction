@@ -47,6 +47,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    return bus.on("auth:revoked", () => {
+      api.clearExternalSession();
+      disconnectSocket();
+      setUser(null);
+    });
+  }, []);
+
+  useEffect(() => {
     if (booted.current) return;
     booted.current = true;
     (async () => {

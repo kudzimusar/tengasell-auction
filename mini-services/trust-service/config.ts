@@ -1,13 +1,23 @@
 // Trust-service configuration — hardcoded port + paths (mirror comms config).
 
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const PROJECT_ROOT = process.env.TGS_PROJECT_ROOT
+  ? path.resolve(process.env.TGS_PROJECT_ROOT)
+  : path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const DATA_ROOT = process.env.TGS_DATA_DIR
+  ? path.resolve(process.env.TGS_DATA_DIR)
+  : PROJECT_ROOT;
+
 export const PORT = 3007;
 export const DB_PATH =
-  process.env.TRUST_DB_PATH ?? "/home/z/my-project/db/trust.db";
+  process.env.TRUST_DB_PATH ?? path.join(DATA_ROOT, "db", "trust.db");
 
 /** TrailBase (Rust backend) origin + admin credentials (same as trade-engine). */
 export const TRAILBASE = process.env.TRAILBASE_URL ?? "http://localhost:3001";
 export const ADMIN_USERNAME = process.env.ADMIN_USERNAME ?? "admin";
-export const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "Tengasell#2025";
+export const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "";
 
 /** TUCS comms-service origin for fire-and-forget user notices. */
 export const COMMS_BASE = process.env.COMMS_URL ?? "http://127.0.0.1:3005";
@@ -18,7 +28,7 @@ export const APP_URL = process.env.APP_URL ?? "http://localhost:81";
  * service). Callers MUST send `x-tgs-internal: <secret>`. BFF user/admin
  * routes use x-tgs-user / x-tgs-admin instead (set by the Next BFF).
  */
-export const INTERNAL_SECRET = process.env.TGS_INTERNAL_SECRET ?? "tgs-internal-v1";
+export const INTERNAL_SECRET = (process.env.TGS_INTERNAL_SECRET ?? "").trim();
 
 /** TOTP (RFC 6238) parameters — HMAC-SHA1, 30s step, 6 digits, ±1 window. */
 export const TOTP = {

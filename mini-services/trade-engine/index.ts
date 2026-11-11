@@ -33,65 +33,175 @@
 //   order:update {order} · question:update {question}
 //   offer:update {auctionId, offer} · room:update {session}      ← Gap-8
 
-import { createServer } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Server, type Socket } from "socket.io";
+import {
+  IdentityResolver,
+  openCanonicalTrailBaseStore,
+  openRevocationStore,
+  parseStrictJwt,
+  resolveTrailBaseDataDir,
+  sha256Hex,
+  timingSafeEqualStr,
+  type AuthResolution,
+  type Identity,
+} from "./auth";
+import {
+  BidService,
+  bidIncrement,
+  isoPlus,
+  nowIso,
+  preCommitError,
+  round2,
+  uncertainBidOutcome,
+  type BidOutcome,
+} from "./bidding";
 
-const PORT = 3002;
-const TRAILBASE = "http://localhost:3001";
+const ENGINE_DIR = path.dirname(fileURLToPath(import.meta.url));
+const PORT = Number(process.env.PORT ?? process.env.TRADE_ENGINE_PORT ?? 3002);
+const TRAILBASE = process.env.TRAILBASE_URL ?? "http://localhost:3001";
+const INTERNAL_SECRET = (process.env.TGS_INTERNAL_SECRET ?? "").trim();
+const AUTH_CACHE_TTL_MS = Number(process.env.TRADE_AUTH_CACHE_TTL_MS ?? 5_000);
 
 // RPC acknowledgement callback shape (client → server events respond with
 // a single JSON payload, e.g. { ok: false, error: "..." } or { ok: true, ... }).
 type Ack = (response: unknown) => void;
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME ?? "admin";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "Tengasell#2025";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "";
 
 // ── TrailBase REST helpers ───────────────────────────────────────────
 let adminToken: string | null = null;
+let adminTokenExpMs = 0;
+let adminLoginPromise: Promise<string> | null = null;
+
+function readAdminTokenExpMs(token: string): number {
+  const claims = parseStrictJwt(token);
+  return claims ? claims.exp * 1000 : Date.now() + 3600_000;
+}
 
 async function tbLogin(): Promise<string> {
+  if (!ADMIN_PASSWORD) {
+    throw new Error("admin login failed: ADMIN_PASSWORD environment variable is not set");
+  }
   const res = await fetch(`${TRAILBASE}/api/auth/v1/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username: ADMIN_USERNAME, password: ADMIN_PASSWORD }),
+    signal: AbortSignal.timeout(8000),
   });
   if (!res.ok) throw new Error(`admin login failed: ${res.status}`);
-  const data = await res.json();
+  const data = (await res.json()) as { auth_token?: unknown };
+  if (typeof data?.auth_token !== "string" || !data.auth_token) {
+    throw new Error("admin login failed: missing auth_token");
+  }
   return data.auth_token;
 }
 
-async function ensureAdminToken(): Promise<string> {
-  if (!adminToken) adminToken = await tbLogin();
-  return adminToken;
+async function ensureAdminToken(force = false): Promise<string> {
+  const expiringSoon = !adminToken || adminTokenExpMs - Date.now() <= 30_000;
+  if (!force && adminToken && !expiringSoon) {
+    return adminToken;
+  }
+  if (!adminLoginPromise || force) {
+    if (force) {
+      adminToken = null;
+      adminTokenExpMs = 0;
+    }
+    const pendingLogin = tbLogin()
+      .then((tok) => {
+        adminToken = tok;
+        adminTokenExpMs = readAdminTokenExpMs(tok);
+        return tok;
+      })
+      .finally(() => {
+        if (adminLoginPromise === pendingLogin) {
+          adminLoginPromise = null;
+        }
+      });
+    adminLoginPromise = pendingLogin;
+  }
+  return adminLoginPromise;
 }
 
-/** One TrailBase request, with a single 401 retry (admin sessions die when
- *  TrailBase restarts — re-login once instead of silently failing writes). */
+export interface TbResult {
+  ok: boolean;
+  status: number;
+  data: any;
+  transportError?: boolean;
+  malformed?: boolean;
+  errorMessage?: string;
+}
+
+/** One TrailBase request, with a single 401/403 retry (TrailBase v0.35 returns 403
+ *  as well as 401 on expired admin bearer tokens). Transport drops never throw
+ *  unexpectedly; callers inspect `ok`/`status`/`transportError`. */
 async function tb(
   method: string,
   path: string,
   body?: unknown,
-): Promise<{ ok: boolean; status: number; data: any }> {
-  const call = async (token: string) => {
-    const res = await fetch(`${TRAILBASE}${path}`, {
-      method,
-      headers: {
-        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
-        Authorization: `Bearer ${token}`,
-      },
-      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-    });
-    let data: any = null;
+): Promise<TbResult> {
+  const call = async (token: string): Promise<TbResult> => {
     try {
-      data = await res.json();
-    } catch {
-      /* empty body (PATCH) */
+      const res = await fetch(`${TRAILBASE}${path}`, {
+        method,
+        headers: {
+          ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+          Authorization: `Bearer ${token}`,
+        },
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+        signal: AbortSignal.timeout(8000),
+      });
+      const text = await res.text();
+      let data: any = null;
+      let malformed = false;
+      if (text) {
+        try {
+          data = JSON.parse(text);
+        } catch {
+          malformed = res.ok;
+        }
+      }
+      return { ok: res.ok && !malformed, status: res.status, data, ...(malformed ? { malformed: true } : {}) };
+    } catch (err) {
+      return {
+        ok: false,
+        status: 0,
+        data: null,
+        transportError: true,
+        errorMessage: (err as Error)?.message ?? "TrailBase request failed",
+      };
     }
-    return { ok: res.ok, status: res.status, data };
   };
-  let result = await call(await ensureAdminToken());
-  if (result.status === 401) {
-    adminToken = await tbLogin(); // session expired (TrailBase restarted)
-    result = await call(adminToken);
+
+  let token: string;
+  try {
+    token = await ensureAdminToken();
+  } catch (err) {
+    return {
+      ok: false,
+      status: 0,
+      data: null,
+      transportError: true,
+      errorMessage: (err as Error)?.message ?? "admin login failed",
+    };
+  }
+
+  let result = await call(token);
+  if (result.status === 401 || result.status === 403) {
+    try {
+      const freshToken = await ensureAdminToken(true);
+      result = await call(freshToken);
+    } catch (err) {
+      return {
+        ok: false,
+        status: result.status,
+        data: null,
+        transportError: true,
+        errorMessage: (err as Error)?.message ?? "admin re-login failed",
+      };
+    }
   }
   return result;
 }
@@ -117,89 +227,84 @@ async function updateRecord(table: string, id: number | string, patch: unknown):
   return res.ok;
 }
 
-function nowIso(): string {
-  return new Date().toISOString().replace(/\.\d+Z$/, "Z");
-}
-
-function isoPlus(ms: number): string {
-  return new Date(Date.now() + ms).toISOString().replace(/\.\d+Z$/, "Z");
-}
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
-}
-
-function bidIncrement(price: number): number {
-  if (price < 50) return 1;
-  if (price < 500) return 2;
-  if (price < 1000) return 5;
-  if (price < 5000) return 10;
-  return 25;
-}
-
 // ── socket identity ──────────────────────────────────────────────────
-interface Identity {
-  id: string; // _user uuid (base64 in JSON)
-  username: string;
-  admin: boolean;
+const trailBaseDataDir = resolveTrailBaseDataDir(ENGINE_DIR);
+const requireSessionDb =
+  process.env.TRAILBASE_REQUIRE_SESSION_DB === "1" || process.env.NODE_ENV === "production";
+if (requireSessionDb && !trailBaseDataDir) {
+  throw new Error(
+    "[trade-engine] TRAILBASE_DATA_DIR is required for canonical _session verification",
+  );
 }
+const canonicalStore = trailBaseDataDir ? openCanonicalTrailBaseStore(trailBaseDataDir) : null;
+const revocationsDbPath =
+  process.env.TGS_REVOCATIONS_DB ??
+  (trailBaseDataDir ? path.join(trailBaseDataDir, "tgs_revocations.db") : null);
+const revocationStore = revocationsDbPath ? openRevocationStore(revocationsDbPath) : undefined;
 
-const identityCache = new Map<string, Identity>(); // token → identity
-
-function decodeJwt(token: string): { username?: string; admin?: boolean; sub?: string } {
-  try {
-    const part = token.split(".")[1] ?? "";
-    const b64 = part.replace(/-/g, "+").replace(/_/g, "/");
-    return JSON.parse(Buffer.from(b64, "base64").toString("utf8"));
-  } catch {
-    return {};
-  }
-}
-
-async function resolveIdentity(token: unknown): Promise<Identity | null> {
-  if (typeof token !== "string" || !token) return null;
-  if (identityCache.has(token)) return identityCache.get(token)!;
-  try {
+const authResolver = new IdentityResolver({
+  cacheTtlMs: AUTH_CACHE_TTL_MS,
+  checkCanonicalUserSession: canonicalStore ? canonicalStore.check : undefined,
+  revocationStore,
+  fetchStatus: async (token: string) => {
     const res = await fetch(`${TRAILBASE}/api/auth/v1/status`, {
       headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(5000),
     });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const activeToken: string = data.auth_token ?? token;
-    const payload = decodeJwt(activeToken);
-    if (!payload.username) return null;
-    // profiles are world-readable → resolve the user id
-    const profiles = await getRecords(
-      "profiles",
-      `filter[username][$eq]=${encodeURIComponent(payload.username)}&limit=1`,
+    if (!res.ok) return { ok: false, status: res.status, authToken: null };
+    const data = (await res.json().catch(() => null)) as { auth_token?: unknown } | null;
+    const authToken = typeof data?.auth_token === "string" ? data.auth_token : null;
+    return { ok: true, status: res.status, authToken };
+  },
+  lookupProfile: async (sub: string, _username: string) => {
+    const res = await tb(
+      "GET",
+      `/api/records/v1/profiles?filter[user][$eq]=${encodeURIComponent(sub)}&limit=1`,
     );
-    const identity: Identity = {
-      id: profiles[0]?.user ?? "",
-      username: payload.username,
-      admin: !!payload.admin,
-    };
-    identityCache.set(token, identity);
-    if (activeToken !== token) identityCache.set(activeToken, identity);
-    return identity;
-  } catch {
-    return null;
-  }
-}
+    if (!res.ok) {
+      throw new Error(
+        `profile lookup failed: HTTP ${res.status} (${res.errorMessage ?? "error"})`,
+      );
+    }
+    const profiles = Array.isArray(res.data?.records) ? res.data.records : [];
+    const p = profiles[0];
+    if (!p || typeof p.user !== "string" || !p.user || typeof p.username !== "string") {
+      return null;
+    }
+    return { user: p.user, username: p.username };
+  },
+});
 
-// ── notifications + audit ────────────────────────────────────────────
-async function notify(user: string, type: string, title: string, body: string, link: string) {
-  if (!user) return;
-  const id = await createRecord("notifications", {
-    user,
-    type,
-    title,
-    body,
-    link,
-    read: 0,
-    created_at: nowIso(),
-  });
-  const notification = { id, user, type, title, body, link, read: 0, created_at: nowIso() };
-  io.to(`user:${user}`).emit("notification:new", { notification });
+// ── notifications + audit (strictly non-throwing post-commit helpers) ─
+async function notify(
+  user: string,
+  type: string,
+  title: string,
+  body: string,
+  link: string,
+): Promise<boolean> {
+  if (!user) return true;
+  try {
+    const id = await createRecord("notifications", {
+      user,
+      type,
+      title,
+      body,
+      link,
+      read: 0,
+      created_at: nowIso(),
+    });
+    if (id == null) {
+      console.warn(`[notify] failed to persist notification for ${user} (${type})`);
+      return false;
+    }
+    const notification = { id, user, type, title, body, link, read: 0, created_at: nowIso() };
+    io.to(`user:${user}`).emit("notification:new", { notification });
+    return true;
+  } catch (err) {
+    console.warn("[notify] unexpected error:", (err as Error)?.message ?? err);
+    return false;
+  }
 }
 
 async function audit(
@@ -209,16 +314,26 @@ async function audit(
   entityId: number | null,
   source: string,
   payload: unknown,
-) {
-  await createRecord("audit_events", {
-    user,
-    action,
-    entity,
-    entity_id: entityId,
-    source,
-    payload: JSON.stringify(payload ?? {}),
-    created_at: nowIso(),
-  });
+): Promise<boolean> {
+  try {
+    const id = await createRecord("audit_events", {
+      user,
+      action,
+      entity,
+      entity_id: entityId,
+      source,
+      payload: JSON.stringify(payload ?? {}),
+      created_at: nowIso(),
+    });
+    if (id == null) {
+      console.warn(`[audit] failed to record ${action} (${entity}:${entityId})`);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn(`[audit] unexpected error recording ${action}:`, (err as Error)?.message ?? err);
+    return false;
+  }
 }
 
 // ── TUCS comms bridge (Task 11-d) ────────────────────────────────
@@ -308,183 +423,129 @@ function financeEvent(type: string, payload: Record<string, unknown>): void {
 }
 
 // ── bidding rules (authoritative) ──────────────────────────────────
-interface BidOutcome {
-  ok: boolean;
-  error?: string;
-  auction?: any;
-  amount?: number;
-  winning?: boolean;
-  outbid?: boolean;
-}
-
-async function placeBid(me: Identity, auctionId: number, maxAmount: number): Promise<BidOutcome> {
-  if (!me.id) return { ok: false, error: "Account profile missing — reload and retry." };
-  const auction = await getRecord("auctions", auctionId);
-  if (!auction) return { ok: false, error: "Auction not found." };
-  if (auction.status !== "live") return { ok: false, error: "This auction is no longer live." };
-  const endsMs = Date.parse(auction.ends_at) - Date.now();
-  if (endsMs <= 0) return { ok: false, error: "This auction has ended." };
-  if (auction.user === me.id) return { ok: false, error: "You cannot bid on your own auction." };
-  if (!Number.isFinite(maxAmount) || maxAmount <= 0)
-    return { ok: false, error: "Enter a valid maximum bid." };
-  maxAmount = round2(maxAmount);
-
-  const bidRows = await getRecords(
-    "bids",
-    `filter[auction_id][$eq]=${auctionId}&order=-id&limit=50`,
-  );
-  const active = bidRows.find((b: any) => b.status === "active");
-  const inc = bidIncrement(active ? active.amount : auction.start_price);
-
-  if (!active) {
-    if (maxAmount < auction.start_price)
-      return { ok: false, error: `The opening bid is US$${auction.start_price}.` };
-    await createRecord("bids", {
-      auction_id: auctionId,
-      user: me.id,
-      bidder_username: me.username,
-      amount: auction.start_price,
-      max_amount: maxAmount,
-      is_auto: 1,
-      status: "active",
-      created_at: nowIso(),
-    });
-    await updateRecord("auctions", auctionId, {
-      current_price: auction.start_price,
-      bid_count: 1,
-      updated_at: nowIso(),
-    });
-    await notifyWatchers(auction, me, auction.start_price);
-    return { ok: true, amount: auction.start_price, winning: true };
+async function antiSnipeOutcome(
+  auctionId: number,
+): Promise<{ auction: any | null; warning?: string }> {
+  const auctionRes = await tb("GET", `/api/records/v1/auctions/${auctionId}`);
+  if (!auctionRes.ok || !auctionRes.data) {
+    return { auction: null, warning: "anti_snipe_failed" };
   }
-
-  const min = round2(active.amount + inc);
-  if (maxAmount < min)
-    return {
-      ok: false,
-      error: `Your maximum bid is below the minimum next bid of US$${min}.`,
-    };
-
-  if (maxAmount > active.max_amount) {
-    // challenger takes the lead
-    const price = round2(Math.min(maxAmount, active.max_amount + inc));
-    await updateRecord("bids", active.id, { status: "superseded" });
-    await createRecord("bids", {
-      auction_id: auctionId,
-      user: me.id,
-      bidder_username: me.username,
-      amount: price,
-      max_amount: maxAmount,
-      is_auto: 1,
-      status: "active",
-      created_at: nowIso(),
-    });
-    await updateRecord("auctions", auctionId, {
-      current_price: price,
-      bid_count: auction.bid_count + 1,
+  const auction = auctionRes.data;
+  if (auction.status !== "live") return { auction };
+  const remaining = Date.parse(auction.ends_at) - Date.now();
+  if (remaining < 5 * 60_000 && Number(auction.extension_count ?? 0) < 15) {
+    const newEnds = isoPlus(5 * 60_000 + Math.max(remaining, 0));
+    const patchRes = await tb("PATCH", `/api/records/v1/auctions/${auctionId}`, {
+      ends_at: newEnds,
+      extension_count: Number(auction.extension_count ?? 0) + 1,
       updated_at: nowIso(),
     });
-    await notify(
-      active.user,
-      "outbid",
-      "You were outbid",
-      `${me.username} placed a higher bid on ${auction.title}.`,
-      `#/item/${auctionId}`,
-    );
-    // TUCS: cross-channel "auction.outbid" to the previous high bidder.
-    if (active.bidder_username) {
-      commsEvent({
-        userId: active.bidder_username,
-        eventKey: "auction.outbid",
-        params: {
-          auctionTitle: auction.title,
-          amount: price,
-          bidderLabel: me.username,
-          auctionId: auctionId,
-        },
-        deepLink: `${APP_URL}/#/item/${auctionId}`,
-      });
+    if (!patchRes.ok) {
+      return { auction, warning: "anti_snipe_failed" };
     }
-    await notifyWatchers(auction, me, price);
-    return { ok: true, amount: price, winning: true };
+    const refreshed = await tb("GET", `/api/records/v1/auctions/${auctionId}`);
+    if (!refreshed.ok || !refreshed.data) {
+      return {
+        auction: {
+          ...auction,
+          ends_at: newEnds,
+          extension_count: Number(auction.extension_count ?? 0) + 1,
+        },
+        warning: "auction_read_failed",
+      };
+    }
+    return { auction: refreshed.data };
   }
-
-  // standing automatic bid defends
-  const newPrice = round2(Math.min(active.max_amount, maxAmount + inc));
-  await updateRecord("bids", active.id, { status: "superseded" });
-  await createRecord("bids", {
-    auction_id: auctionId,
-    user: active.user,
-    bidder_username: active.bidder_username,
-    amount: newPrice,
-    max_amount: active.max_amount,
-    is_auto: 1,
-    status: "active",
-    created_at: nowIso(),
-  });
-  await updateRecord("auctions", auctionId, {
-    current_price: newPrice,
-    bid_count: auction.bid_count + 1,
-    updated_at: nowIso(),
-  });
-  await notify(
-    me.id,
-    "outbid",
-    "You were outbid",
-    `Automatic bidding for ${active.bidder_username} exceeded your maximum on ${auction.title}.`,
-    `#/item/${auctionId}`,
-  );
-  // TUCS: the challenger was instantly outbid by the standing auto-bid.
-  commsEvent({
-    userId: me.username,
-    eventKey: "auction.outbid",
-    params: {
-      auctionTitle: auction.title,
-      amount: newPrice,
-      bidderLabel: active.bidder_username,
-      auctionId: auctionId,
-    },
-    deepLink: `${APP_URL}/#/item/${auctionId}`,
-  });
-  return { ok: true, amount: newPrice, winning: false, outbid: true };
+  return { auction };
 }
 
-async function notifyWatchers(auction: any, bidder: Identity, price: number) {
+async function notifyWatchers(auction: any, bidder: Identity, price: number): Promise<boolean> {
   try {
     const watchers = await getRecords(
       "watchlist",
       `filter[auction_id][$eq]=${auction.id}&limit=100`,
     );
+    let allOk = true;
     for (const w of watchers) {
       if (w.user === bidder.id) continue;
-      await notify(
+      const ok = await notify(
         w.user,
         "bid",
         "New bid on your watchlist",
         `${bidder.username} bid US$${price} on ${auction.title}.`,
         `#/item/${auction.id}`,
       );
+      if (!ok) allOk = false;
     }
+    return allOk;
   } catch {
-    /* best effort */
+    return false;
   }
 }
 
-async function antiSnipe(auctionId: number): Promise<any | null> {
-  const auction = await getRecord("auctions", auctionId);
-  if (!auction || auction.status !== "live") return auction;
-  const remaining = Date.parse(auction.ends_at) - Date.now();
-  if (remaining < 5 * 60_000 && auction.extension_count < 15) {
-    const newEnds = isoPlus(5 * 60_000 + Math.max(remaining, 0));
-    await updateRecord("auctions", auctionId, {
-      ends_at: newEnds,
-      extension_count: auction.extension_count + 1,
+const bidService = new BidService({
+  getAuction: async (auctionId) => {
+    const res = await tb("GET", `/api/records/v1/auctions/${auctionId}`);
+    if (res.ok && res.data) return { ok: true, row: res.data };
+    return {
+      ok: false,
+      notFound: res.status === 404,
+      error: res.errorMessage ?? `HTTP ${res.status}`,
+    };
+  },
+  listBids: async (auctionId) => {
+    const res = await tb(
+      "GET",
+      `/api/records/v1/bids?filter[auction_id][$eq]=${auctionId}&order=-id&limit=50`,
+    );
+    if (!res.ok) return { ok: false, error: res.errorMessage ?? `HTTP ${res.status}` };
+    return { ok: true, rows: res.data?.records ?? [] };
+  },
+  createBid: async (row) => {
+    const res = await tb("POST", "/api/records/v1/bids", row);
+    if (res.ok) {
+      const id = res.data?.ids?.[0];
+      if (id != null && Number.isFinite(Number(id))) {
+        return { status: "created", id: Number(id) };
+      }
+      // 200 OK without a parsable record id is ambiguous — never assert non-commit.
+      return { status: "uncertain", error: "Malformed bid insert confirmation" };
+    }
+    if (res.transportError || res.malformed || res.status === 502 || res.status === 504) {
+      return { status: "uncertain", error: res.errorMessage ?? `HTTP ${res.status}` };
+    }
+    return { status: "rejected", statusCode: res.status };
+  },
+  patchBid: async (bidId, patch) => updateRecord("bids", bidId, patch),
+  patchAuction: async (auctionId, patch) => updateRecord("auctions", auctionId, patch),
+  extendLiveRoom: async (liveSessionId) => {
+    const patchRes = await tb("PATCH", `/api/records/v1/live_sessions/${liveSessionId}`, {
+      close_at: isoPlus(20_000),
       updated_at: nowIso(),
     });
-    return getRecord("auctions", auctionId);
-  }
-  return auction;
-}
+    if (!patchRes.ok) return { session: null, warning: "room_extend_failed" };
+    const session = await getRecord("live_sessions", liveSessionId);
+    return { session, ...(!session ? { warning: "room_read_failed" } : {}) };
+  },
+  antiSnipe: antiSnipeOutcome,
+  notifyBestEffort: notify,
+  notifyWatchersBestEffort: notifyWatchers,
+  commsOutbidBestEffort: ({ userId, auctionTitle, amount, bidderLabel, auctionId }) => {
+    commsEvent({
+      userId,
+      eventKey: "auction.outbid",
+      params: { auctionTitle, amount, bidderLabel, auctionId },
+      deepLink: `${APP_URL}/#/item/${auctionId}`,
+    });
+  },
+  auditBestEffort: audit,
+  emitRoomUpdate: (session) => {
+    io.emit("room:update", { session });
+  },
+  emitAuctionUpdate: (auction) => {
+    io.emit("auction:update", { auction });
+  },
+});
 
 // ── Gap-8 shared sale helper (offers accept + live-room hammer) ───────
 // Marks the auction sold, creates the 48h-SLA order, notifies both
@@ -496,7 +557,11 @@ async function sellAuctionTo(
   price: number,
   address?: string | null,
 ): Promise<number | null> {
-  await updateRecord("auctions", auction.id, { status: "sold", updated_at: nowIso() });
+  const soldOk = await updateRecord("auctions", auction.id, { status: "sold", updated_at: nowIso() });
+  if (!soldOk) {
+    console.error(`[sellAuctionTo] failed to mark auction ${auction.id} sold`);
+    return null;
+  }
   const orderId = await createRecord("orders", {
     auction_id: auction.id,
     auction_title: auction.title,
@@ -512,7 +577,10 @@ async function sellAuctionTo(
     updated_at: nowIso(),
   });
   if (orderId == null) {
-    await updateRecord("auctions", auction.id, { status: "live", updated_at: nowIso() });
+    const reverted = await updateRecord("auctions", auction.id, { status: "live", updated_at: nowIso() });
+    if (!reverted) {
+      console.error(`[sellAuctionTo] failed to roll back auction ${auction.id} after order insert error`);
+    }
     return null;
   }
   await notify(
@@ -559,40 +627,48 @@ async function sellAuctionTo(
 }
 
 /** End a lot/auction unsold (no winner). */
-async function endUnsold(auction: any): Promise<void> {
-  await updateRecord("auctions", auction.id, { status: "ended", updated_at: nowIso() });
+async function endUnsold(auction: any): Promise<boolean> {
+  const ok = await updateRecord("auctions", auction.id, { status: "ended", updated_at: nowIso() });
+  if (!ok) {
+    console.error(`[endUnsold] failed to end auction ${auction.id}`);
+    return false;
+  }
   await notify(auction.user, "info", "Auction ended unsold", auction.title, `#/item/${auction.id}`);
   const updated = await getRecord("auctions", auction.id);
   if (updated) {
     io.emit("auction:update", { auction: updated });
     io.emit("auction:ended", { auction: updated });
   }
+  return true;
 }
 
 /** Advance a live room to its next unsold lot, or close the room. */
-async function advanceRoom(session: any): Promise<void> {
+async function advanceRoom(session: any): Promise<boolean> {
   const lots = await getRecords(
     "auctions",
     `filter[live_session_id][$eq]=${session.id}&filter[status][$eq]=live&order=id&limit=100`,
   );
   const remaining = lots.filter((l: any) => l.id !== session.current_lot_id);
-  if (remaining.length > 0) {
-    await updateRecord("live_sessions", session.id, {
-      current_lot_id: remaining[0].id,
-      lot_index: Number(session.lot_index ?? 0) + 1,
-      close_at: null,
-      updated_at: nowIso(),
-    });
-  } else {
-    await updateRecord("live_sessions", session.id, {
-      status: "closed",
-      current_lot_id: null,
-      close_at: null,
-      updated_at: nowIso(),
-    });
+  const ok = remaining.length > 0
+    ? await updateRecord("live_sessions", session.id, {
+        current_lot_id: remaining[0].id,
+        lot_index: Number(session.lot_index ?? 0) + 1,
+        close_at: null,
+        updated_at: nowIso(),
+      })
+    : await updateRecord("live_sessions", session.id, {
+        status: "closed",
+        current_lot_id: null,
+        close_at: null,
+        updated_at: nowIso(),
+      });
+  if (!ok) {
+    console.error(`[advanceRoom] failed to update live_session ${session.id}`);
+    return false;
   }
   const updated = await getRecord("live_sessions", session.id);
   if (updated) io.emit("room:update", { session: updated });
+  return true;
 }
 
 // ── sweeps ───────────────────────────────────────────────────────────
@@ -601,79 +677,99 @@ async function sweepAuctions() {
     "auctions",
     `filter[status][$eq]=live&filter[ends_at][$lte]=${encodeURIComponent(nowIso())}&limit=100`,
   );
-  for (const auction of due) {
-    const bids = await getRecords(
-      "bids",
-      `filter[auction_id][$eq]=${auction.id}&order=-id&limit=50`,
-    );
-    const active = bids.find((b: any) => b.status === "active");
-    const reserveMet =
-      auction.reserve_price == null || (active ? active.amount : 0) >= auction.reserve_price;
-    if (active && reserveMet) {
-      await updateRecord("auctions", auction.id, { status: "sold", updated_at: nowIso() });
-      const orderId = await createRecord("orders", {
-        auction_id: auction.id,
-        auction_title: auction.title,
-        buyer_user: active.user,
-        seller_user: auction.user,
-        buyer_username: active.bidder_username,
-        seller_username: auction.seller_username,
-        final_price: active.amount,
-        status: "pending_payment",
-        pay_by: isoPlus(48 * 3600_000),
-        created_at: nowIso(),
-        updated_at: nowIso(),
-      });
-      await notify(
-        active.user,
-        "won",
-        "You won — payment due",
-        `${auction.title} at US$${active.amount}. Complete payment within 48h (SLA).`,
-        `#/orders/${orderId}`,
+  for (const staleAuction of due) {
+    await bidService.withAuctionLock(Number(staleAuction.id), async () => {
+      const auction = await getRecord("auctions", staleAuction.id);
+      if (!auction || auction.status !== "live") return;
+      const endsMs = Date.parse(auction.ends_at);
+      if (Number.isFinite(endsMs) && endsMs > Date.now()) return;
+
+      const bids = await getRecords(
+        "bids",
+        `filter[auction_id][$eq]=${auction.id}&order=-id&limit=50`,
       );
-      await notify(
-        auction.user,
-        "sold",
-        "Your auction sold",
-        `${auction.title} — US$${active.amount}.`,
-        `#/orders/${orderId}`,
-      );
-      // TUCS: auction.won → winner, auction.sold → seller (channel fan-out).
-      if (active.bidder_username) {
-        commsEvent({
-          userId: active.bidder_username,
-          eventKey: "auction.won",
-          params: { auctionTitle: auction.title, amount: active.amount, auctionId: auction.id },
-          deepLink: `${APP_URL}/#/item/${auction.id}`,
+      const active = bids.find((b: any) => b.status === "active");
+      const reserveMet =
+        auction.reserve_price == null || (active ? active.amount : 0) >= auction.reserve_price;
+      if (active && reserveMet) {
+        const soldOk = await updateRecord("auctions", auction.id, { status: "sold", updated_at: nowIso() });
+        if (!soldOk) {
+          console.error(`[sweepAuctions] failed to mark auction ${auction.id} sold`);
+          return;
+        }
+        const orderId = await createRecord("orders", {
+          auction_id: auction.id,
+          auction_title: auction.title,
+          buyer_user: active.user,
+          seller_user: auction.user,
+          buyer_username: active.bidder_username,
+          seller_username: auction.seller_username,
+          final_price: active.amount,
+          status: "pending_payment",
+          pay_by: isoPlus(48 * 3600_000),
+          created_at: nowIso(),
+          updated_at: nowIso(),
         });
+        if (orderId == null) {
+          console.error(`[sweepAuctions] failed to create order for auction ${auction.id}; rolling back status`);
+          await updateRecord("auctions", auction.id, { status: "live", updated_at: nowIso() });
+          return;
+        }
+        await notify(
+          active.user,
+          "won",
+          "You won — payment due",
+          `${auction.title} at US$${active.amount}. Complete payment within 48h (SLA).`,
+          `#/orders/${orderId}`,
+        );
+        await notify(
+          auction.user,
+          "sold",
+          "Your auction sold",
+          `${auction.title} — US$${active.amount}.`,
+          `#/orders/${orderId}`,
+        );
+        // TUCS: auction.won → winner, auction.sold → seller (channel fan-out).
+        if (active.bidder_username) {
+          commsEvent({
+            userId: active.bidder_username,
+            eventKey: "auction.won",
+            params: { auctionTitle: auction.title, amount: active.amount, auctionId: auction.id },
+            deepLink: `${APP_URL}/#/item/${auction.id}`,
+          });
+        }
+        if (auction.seller_username) {
+          commsEvent({
+            userId: auction.seller_username,
+            eventKey: "auction.sold",
+            params: {
+              auctionTitle: auction.title,
+              amount: active.amount,
+              winnerLabel: active.bidder_username,
+              auctionId: auction.id,
+            },
+            deepLink: `${APP_URL}/#/item/${auction.id}`,
+          });
+        }
+        const order = await getRecord("orders", orderId);
+        if (order) io.emit("order:update", { order });
+      } else {
+        const endedOk = await updateRecord("auctions", auction.id, { status: "ended", updated_at: nowIso() });
+        if (!endedOk) {
+          console.error(`[sweepAuctions] failed to mark auction ${auction.id} ended`);
+          return;
+        }
+        await notify(
+          auction.user,
+          "info",
+          "Auction ended unsold",
+          auction.title,
+          `#/item/${auction.id}`,
+        );
       }
-      if (auction.seller_username) {
-        commsEvent({
-          userId: auction.seller_username,
-          eventKey: "auction.sold",
-          params: {
-            auctionTitle: auction.title,
-            amount: active.amount,
-            winnerLabel: active.bidder_username,
-            auctionId: auction.id,
-          },
-          deepLink: `${APP_URL}/#/item/${auction.id}`,
-        });
-      }
-      const order = await getRecord("orders", orderId ?? 0);
-      if (order) io.emit("order:update", { order });
-    } else {
-      await updateRecord("auctions", auction.id, { status: "ended", updated_at: nowIso() });
-      await notify(
-        auction.user,
-        "info",
-        "Auction ended unsold",
-        auction.title,
-        `#/item/${auction.id}`,
-      );
-    }
-    const updated = await getRecord("auctions", auction.id);
-    if (updated) io.emit("auction:ended", { auction: updated });
+      const updated = await getRecord("auctions", auction.id);
+      if (updated) io.emit("auction:ended", { auction: updated });
+    });
   }
   // payment SLA enforcement
   const overdue = await getRecords(
@@ -681,7 +777,11 @@ async function sweepAuctions() {
     `filter[status][$eq]=pending_payment&filter[pay_by][$lte]=${encodeURIComponent(nowIso())}&limit=100`,
   );
   for (const order of overdue) {
-    await updateRecord("orders", order.id, { status: "cancelled", updated_at: nowIso() });
+    const cancelOk = await updateRecord("orders", order.id, { status: "cancelled", updated_at: nowIso() });
+    if (!cancelOk) {
+      console.error(`[sweepAuctions] failed to cancel overdue order ${order.id}`);
+      continue;
+    }
     // Finance (12-b): reverse escrow on 48h-SLA auto-cancel — fire-and-forget.
     financeEvent("order.cancelled", {
       orderId: Number(order.id),
@@ -735,32 +835,46 @@ async function sweepLiveRooms() {
   for (const session of rooms) {
     const lotId = session.current_lot_id;
     if (!lotId) continue;
-    const auction = await getRecord("auctions", lotId);
-    if (!auction || auction.status !== "live") {
-      await advanceRoom(session);
-      continue;
-    }
-    const bids = await getRecords(
-      "bids",
-      `filter[auction_id][$eq]=${lotId}&order=-id&limit=50`,
-    );
-    const active = bids.find((b: any) => b.status === "active");
-    const reserveMet =
-      auction.reserve_price == null || (active ? active.amount : 0) >= auction.reserve_price;
-    if (active && reserveMet) {
-      await sellAuctionTo(
-        auction,
-        { id: active.user, username: active.bidder_username },
-        active.amount,
+    await bidService.withAuctionLock(Number(lotId), async () => {
+      const freshSession = await getRecord("live_sessions", session.id);
+      if (
+        !freshSession ||
+        freshSession.status !== "live" ||
+        Number(freshSession.current_lot_id) !== Number(lotId) ||
+        !freshSession.close_at ||
+        Date.parse(String(freshSession.close_at)) > Date.now()
+      ) {
+        return;
+      }
+      const auction = await getRecord("auctions", lotId);
+      if (!auction || auction.status !== "live") {
+        await advanceRoom(freshSession);
+        return;
+      }
+      const bids = await getRecords(
+        "bids",
+        `filter[auction_id][$eq]=${lotId}&order=-id&limit=50`,
       );
-      await audit(active.user, "room:hammer", "auctions", lotId, "web", {
-        sessionId: session.id,
-        amount: active.amount,
-      });
-    } else {
-      await endUnsold(auction);
-    }
-    await advanceRoom(session);
+      const active = bids.find((b: any) => b.status === "active");
+      const reserveMet =
+        auction.reserve_price == null || (active ? active.amount : 0) >= auction.reserve_price;
+      if (active && reserveMet) {
+        const orderId = await sellAuctionTo(
+          auction,
+          { id: active.user, username: active.bidder_username },
+          active.amount,
+        );
+        if (orderId == null) return;
+        await audit(active.user, "room:hammer", "auctions", lotId, "web", {
+          sessionId: freshSession.id,
+          amount: active.amount,
+        });
+      } else {
+        const unsoldOk = await endUnsold(auction);
+        if (!unsoldOk) return;
+      }
+      await advanceRoom(freshSession);
+    });
   }
 }
 
@@ -773,11 +887,12 @@ async function sweepOfferExpiry() {
     )}&limit=100`,
   );
   for (const offer of stale) {
-    await updateRecord("offers", offer.id, {
+    const expiredOk = await updateRecord("offers", offer.id, {
       status: "expired",
       responded_at: nowIso(),
       updated_at: nowIso(),
     });
+    if (!expiredOk) continue;
     await notify(
       offer.buyer_user,
       "info",
@@ -785,7 +900,8 @@ async function sweepOfferExpiry() {
       `Your offer of US$${offer.amount} expired without a response.`,
       `#/item/${offer.auction_id}`,
     );
-    io.emit("offer:update", { auctionId: offer.auction_id, offer });
+    const updatedOffer = await getRecord("offers", offer.id);
+    io.emit("offer:update", { auctionId: offer.auction_id, offer: updatedOffer ?? { ...offer, status: "expired" } });
   }
   const countered = await getRecords(
     "offers",
@@ -794,12 +910,14 @@ async function sweepOfferExpiry() {
     )}&limit=100`,
   );
   for (const offer of countered) {
-    await updateRecord("offers", offer.id, {
+    const expiredOk = await updateRecord("offers", offer.id, {
       status: "expired",
       responded_at: nowIso(),
       updated_at: nowIso(),
     });
-    io.emit("offer:update", { auctionId: offer.auction_id, offer });
+    if (!expiredOk) continue;
+    const updatedOffer = await getRecord("offers", offer.id);
+    io.emit("offer:update", { auctionId: offer.auction_id, offer: updatedOffer ?? { ...offer, status: "expired" } });
   }
 }
 
@@ -863,30 +981,167 @@ async function sweepSavedSearches() {
         });
       }
     }
-    await updateRecord("saved_searches", ss.id, {
+    const ssOk = await updateRecord("saved_searches", ss.id, {
       last_seen_id: maxId,
       updated_at: nowIso(),
     });
+    if (!ssOk) {
+      console.error(`[sweepSavedSearches] failed to update last_seen_id for saved_search ${ss.id}`);
+    }
   }
 }
 
 // ── server ───────────────────────────────────────────────────────────
+function readJsonBody(req: IncomingMessage, maxBytes = 8192): Promise<Record<string, unknown> | null> {
+  return new Promise((resolve) => {
+    let body = "";
+    let size = 0;
+    req.on("data", (chunk: Buffer | string) => {
+      size += chunk.length;
+      if (size > maxBytes) {
+        req.destroy();
+        resolve(null);
+        return;
+      }
+      body += chunk.toString();
+    });
+    req.on("end", () => {
+      if (!body.trim()) {
+        resolve({});
+        return;
+      }
+      try {
+        const parsed = JSON.parse(body) as unknown;
+        resolve(parsed && typeof parsed === "object" && !Array.isArray(parsed)
+          ? (parsed as Record<string, unknown>)
+          : null);
+      } catch {
+        resolve(null);
+      }
+    });
+    req.on("error", () => resolve(null));
+  });
+}
+
+async function authorizeAdminHttp(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
+  const internalHdr = req.headers["x-tgs-internal"];
+  if (
+    INTERNAL_SECRET.length > 0 &&
+    typeof internalHdr === "string" &&
+    timingSafeEqualStr(internalHdr, INTERNAL_SECRET)
+  ) {
+    return true;
+  }
+  const authHdr = req.headers.authorization;
+  if (typeof authHdr === "string" && authHdr.toLowerCase().startsWith("bearer ")) {
+    const token = authHdr.slice(7).trim();
+    const resolved = await authResolver.resolveWithReason(token, { forceFresh: true });
+    if (resolved.ok && resolved.identity.admin) return true;
+    if (resolved.ok) {
+      res.writeHead(403, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: "Admin authorization required." }));
+      return false;
+    }
+  }
+  res.writeHead(401, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ ok: false, error: "Authentication required." }));
+  return false;
+}
+
+const activeSocketsBySub = new Map<string, Set<Socket>>();
+const activeSocketsByDigest = new Map<string, Set<Socket>>();
+
+function trackSocketAuth(socket: Socket, sub: string, tokenDigest: string): void {
+  let bySub = activeSocketsBySub.get(sub);
+  if (!bySub) {
+    bySub = new Set();
+    activeSocketsBySub.set(sub, bySub);
+  }
+  bySub.add(socket);
+
+  let byDig = activeSocketsByDigest.get(tokenDigest);
+  if (!byDig) {
+    byDig = new Set();
+    activeSocketsByDigest.set(tokenDigest, byDig);
+  }
+  byDig.add(socket);
+
+  socket.once("disconnect", () => {
+    bySub?.delete(socket);
+    if (bySub && bySub.size === 0) activeSocketsBySub.delete(sub);
+    byDig?.delete(socket);
+    if (byDig && byDig.size === 0) activeSocketsByDigest.delete(tokenDigest);
+  });
+}
+
+function disconnectRevokedSockets(opts: { token?: string; sub?: string }): number {
+  const targets = new Set<Socket>();
+  if (opts.token) {
+    const digest = sha256Hex(opts.token);
+    for (const s of activeSocketsByDigest.get(digest) ?? []) targets.add(s);
+  }
+  if (opts.sub) {
+    for (const s of activeSocketsBySub.get(opts.sub) ?? []) targets.add(s);
+  }
+  for (const s of targets) {
+    try {
+      s.emit("auth:revoked", { code: "AUTH_REVOKED", error: "Session revoked." });
+      s.disconnect(true);
+    } catch {
+      /* ignore */
+    }
+  }
+  return targets.size;
+}
+
 const httpServer = createServer((req, res) => {
-  if (req.method === "GET" && (req.url === "/" || (req.url ?? "").startsWith("/?"))) {
+  const urlPath = (req.url ?? "/").split("?")[0];
+  if (req.method === "GET" && urlPath === "/") {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ service: "tengasell-trade-engine", port: PORT, ok: true }));
     return;
   }
   // Admin: ensure the Next dev server (and its GIS child) is running.
-  // The trade engine is a persistent anchor process — children spawned here
-  // survive agent-shell reaping (the sandbox kills per-call process trees).
-  if (req.method === "POST" && req.url === "/admin/ensure-dev") {
-    handleEnsureDev(res);
+  // Requires admin Bearer token or shared internal secret.
+  if (req.method === "POST" && urlPath === "/admin/ensure-dev") {
+    void authorizeAdminHttp(req, res).then((ok) => {
+      if (ok) void handleEnsureDev(res);
+    });
     return;
   }
-  if (req.method === "GET" && req.url === "/admin/status") {
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ next: nextDevRunning, checkedAt: new Date().toISOString() }));
+  if (req.method === "GET" && urlPath === "/admin/status") {
+    void authorizeAdminHttp(req, res).then((ok) => {
+      if (!ok) return;
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ next: nextDevRunning, checkedAt: new Date().toISOString() }));
+    });
+    return;
+  }
+  if (req.method === "POST" && urlPath === "/internal/auth/revoke") {
+    void authorizeAdminHttp(req, res).then(async (ok) => {
+      if (!ok) return;
+      const body = await readJsonBody(req);
+      if (!body) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: "Invalid JSON payload." }));
+        return;
+      }
+      const token = typeof body.token === "string" ? body.token : undefined;
+      const sub = typeof body.sub === "string" ? body.sub : undefined;
+      const username = typeof body.username === "string" ? body.username : undefined;
+      const cutoffSec = typeof body.cutoffSec === "number" ? body.cutoffSec : undefined;
+      if (!token && !sub && !username) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: "Provide token, sub, or username." }));
+        return;
+      }
+      if (token) authResolver.revokeToken(token);
+      if (sub || username) authResolver.revokeSubject({ sub, username }, cutoffSec);
+      const parsedSub = sub ?? (token ? parseStrictJwt(token)?.sub : undefined);
+      const disconnected = disconnectRevokedSockets({ token, sub: parsedSub });
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true, disconnected }));
+    });
     return;
   }
   res.writeHead(404);
@@ -898,7 +1153,9 @@ import net from "node:net";
 import fs from "node:fs";
 import { spawn as cpSpawn } from "node:child_process";
 
-const PROJECT_ROOT = "/home/z/my-project";
+const PROJECT_ROOT = process.env.TGS_PROJECT_ROOT
+  ? path.resolve(process.env.TGS_PROJECT_ROOT)
+  : path.resolve(ENGINE_DIR, "../..");
 
 function portOpen(port: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -954,114 +1211,171 @@ const io = new Server(httpServer, {
 });
 
 io.on("connection", (socket: Socket) => {
-  const token = (socket.handshake.auth as { token?: string })?.token;
-  let me: Identity | null = null;
-  const identityPromise: Promise<Identity | null> = token
-    ? resolveIdentity(token)
-    : Promise.resolve(null);
+  const token = (socket.handshake.auth as { token?: unknown })?.token;
+  let joinedRoom: string | null = null;
+  const initialResolution: Promise<AuthResolution> =
+    typeof token === "string" && token
+      ? authResolver.resolveWithReason(token)
+      : Promise.resolve({ ok: false, code: "AUTH_REQUIRED", error: "Sign in to continue." });
 
-  void identityPromise.then((identity) => {
-    me = identity;
-    if (me?.id) void socket.join(`user:${me.id}`);
-    socket.emit("hello", { ok: true, identity: me ? { username: me.username } : null });
+  void initialResolution.then((res) => {
+    if (socket.disconnected) return;
+    if (res.ok && res.identity.id) {
+      joinedRoom = `user:${res.identity.id}`;
+      void socket.join(joinedRoom);
+      if (typeof token === "string") {
+        trackSocketAuth(socket, res.claims.sub, sha256Hex(token));
+      }
+      socket.emit("hello", { ok: true, identity: { username: res.identity.username } });
+    } else {
+      socket.emit("hello", { ok: true, identity: null });
+    }
   });
 
-  const requireAuth = async (): Promise<Identity | null> => {
-    if (!token) return null;
-    if (!me) me = await identityPromise;
-    return me;
+  // Never pin handshake identity (`me`) across socket lifetime: every mutating
+  // RPC re-checks expiry, canonical _user/_session state, and revocations.
+  const requireSocketAuth = async (
+    ack: Ack | undefined,
+    unauthenticatedMsg: string,
+  ): Promise<Identity | null> => {
+    await initialResolution;
+    const res = await authResolver.resolveWithReason(token, { forceFresh: true });
+    if (res.ok) {
+      if (!res.identity.id) {
+        ack?.(preCommitError("PROFILE_MISSING", "Account profile missing — reload and retry."));
+        return null;
+      }
+      if (joinedRoom !== `user:${res.identity.id}`) {
+        if (joinedRoom) void socket.leave(joinedRoom);
+        joinedRoom = `user:${res.identity.id}`;
+        void socket.join(joinedRoom);
+      }
+      return res.identity;
+    }
+
+    const message = res.code === "AUTH_REQUIRED" ? unauthenticatedMsg : res.error;
+    ack?.(preCommitError(res.code, message));
+
+    if (res.code === "AUTH_REVOKED" || res.code === "AUTH_EXPIRED") {
+      if (joinedRoom) {
+        void socket.leave(joinedRoom);
+        joinedRoom = null;
+      }
+      try {
+        socket.emit("auth:revoked", { code: res.code, error: res.error });
+      } catch {
+        /* ignore */
+      }
+      setTimeout(() => {
+        try {
+          socket.disconnect(true);
+        } catch {
+          /* ignore */
+        }
+      }, 25);
+    }
+    return null;
   };
 
   socket.on("bid:place", async (data: any, ack?: Ack) => {
     try {
-      const user = await requireAuth();
-      if (!user) return ack?.({ ok: false, error: "Sign in to place bids." });
-      const auctionId = Number(data?.auctionId);
-      const result = await placeBid(user, auctionId, Number(data?.maxAmount));
-      if (result.ok) {
-        let auction = await getRecord("auctions", auctionId);
-        if (auction?.live_session_id != null) {
-          // Gap-8 live-room lot: no anti-snipe — each accepted bid pushes
-          // the going-going-sold hammer clock out 20 seconds instead.
-          await updateRecord("live_sessions", auction.live_session_id, {
-            close_at: isoPlus(20_000),
-            updated_at: nowIso(),
-          });
-          const session = await getRecord("live_sessions", auction.live_session_id);
-          if (session) io.emit("room:update", { session });
-        } else {
-          auction = await antiSnipe(auctionId);
-        }
-        if (auction) io.emit("auction:update", { auction });
-        result.auction = auction ?? result.auction;
-        await audit(user.id, "bid:place", "auctions", auctionId, "web", {
-          maxAmount: data?.maxAmount,
-          amount: result.amount,
-        });
-      }
+      const user = await requireSocketAuth(ack, "Sign in to place bids.");
+      if (!user) return;
+      const result: BidOutcome = await bidService.handleBidPlace({
+        user,
+        auctionId: data?.auctionId,
+        maxAmount: data?.maxAmount,
+        clientRequestId: data?.clientRequestId,
+      });
       ack?.(result);
     } catch (err) {
+      // Unclassified exception before committed stage cannot be claimed pre_commit.
       console.error("[bid:place]", err);
-      ack?.({ ok: false, error: "The trade engine hit an unexpected error. Please retry." });
+      ack?.(
+        uncertainBidOutcome(
+          "COMMIT_UNCERTAIN",
+          "Bid outcome could not be verified — refreshing auction state.",
+        ),
+      );
     }
   });
 
   // ── Gap-8: bid retraction (eBay-style, 60-minute window) ─────────────
   socket.on("bid:retract", async (data: any, ack?: Ack) => {
     try {
-      const user = await requireAuth();
-      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      const user = await requireSocketAuth(ack, "Sign in first.");
+      if (!user) return;
       const bidId = Number(data?.bidId);
       const reason = String(data?.reason ?? "").trim();
       if (reason.length < 10)
         return ack?.({ ok: false, error: "Give a reason (at least 10 characters) for the retraction." });
-      const bid = await getRecord("bids", bidId);
-      if (!bid) return ack?.({ ok: false, error: "Bid not found." });
-      const auction = await getRecord("auctions", bid.auction_id);
-      if (!auction || auction.status !== "live")
-        return ack?.({ ok: false, error: "Bids can only be retracted while the auction is live." });
-      if (bid.user !== user.id && !user.admin)
-        return ack?.({ ok: false, error: "You can only retract your own bid." });
-      if (bid.status !== "active")
-        return ack?.({ ok: false, error: "Only the current leading bid can be retracted." });
-      const ageMs = Date.now() - Date.parse(bid.created_at);
-      if (!user.admin && ageMs > 60 * 60_000)
-        return ack?.({
-          ok: false,
-          error: "The 60-minute retraction window has elapsed. Contact the seller or support.",
+      const initialBid = await getRecord("bids", bidId);
+      if (!initialBid) return ack?.({ ok: false, error: "Bid not found." });
+      await bidService.withAuctionLock(Number(initialBid.auction_id), async () => {
+        const bid = await getRecord("bids", bidId);
+        if (!bid) return ack?.({ ok: false, error: "Bid not found." });
+        const auction = await getRecord("auctions", bid.auction_id);
+        if (!auction || auction.status !== "live")
+          return ack?.({ ok: false, error: "Bids can only be retracted while the auction is live." });
+        if (bid.user !== user.id && !user.admin)
+          return ack?.({ ok: false, error: "You can only retract your own bid." });
+        if (bid.status !== "active")
+          return ack?.({ ok: false, error: "Only the current leading bid can be retracted." });
+        const ageMs = Date.now() - Date.parse(bid.created_at);
+        if (!user.admin && ageMs > 60 * 60_000)
+          return ack?.({
+            ok: false,
+            error: "The 60-minute retraction window has elapsed. Contact the seller or support.",
+          });
+        // restore the previous lead row (proxy ledger), then void the bid
+        const rows = await getRecords(
+          "bids",
+          `filter[auction_id][$eq]=${bid.auction_id}&order=-id&limit=100`,
+        );
+        const prev = rows.find((b: any) => b.id < bid.id && b.status === "superseded");
+        if (prev) {
+          const prevOk = await updateRecord("bids", prev.id, { status: "active" });
+          if (!prevOk) {
+            return ack?.({ ok: false, error: "Could not restore previous leading bid — please retry." });
+          }
+        }
+        const retractedOk = await updateRecord("bids", bidId, {
+          status: "retracted",
+          retracted_at: nowIso(),
+          retraction_reason: reason.slice(0, 200),
         });
-      // restore the previous lead row (proxy ledger), then void the bid
-      const rows = await getRecords(
-        "bids",
-        `filter[auction_id][$eq]=${bid.auction_id}&order=-id&limit=100`,
-      );
-      const prev = rows.find((b: any) => b.id < bid.id && b.status === "superseded");
-      if (prev) await updateRecord("bids", prev.id, { status: "active" });
-      await updateRecord("bids", bidId, {
-        status: "retracted",
-        retracted_at: nowIso(),
-        retraction_reason: reason.slice(0, 200),
+        if (!retractedOk) {
+          if (prev) await updateRecord("bids", prev.id, { status: "superseded" });
+          return ack?.({ ok: false, error: "Could not retract bid — please retry." });
+        }
+        const auctionOk = await updateRecord("auctions", auction.id, {
+          current_price: prev ? prev.amount : auction.start_price,
+          bid_count: Math.max(0, Number(auction.bid_count ?? 1) - 1),
+          updated_at: nowIso(),
+        });
+        if (!auctionOk) {
+          console.error(`[bid:retract] bid ${bidId} retracted but auction ${auction.id} update failed`);
+          return ack?.({
+            ok: false,
+            error: "Could not update auction summary after retracting bid — please refresh.",
+          });
+        }
+        await notify(
+          auction.user,
+          "info",
+          "A bid was retracted",
+          `${user.username} retracted their bid on ${auction.title}: “${reason.slice(0, 90)}”`,
+          `#/item/${auction.id}`,
+        );
+        await audit(user.id, "bid:retract", "bids", bidId, "web", {
+          auctionId: auction.id,
+          reason,
+          admin: user.admin,
+        });
+        const updated = await getRecord("auctions", auction.id);
+        if (updated) io.emit("auction:update", { auction: updated });
+        ack?.({ ok: true, auction: updated });
       });
-      await updateRecord("auctions", auction.id, {
-        current_price: prev ? prev.amount : auction.start_price,
-        bid_count: Math.max(0, Number(auction.bid_count ?? 1) - 1),
-        updated_at: nowIso(),
-      });
-      await notify(
-        auction.user,
-        "info",
-        "A bid was retracted",
-        `${user.username} retracted their bid on ${auction.title}: “${reason.slice(0, 90)}”`,
-        `#/item/${auction.id}`,
-      );
-      await audit(user.id, "bid:retract", "bids", bidId, "web", {
-        auctionId: auction.id,
-        reason,
-        admin: user.admin,
-      });
-      const updated = await getRecord("auctions", auction.id);
-      if (updated) io.emit("auction:update", { auction: updated });
-      ack?.({ ok: true, auction: updated });
     } catch (err) {
       console.error("[bid:retract]", err);
       ack?.({ ok: false, error: "Unexpected error — please retry." });
@@ -1071,8 +1385,8 @@ io.on("connection", (socket: Socket) => {
   // ── Gap-8: Best-Offer / haggle ──────────────────────────────────────
   socket.on("offer:submit", async (data: any, ack?: Ack) => {
     try {
-      const user = await requireAuth();
-      if (!user) return ack?.({ ok: false, error: "Sign in to make an offer." });
+      const user = await requireSocketAuth(ack, "Sign in to make an offer.");
+      if (!user) return;
       const auctionId = Number(data?.auctionId);
       const amount = round2(Number(data?.amount));
       const message = String(data?.message ?? "").slice(0, 300);
@@ -1110,8 +1424,10 @@ io.on("connection", (socket: Socket) => {
           created_at: nowIso(),
           updated_at: nowIso(),
         });
-        const offer = await getRecord("offers", id ?? 0);
-        io.emit("offer:update", { auctionId, offer });
+        if (id != null) {
+          const offer = await getRecord("offers", id);
+          if (offer) io.emit("offer:update", { auctionId, offer });
+        }
         return ack?.({
           ok: false,
           error: `The seller's minimum offer is US$${auction.offer_min}. Your offer was declined automatically.`,
@@ -1127,7 +1443,10 @@ io.on("connection", (socket: Socket) => {
         created_at: nowIso(),
         updated_at: nowIso(),
       });
-      const offer = await getRecord("offers", id ?? 0);
+      if (id == null) {
+        return ack?.({ ok: false, error: "Could not submit offer — please retry." });
+      }
+      const offer = await getRecord("offers", id);
       await notify(
         auction.user,
         "offer",
@@ -1152,8 +1471,8 @@ io.on("connection", (socket: Socket) => {
 
   socket.on("offer:withdraw", async (data: any, ack?: Ack) => {
     try {
-      const user = await requireAuth();
-      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      const user = await requireSocketAuth(ack, "Sign in first.");
+      if (!user) return;
       const offerId = Number(data?.offerId);
       const offer = await getRecord("offers", offerId);
       if (!offer) return ack?.({ ok: false, error: "Offer not found." });
@@ -1161,11 +1480,14 @@ io.on("connection", (socket: Socket) => {
         return ack?.({ ok: false, error: "Not your offer." });
       if (offer.status !== "pending")
         return ack?.({ ok: false, error: "Only a pending offer can be withdrawn." });
-      await updateRecord("offers", offerId, {
+      const withdrawnOk = await updateRecord("offers", offerId, {
         status: "withdrawn",
         responded_at: nowIso(),
         updated_at: nowIso(),
       });
+      if (!withdrawnOk) {
+        return ack?.({ ok: false, error: "Could not withdraw offer — please retry." });
+      }
       const auction = await getRecord("auctions", offer.auction_id);
       if (auction) {
         await notify(
@@ -1178,7 +1500,7 @@ io.on("connection", (socket: Socket) => {
       }
       await audit(user.id, "offer:withdraw", "offers", offerId, "web", {});
       const updated = await getRecord("offers", offerId);
-      io.emit("offer:update", { auctionId: offer.auction_id, offer: updated });
+      if (updated) io.emit("offer:update", { auctionId: offer.auction_id, offer: updated });
       ack?.({ ok: true, offer: updated });
     } catch (err) {
       console.error("[offer:withdraw]", err);
@@ -1188,8 +1510,8 @@ io.on("connection", (socket: Socket) => {
 
   socket.on("offer:respond", async (data: any, ack?: Ack) => {
     try {
-      const user = await requireAuth();
-      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      const user = await requireSocketAuth(ack, "Sign in first.");
+      if (!user) return;
       const offerId = Number(data?.offerId);
       const action = String(data?.action ?? "");
       const offer = await getRecord("offers", offerId);
@@ -1202,34 +1524,48 @@ io.on("connection", (socket: Socket) => {
         return ack?.({ ok: false, error: "This offer was already answered." });
 
       if (action === "accept") {
-        if (auction.status !== "live")
-          return ack?.({ ok: false, error: "This item is no longer live." });
-        const orderId = await sellAuctionTo(
-          auction,
-          { id: offer.buyer_user, username: offer.buyer_username },
-          offer.amount,
-        );
-        if (orderId == null) return ack?.({ ok: false, error: "Could not complete the sale — retry." });
-        await updateRecord("offers", offerId, {
-          status: "accepted",
-          responded_at: nowIso(),
-          updated_at: nowIso(),
+        await bidService.withAuctionLock(Number(offer.auction_id), async () => {
+          const freshOffer = await getRecord("offers", offerId);
+          if (!freshOffer || freshOffer.status !== "pending")
+            return ack?.({ ok: false, error: "This offer was already answered." });
+          const freshAuction = await getRecord("auctions", freshOffer.auction_id);
+          if (!freshAuction) return ack?.({ ok: false, error: "Item not found." });
+          if (freshAuction.status !== "live")
+            return ack?.({ ok: false, error: "This item is no longer live." });
+          const orderId = await sellAuctionTo(
+            freshAuction,
+            { id: freshOffer.buyer_user, username: freshOffer.buyer_username },
+            freshOffer.amount,
+          );
+          if (orderId == null) return ack?.({ ok: false, error: "Could not complete the sale — retry." });
+          const acceptedOk = await updateRecord("offers", offerId, {
+            status: "accepted",
+            responded_at: nowIso(),
+            updated_at: nowIso(),
+          });
+          if (!acceptedOk) {
+            return ack?.({ ok: false, error: "Sale completed, but failed to update offer status — please refresh." });
+          }
+          await audit(user.id, "offer:accept", "offers", offerId, "web", {
+            auctionId: freshAuction.id,
+            amount: freshOffer.amount,
+          });
+          const updatedOffer = await getRecord("offers", offerId);
+          if (updatedOffer) io.emit("offer:update", { auctionId: freshAuction.id, offer: updatedOffer });
+          return ack?.({ ok: true, accepted: true, orderId, offer: updatedOffer });
         });
-        await audit(user.id, "offer:accept", "offers", offerId, "web", {
-          auctionId: auction.id,
-          amount: offer.amount,
-        });
-        const updatedOffer = await getRecord("offers", offerId);
-        io.emit("offer:update", { auctionId: auction.id, offer: updatedOffer });
-        return ack?.({ ok: true, accepted: true, orderId, offer: updatedOffer });
+        return;
       }
 
       if (action === "decline") {
-        await updateRecord("offers", offerId, {
+        const declinedOk = await updateRecord("offers", offerId, {
           status: "declined",
           responded_at: nowIso(),
           updated_at: nowIso(),
         });
+        if (!declinedOk) {
+          return ack?.({ ok: false, error: "Could not decline offer — please retry." });
+        }
         await notify(
           offer.buyer_user,
           "offer",
@@ -1245,7 +1581,7 @@ io.on("connection", (socket: Socket) => {
         });
         await audit(user.id, "offer:decline", "offers", offerId, "web", {});
         const updatedOffer = await getRecord("offers", offerId);
-        io.emit("offer:update", { auctionId: auction.id, offer: updatedOffer });
+        if (updatedOffer) io.emit("offer:update", { auctionId: auction.id, offer: updatedOffer });
         return ack?.({ ok: true, declined: true, offer: updatedOffer });
       }
 
@@ -1256,13 +1592,16 @@ io.on("connection", (socket: Socket) => {
           return ack?.({ ok: false, error: "Enter a counter of US$1 or more." });
         if (auction.buy_now_price != null && amount >= Number(auction.buy_now_price))
           return ack?.({ ok: false, error: "Counter must stay below the buy-now price." });
-        await updateRecord("offers", offerId, {
+        const counteredOk = await updateRecord("offers", offerId, {
           status: "countered",
           counter_amount: amount,
           counter_message: message || null,
           responded_at: nowIso(),
           updated_at: nowIso(),
         });
+        if (!counteredOk) {
+          return ack?.({ ok: false, error: "Could not send counter-offer — please retry." });
+        }
         await notify(
           offer.buyer_user,
           "offer",
@@ -1294,8 +1633,8 @@ io.on("connection", (socket: Socket) => {
 
   socket.on("offer:counter-respond", async (data: any, ack?: Ack) => {
     try {
-      const user = await requireAuth();
-      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      const user = await requireSocketAuth(ack, "Sign in first.");
+      if (!user) return;
       const offerId = Number(data?.offerId);
       const accept = data?.accept === true;
       const offer = await getRecord("offers", offerId);
@@ -1308,34 +1647,48 @@ io.on("connection", (socket: Socket) => {
       if (!auction) return ack?.({ ok: false, error: "Item not found." });
 
       if (accept) {
-        if (auction.status !== "live")
-          return ack?.({ ok: false, error: "This item is no longer live." });
-        const price = Number(offer.counter_amount ?? offer.amount);
-        const orderId = await sellAuctionTo(
-          auction,
-          { id: offer.buyer_user, username: offer.buyer_username },
-          price,
-        );
-        if (orderId == null) return ack?.({ ok: false, error: "Could not complete the sale — retry." });
-        await updateRecord("offers", offerId, {
-          status: "accepted",
-          responded_at: nowIso(),
-          updated_at: nowIso(),
+        await bidService.withAuctionLock(Number(offer.auction_id), async () => {
+          const freshOffer = await getRecord("offers", offerId);
+          if (!freshOffer || freshOffer.status !== "countered")
+            return ack?.({ ok: false, error: "This offer has no counter pending." });
+          const freshAuction = await getRecord("auctions", freshOffer.auction_id);
+          if (!freshAuction) return ack?.({ ok: false, error: "Item not found." });
+          if (freshAuction.status !== "live")
+            return ack?.({ ok: false, error: "This item is no longer live." });
+          const price = Number(freshOffer.counter_amount ?? freshOffer.amount);
+          const orderId = await sellAuctionTo(
+            freshAuction,
+            { id: freshOffer.buyer_user, username: freshOffer.buyer_username },
+            price,
+          );
+          if (orderId == null) return ack?.({ ok: false, error: "Could not complete the sale — retry." });
+          const acceptedOk = await updateRecord("offers", offerId, {
+            status: "accepted",
+            responded_at: nowIso(),
+            updated_at: nowIso(),
+          });
+          if (!acceptedOk) {
+            return ack?.({ ok: false, error: "Sale completed, but failed to update offer status — please refresh." });
+          }
+          await audit(user.id, "offer:accept_counter", "offers", offerId, "web", {
+            auctionId: freshAuction.id,
+            amount: price,
+          });
+          const updatedOffer = await getRecord("offers", offerId);
+          if (updatedOffer) io.emit("offer:update", { auctionId: freshAuction.id, offer: updatedOffer });
+          return ack?.({ ok: true, accepted: true, orderId, offer: updatedOffer });
         });
-        await audit(user.id, "offer:accept_counter", "offers", offerId, "web", {
-          auctionId: auction.id,
-          amount: price,
-        });
-        const updatedOffer = await getRecord("offers", offerId);
-        io.emit("offer:update", { auctionId: auction.id, offer: updatedOffer });
-        return ack?.({ ok: true, accepted: true, orderId, offer: updatedOffer });
+        return;
       }
 
-      await updateRecord("offers", offerId, {
+      const declinedOk = await updateRecord("offers", offerId, {
         status: "declined",
         responded_at: nowIso(),
         updated_at: nowIso(),
       });
+      if (!declinedOk) {
+        return ack?.({ ok: false, error: "Could not decline counter-offer — please retry." });
+      }
       await notify(
         auction.user,
         "info",
@@ -1345,7 +1698,7 @@ io.on("connection", (socket: Socket) => {
       );
       await audit(user.id, "offer:decline_counter", "offers", offerId, "web", {});
       const updatedOffer = await getRecord("offers", offerId);
-      io.emit("offer:update", { auctionId: auction.id, offer: updatedOffer });
+      if (updatedOffer) io.emit("offer:update", { auctionId: auction.id, offer: updatedOffer });
       ack?.({ ok: true, declined: true, offer: updatedOffer });
     } catch (err) {
       console.error("[offer:counter-respond]", err);
@@ -1356,8 +1709,8 @@ io.on("connection", (socket: Socket) => {
   // ── Gap-8: featured listing (sell wizard, US$2 + VAT fee) ────────────
   socket.on("listing:feature", async (data: any, ack?: Ack) => {
     try {
-      const user = await requireAuth();
-      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      const user = await requireSocketAuth(ack, "Sign in first.");
+      if (!user) return;
       const auctionId = Number(data?.auctionId);
       const auction = await getRecord("auctions", auctionId);
       if (!auction) return ack?.({ ok: false, error: "Listing not found." });
@@ -1392,7 +1745,10 @@ io.on("connection", (socket: Socket) => {
           ok: false,
           error: "Could not charge the featured fee (US$2 + VAT) — please retry.",
         });
-      await updateRecord("auctions", auctionId, { featured: 1, updated_at: nowIso() });
+      const featOk = await updateRecord("auctions", auctionId, { featured: 1, updated_at: nowIso() });
+      if (!featOk) {
+        return ack?.({ ok: false, error: "Could not mark listing as featured — please retry." });
+      }
       await notify(
         user.id,
         "info",
@@ -1402,7 +1758,7 @@ io.on("connection", (socket: Socket) => {
       );
       await audit(user.id, "listing:feature", "auctions", auctionId, "web", { fee: 2 });
       const updated = await getRecord("auctions", auctionId);
-      io.emit("auction:update", { auction: updated });
+      if (updated) io.emit("auction:update", { auction: updated });
       ack?.({ ok: true, auction: updated });
     } catch (err) {
       console.error("[listing:feature]", err);
@@ -1413,8 +1769,8 @@ io.on("connection", (socket: Socket) => {
   // ── Gap-8: live-room sessions (host + lots + hammer host controls) ──
   socket.on("room:create", async (data: any, ack?: Ack) => {
     try {
-      const user = await requireAuth();
-      if (!user) return ack?.({ ok: false, error: "Sign in to host a live room." });
+      const user = await requireSocketAuth(ack, "Sign in to host a live room.");
+      if (!user) return;
       const title = String(data?.title ?? "").trim().slice(0, 120);
       const scheduledAt = String(data?.scheduledAt ?? "").trim();
       if (title.length < 3)
@@ -1432,7 +1788,10 @@ io.on("connection", (socket: Socket) => {
         created_at: nowIso(),
         updated_at: nowIso(),
       });
-      const session = await getRecord("live_sessions", id ?? 0);
+      if (id == null) {
+        return ack?.({ ok: false, error: "Could not create live room — please retry." });
+      }
+      const session = await getRecord("live_sessions", id);
       await audit(user.id, "room:create", "live_sessions", id, "web", { title });
       if (session) io.emit("room:update", { session });
       ack?.({ ok: true, session });
@@ -1444,8 +1803,8 @@ io.on("connection", (socket: Socket) => {
 
   socket.on("room:add-lot", async (data: any, ack?: Ack) => {
     try {
-      const user = await requireAuth();
-      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      const user = await requireSocketAuth(ack, "Sign in first.");
+      if (!user) return;
       const sessionId = Number(data?.sessionId);
       const auctionId = Number(data?.auctionId);
       const session = await getRecord("live_sessions", sessionId);
@@ -1462,18 +1821,21 @@ io.on("connection", (socket: Socket) => {
         return ack?.({ ok: false, error: "This listing is already a lot in a room." });
       if (Number(auction.bid_count ?? 0) > 0)
         return ack?.({ ok: false, error: "Only listings without bids can be auctioned live." });
-      await updateRecord("auctions", auctionId, {
+      const addedOk = await updateRecord("auctions", auctionId, {
         live_session_id: sessionId,
         // lots live at the room's pace — park the timed end 30 days out so
         // the timed sweep never ends a lot mid-room.
         ends_at: isoPlus(30 * 24 * 3600_000),
         updated_at: nowIso(),
       });
+      if (!addedOk) {
+        return ack?.({ ok: false, error: "Could not add lot to live room — please retry." });
+      }
       await audit(user.id, "room:add-lot", "auctions", auctionId, "web", { sessionId });
       const updated = await getRecord("auctions", auctionId);
       const updatedSession = await getRecord("live_sessions", sessionId);
-      io.emit("auction:update", { auction: updated });
-      io.emit("room:update", { session: updatedSession });
+      if (updated) io.emit("auction:update", { auction: updated });
+      if (updatedSession) io.emit("room:update", { session: updatedSession });
       ack?.({ ok: true, auction: updated });
     } catch (err) {
       console.error("[room:add-lot]", err);
@@ -1483,8 +1845,8 @@ io.on("connection", (socket: Socket) => {
 
   socket.on("room:remove-lot", async (data: any, ack?: Ack) => {
     try {
-      const user = await requireAuth();
-      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      const user = await requireSocketAuth(ack, "Sign in first.");
+      if (!user) return;
       const sessionId = Number(data?.sessionId);
       const auctionId = Number(data?.auctionId);
       const session = await getRecord("live_sessions", sessionId);
@@ -1498,14 +1860,17 @@ io.on("connection", (socket: Socket) => {
         return ack?.({ ok: false, error: "Close the current lot before removing it." });
       if (auction.status !== "live")
         return ack?.({ ok: false, error: "Sold/ended lots stay in the room history." });
-      await updateRecord("auctions", auctionId, {
+      const removedOk = await updateRecord("auctions", auctionId, {
         live_session_id: null,
         ends_at: isoPlus(7 * 24 * 3600_000),
         updated_at: nowIso(),
       });
+      if (!removedOk) {
+        return ack?.({ ok: false, error: "Could not remove lot from live room — please retry." });
+      }
       await audit(user.id, "room:remove-lot", "auctions", auctionId, "web", { sessionId });
       const updated = await getRecord("auctions", auctionId);
-      io.emit("auction:update", { auction: updated });
+      if (updated) io.emit("auction:update", { auction: updated });
       ack?.({ ok: true, auction: updated });
     } catch (err) {
       console.error("[room:remove-lot]", err);
@@ -1515,8 +1880,8 @@ io.on("connection", (socket: Socket) => {
 
   socket.on("host:open-lot", async (data: any, ack?: Ack) => {
     try {
-      const user = await requireAuth();
-      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      const user = await requireSocketAuth(ack, "Sign in first.");
+      if (!user) return;
       const sessionId = Number(data?.sessionId);
       const session = await getRecord("live_sessions", sessionId);
       if (!session) return ack?.({ ok: false, error: "Live room not found." });
@@ -1536,13 +1901,16 @@ io.on("connection", (socket: Socket) => {
         lot = lots.find((l: any) => l.id !== session.current_lot_id) ?? null;
       }
       if (!lot) return ack?.({ ok: false, error: "No more lots to open." });
-      await updateRecord("live_sessions", sessionId, {
+      const openedOk = await updateRecord("live_sessions", sessionId, {
         status: "live",
         current_lot_id: lot.id,
         lot_index: Number(session.lot_index ?? 0) + 1,
         close_at: null,
         updated_at: nowIso(),
       });
+      if (!openedOk) {
+        return ack?.({ ok: false, error: "Could not open lot — please retry." });
+      }
       await audit(user.id, "host:open-lot", "live_sessions", sessionId, "web", { lotId: lot.id });
       const updatedSession = await getRecord("live_sessions", sessionId);
       const watchers = await getRecords(
@@ -1570,8 +1938,8 @@ io.on("connection", (socket: Socket) => {
 
   socket.on("host:close-lot", async (data: any, ack?: Ack) => {
     try {
-      const user = await requireAuth();
-      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      const user = await requireSocketAuth(ack, "Sign in first.");
+      if (!user) return;
       const sessionId = Number(data?.sessionId);
       const sold = data?.sold === true;
       const session = await getRecord("live_sessions", sessionId);
@@ -1580,31 +1948,46 @@ io.on("connection", (socket: Socket) => {
         return ack?.({ ok: false, error: "Only the host can close lots." });
       if (session.status !== "live" || !session.current_lot_id)
         return ack?.({ ok: false, error: "No lot is open in this room." });
-      const lot = await getRecord("auctions", session.current_lot_id);
-      if (!lot) return ack?.({ ok: false, error: "Lot not found." });
-      if (sold) {
-        const bids = await getRecords(
-          "bids",
-          `filter[auction_id][$eq]=${lot.id}&order=-id&limit=50`,
-        );
-        const active = bids.find((b: any) => b.status === "active");
-        if (!active)
-          return ack?.({ ok: false, error: "No bids to sell to — pass the lot instead." });
-        const orderId = await sellAuctionTo(
-          lot,
-          { id: active.user, username: active.bidder_username },
-          active.amount,
-        );
-        if (orderId == null) return ack?.({ ok: false, error: "Could not complete the sale." });
-        await audit(user.id, "room:hammer", "auctions", lot.id, "web", { sessionId, manual: true });
-      } else {
-        await endUnsold(lot);
-        await audit(user.id, "room:pass", "auctions", lot.id, "web", { sessionId });
-      }
-      const fresh = await getRecord("live_sessions", sessionId);
-      await advanceRoom(fresh);
-      const updatedSession = await getRecord("live_sessions", sessionId);
-      ack?.({ ok: true, session: updatedSession });
+      await bidService.withAuctionLock(Number(session.current_lot_id), async () => {
+        const freshSession = await getRecord("live_sessions", sessionId);
+        if (
+          !freshSession ||
+          freshSession.status !== "live" ||
+          Number(freshSession.current_lot_id) !== Number(session.current_lot_id)
+        )
+          return ack?.({ ok: false, error: "No lot is open in this room." });
+        const lot = await getRecord("auctions", freshSession.current_lot_id);
+        if (!lot) return ack?.({ ok: false, error: "Lot not found." });
+        if (lot.status !== "live")
+          return ack?.({ ok: false, error: "Lot is no longer live." });
+        if (sold) {
+          const bids = await getRecords(
+            "bids",
+            `filter[auction_id][$eq]=${lot.id}&order=-id&limit=50`,
+          );
+          const active = bids.find((b: any) => b.status === "active");
+          if (!active)
+            return ack?.({ ok: false, error: "No bids to sell to — pass the lot instead." });
+          const orderId = await sellAuctionTo(
+            lot,
+            { id: active.user, username: active.bidder_username },
+            active.amount,
+          );
+          if (orderId == null) return ack?.({ ok: false, error: "Could not complete the sale." });
+          await audit(user.id, "room:hammer", "auctions", lot.id, "web", { sessionId, manual: true });
+        } else {
+          const unsoldOk = await endUnsold(lot);
+          if (!unsoldOk) return ack?.({ ok: false, error: "Could not close lot — please retry." });
+          await audit(user.id, "room:pass", "auctions", lot.id, "web", { sessionId });
+        }
+        const fresh = await getRecord("live_sessions", sessionId);
+        const advancedOk = fresh ? await advanceRoom(fresh) : false;
+        if (!advancedOk) {
+          return ack?.({ ok: false, error: "Lot closed, but failed to advance live room — please refresh." });
+        }
+        const updatedSession = await getRecord("live_sessions", sessionId);
+        ack?.({ ok: true, session: updatedSession });
+      });
     } catch (err) {
       console.error("[host:close-lot]", err);
       ack?.({ ok: false, error: "Unexpected error — please retry." });
@@ -1613,8 +1996,8 @@ io.on("connection", (socket: Socket) => {
 
   socket.on("host:end-session", async (data: any, ack?: Ack) => {
     try {
-      const user = await requireAuth();
-      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      const user = await requireSocketAuth(ack, "Sign in first.");
+      if (!user) return;
       const sessionId = Number(data?.sessionId);
       const session = await getRecord("live_sessions", sessionId);
       if (!session) return ack?.({ ok: false, error: "Live room not found." });
@@ -1628,25 +2011,41 @@ io.on("connection", (socket: Socket) => {
         `filter[live_session_id][$eq]=${sessionId}&filter[status][$eq]=live&limit=100`,
       );
       for (const lot of lots) {
-        await updateRecord("auctions", lot.id, {
-          live_session_id: null,
-          ends_at: isoPlus(7 * 24 * 3600_000),
-          updated_at: nowIso(),
+        const failed = await bidService.withAuctionLock(Number(lot.id), async () => {
+          const freshLot = await getRecord("auctions", lot.id);
+          if (!freshLot || freshLot.status !== "live" || Number(freshLot.live_session_id) !== sessionId) {
+            return false;
+          }
+          const lotOk = await updateRecord("auctions", lot.id, {
+            live_session_id: null,
+            ends_at: isoPlus(7 * 24 * 3600_000),
+            updated_at: nowIso(),
+          });
+          if (!lotOk) {
+            return true;
+          }
+          const updated = await getRecord("auctions", lot.id);
+          if (updated) io.emit("auction:update", { auction: updated });
+          return false;
         });
-        const updated = await getRecord("auctions", lot.id);
-        io.emit("auction:update", { auction: updated });
+        if (failed) {
+          return ack?.({ ok: false, error: "Could not release live room lots — please retry." });
+        }
       }
-      await updateRecord("live_sessions", sessionId, {
+      const closedOk = await updateRecord("live_sessions", sessionId, {
         status: "closed",
         current_lot_id: null,
         close_at: null,
         updated_at: nowIso(),
       });
+      if (!closedOk) {
+        return ack?.({ ok: false, error: "Could not close live room — please retry." });
+      }
       await audit(user.id, "host:end-session", "live_sessions", sessionId, "web", {
         returnedLots: lots.length,
       });
       const updatedSession = await getRecord("live_sessions", sessionId);
-      io.emit("room:update", { session: updatedSession });
+      if (updatedSession) io.emit("room:update", { session: updatedSession });
       ack?.({ ok: true, session: updatedSession });
     } catch (err) {
       console.error("[host:end-session]", err);
@@ -1656,85 +2055,96 @@ io.on("connection", (socket: Socket) => {
 
   socket.on("buynow:purchase", async (data: any, ack?: Ack) => {
     try {
-      const user = await requireAuth();
-      if (!user) return ack?.({ ok: false, error: "Sign in to buy instantly." });
+      const user = await requireSocketAuth(ack, "Sign in to buy instantly.");
+      if (!user) return;
       const auctionId = Number(data?.auctionId);
-      const auction = await getRecord("auctions", auctionId);
-      if (!auction) return ack?.({ ok: false, error: "Auction not found." });
-      if (auction.status !== "live")
-        return ack?.({ ok: false, error: "This auction is no longer live." });
-      if (auction.buy_now_price == null)
-        return ack?.({ ok: false, error: "This auction has no buy-now price." });
-      if (auction.bid_count > 0)
-        return ack?.({ ok: false, error: "Buy-now is no longer available after the first bid." });
-      if (auction.user === user.id)
-        return ack?.({ ok: false, error: "You cannot buy your own auction." });
+      if (!Number.isFinite(auctionId) || auctionId <= 0)
+        return ack?.({ ok: false, error: "Auction not found." });
+      await bidService.withAuctionLock(auctionId, async () => {
+        const auction = await getRecord("auctions", auctionId);
+        if (!auction) return ack?.({ ok: false, error: "Auction not found." });
+        if (auction.status !== "live")
+          return ack?.({ ok: false, error: "This auction is no longer live." });
+        if (auction.buy_now_price == null)
+          return ack?.({ ok: false, error: "This auction has no buy-now price." });
+        const bids = await getRecords(
+          "bids",
+          `filter[auction_id][$eq]=${auctionId}&order=-id&limit=10`,
+        );
+        if (auction.bid_count > 0 || bids.some((b: any) => b.status === "active"))
+          return ack?.({ ok: false, error: "Buy-now is no longer available after the first bid." });
+        if (auction.user === user.id)
+          return ack?.({ ok: false, error: "You cannot buy your own auction." });
 
-      await updateRecord("auctions", auctionId, { status: "sold", updated_at: nowIso() });
-      const orderId = await createRecord("orders", {
-        auction_id: auctionId,
-        auction_title: auction.title,
-        buyer_user: user.id,
-        seller_user: auction.user,
-        buyer_username: user.username,
-        seller_username: auction.seller_username,
-        final_price: auction.buy_now_price,
-        status: "pending_payment",
-        // Delivery address the buyer selected at checkout (GIS displayName)
-        address: typeof data?.address === "string" && data.address.trim()
-          ? data.address.trim().slice(0, 200)
-          : null,
-        pay_by: isoPlus(48 * 3600_000),
-        created_at: nowIso(),
-        updated_at: nowIso(),
-      });
-      if (orderId == null) {
-        // Roll back the sold flag — the order row could not be created.
-        await updateRecord("auctions", auctionId, { status: "live", updated_at: nowIso() });
-        return ack?.({ ok: false, error: "Could not create the order — please retry." });
-      }
-      await notify(
-        auction.user,
-        "sold",
-        "Your item sold (buy-now)",
-        `${user.username} bought ${auction.title} for US$${auction.buy_now_price}.`,
-        `#/orders/${orderId}`,
-      );
-      await notify(
-        user.id,
-        "order",
-        "Reserved — complete payment",
-        `${auction.title}: pay within 48h to confirm.`,
-        `#/orders/${orderId}`,
-      );
-      // TUCS: buy-now is a won+sold pair — notify both parties cross-channel.
-      commsEvent({
-        userId: user.username,
-        eventKey: "auction.won",
-        params: { auctionTitle: auction.title, amount: auction.buy_now_price, auctionId },
-        deepLink: `${APP_URL}/#/item/${auctionId}`,
-      });
-      if (auction.seller_username) {
+        const soldOk = await updateRecord("auctions", auctionId, { status: "sold", updated_at: nowIso() });
+        if (!soldOk) {
+          return ack?.({ ok: false, error: "Could not reserve this listing — please retry." });
+        }
+        const orderId = await createRecord("orders", {
+          auction_id: auctionId,
+          auction_title: auction.title,
+          buyer_user: user.id,
+          seller_user: auction.user,
+          buyer_username: user.username,
+          seller_username: auction.seller_username,
+          final_price: auction.buy_now_price,
+          status: "pending_payment",
+          // Delivery address the buyer selected at checkout (GIS displayName)
+          address: typeof data?.address === "string" && data.address.trim()
+            ? data.address.trim().slice(0, 200)
+            : null,
+          pay_by: isoPlus(48 * 3600_000),
+          created_at: nowIso(),
+          updated_at: nowIso(),
+        });
+        if (orderId == null) {
+          // Roll back the sold flag — the order row could not be created.
+          await updateRecord("auctions", auctionId, { status: "live", updated_at: nowIso() });
+          return ack?.({ ok: false, error: "Could not create the order — please retry." });
+        }
+        await notify(
+          auction.user,
+          "sold",
+          "Your item sold (buy-now)",
+          `${user.username} bought ${auction.title} for US$${auction.buy_now_price}.`,
+          `#/orders/${orderId}`,
+        );
+        await notify(
+          user.id,
+          "order",
+          "Reserved — complete payment",
+          `${auction.title}: pay within 48h to confirm.`,
+          `#/orders/${orderId}`,
+        );
+        // TUCS: buy-now is a won+sold pair — notify both parties cross-channel.
         commsEvent({
-          userId: auction.seller_username,
-          eventKey: "auction.sold",
-          params: {
-            auctionTitle: auction.title,
-            amount: auction.buy_now_price,
-            winnerLabel: user.username,
-            auctionId,
-          },
+          userId: user.username,
+          eventKey: "auction.won",
+          params: { auctionTitle: auction.title, amount: auction.buy_now_price, auctionId },
           deepLink: `${APP_URL}/#/item/${auctionId}`,
         });
-      }
-      await audit(user.id, "buynow:purchase", "auctions", auctionId, "web", {
-        price: auction.buy_now_price,
+        if (auction.seller_username) {
+          commsEvent({
+            userId: auction.seller_username,
+            eventKey: "auction.sold",
+            params: {
+              auctionTitle: auction.title,
+              amount: auction.buy_now_price,
+              winnerLabel: user.username,
+              auctionId,
+            },
+            deepLink: `${APP_URL}/#/item/${auctionId}`,
+          });
+        }
+        await audit(user.id, "buynow:purchase", "auctions", auctionId, "web", {
+          price: auction.buy_now_price,
+        });
+        const order = await getRecord("orders", orderId ?? 0);
+        const updatedAuction = await getRecord("auctions", auctionId);
+        if (updatedAuction) io.emit("auction:update", { auction: updatedAuction });
+        if (order) io.emit("order:update", { order });
+        ack?.({ ok: true, orderId, order });
       });
-      const order = await getRecord("orders", orderId ?? 0);
-      const updatedAuction = await getRecord("auctions", auctionId);
-      if (updatedAuction) io.emit("auction:update", { auction: updatedAuction });
-      if (order) io.emit("order:update", { order });
-      ack?.({ ok: true, orderId, order });
     } catch (err) {
       console.error("[buynow:purchase]", err);
       ack?.({ ok: false, error: "Unexpected error — please retry." });
@@ -1743,8 +2153,8 @@ io.on("connection", (socket: Socket) => {
 
   socket.on("question:ask", async (data: any, ack?: Ack) => {
     try {
-      const user = await requireAuth();
-      if (!user) return ack?.({ ok: false, error: "Sign in to ask questions." });
+      const user = await requireSocketAuth(ack, "Sign in to ask questions.");
+      if (!user) return;
       const auctionId = Number(data?.auctionId);
       const body = String(data?.body ?? "").trim();
       if (body.length < 10) return ack?.({ ok: false, error: "Write at least 10 characters." });
@@ -1757,7 +2167,10 @@ io.on("connection", (socket: Socket) => {
         body,
         created_at: nowIso(),
       });
-      const question = await getRecord("questions", id ?? 0);
+      if (id == null) {
+        return ack?.({ ok: false, error: "Could not post your question — please retry." });
+      }
+      const question = await getRecord("questions", id);
       await notify(
         auction.user,
         "question",
@@ -1776,8 +2189,8 @@ io.on("connection", (socket: Socket) => {
 
   socket.on("question:answer", async (data: any, ack?: Ack) => {
     try {
-      const user = await requireAuth();
-      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      const user = await requireSocketAuth(ack, "Sign in first.");
+      if (!user) return;
       const questionId = Number(data?.questionId);
       const body = String(data?.body ?? "").trim();
       const question = await getRecord("questions", questionId);
@@ -1785,7 +2198,10 @@ io.on("connection", (socket: Socket) => {
       const auction = await getRecord("auctions", question.auction_id);
       if (!auction || (auction.user !== user.id && !user.admin))
         return ack?.({ ok: false, error: "Only the seller can answer this question." });
-      await updateRecord("questions", questionId, { answer: body, answered_at: nowIso() });
+      const answeredOk = await updateRecord("questions", questionId, { answer: body, answered_at: nowIso() });
+      if (!answeredOk) {
+        return ack?.({ ok: false, error: "Could not save your answer — please retry." });
+      }
       const updated = await getRecord("questions", questionId);
       await notify(
         question.user,
@@ -1805,8 +2221,8 @@ io.on("connection", (socket: Socket) => {
 
   socket.on("message:send", async (data: any, ack?: Ack) => {
     try {
-      const user = await requireAuth();
-      if (!user) return ack?.({ ok: false, error: "Sign in to send messages." });
+      const user = await requireSocketAuth(ack, "Sign in to send messages.");
+      if (!user) return;
       const body = String(data?.body ?? "").trim();
       if (!body) return ack?.({ ok: false, error: "Message is empty." });
 
@@ -1838,7 +2254,10 @@ io.on("connection", (socket: Socket) => {
             last_message_at: nowIso(),
             created_at: nowIso(),
           });
-          thread = await getRecord("threads", threadId ?? 0);
+          if (threadId == null) {
+            return ack?.({ ok: false, error: "Could not start conversation — please retry." });
+          }
+          thread = await getRecord("threads", threadId);
         }
       }
       if (!thread && data?.toUsername) {
@@ -1866,7 +2285,10 @@ io.on("connection", (socket: Socket) => {
             last_message_at: nowIso(),
             created_at: nowIso(),
           });
-          thread = await getRecord("threads", threadId ?? 0);
+          if (threadId == null) {
+            return ack?.({ ok: false, error: "Could not start conversation — please retry." });
+          }
+          thread = await getRecord("threads", threadId);
         }
       }
       if (!thread) return ack?.({ ok: false, error: "Conversation not found." });
@@ -1878,8 +2300,14 @@ io.on("connection", (socket: Socket) => {
         body,
         created_at: nowIso(),
       });
-      await updateRecord("threads", thread.id, { last_message_at: nowIso() });
-      const message = await getRecord("messages", messageId ?? 0);
+      if (messageId == null) {
+        return ack?.({ ok: false, error: "Could not send message — please retry." });
+      }
+      const threadUpdatedOk = await updateRecord("threads", thread.id, { last_message_at: nowIso() });
+      if (!threadUpdatedOk) {
+        console.error(`[message:send] failed to update last_message_at for thread ${thread.id}`);
+      }
+      const message = await getRecord("messages", messageId);
       const recipient = thread.buyer_user === user.id ? thread.seller_user : thread.buyer_user;
       await notify(
         recipient,
@@ -1913,8 +2341,8 @@ io.on("connection", (socket: Socket) => {
 
   socket.on("order:pay", async (data: any, ack?: Ack) => {
     try {
-      const user = await requireAuth();
-      if (!user) return ack?.({ ok: false, error: "Sign in to pay." });
+      const user = await requireSocketAuth(ack, "Sign in to pay.");
+      if (!user) return;
       const orderId = Number(data?.orderId);
       const order = await getRecord("orders", orderId);
       if (!order) return ack?.({ ok: false, error: "Order not found." });
@@ -1926,12 +2354,15 @@ io.on("connection", (socket: Socket) => {
       const reference =
         String(data?.reference ?? "") ||
         `${method.toUpperCase()}-${Math.floor(Math.random() * 9000 + 1000)}`;
-      await updateRecord("orders", orderId, {
+      const paidOk = await updateRecord("orders", orderId, {
         status: "paid",
         paid_at: nowIso(),
         updated_at: nowIso(),
       });
-      await createRecord("payments", {
+      if (!paidOk) {
+        return ack?.({ ok: false, error: "Could not confirm order payment — please retry." });
+      }
+      const paymentId = await createRecord("payments", {
         order_id: orderId,
         user: user.id,
         method,
@@ -1940,6 +2371,14 @@ io.on("connection", (socket: Socket) => {
         reference,
         created_at: nowIso(),
       });
+      if (paymentId == null) {
+        await updateRecord("orders", orderId, {
+          status: "pending_payment",
+          paid_at: null,
+          updated_at: nowIso(),
+        });
+        return ack?.({ ok: false, error: "Could not record payment entry — please retry." });
+      }
       // Finance (12-b): fund escrow for this payment — item price + the
       // auction's shipping fee (§G: buyer pays win price + shipping).
       // Fire-and-forget; the finance sweep backfills if this is missed.
@@ -1972,8 +2411,8 @@ io.on("connection", (socket: Socket) => {
 
   socket.on("order:ship", async (data: any, ack?: Ack) => {
     try {
-      const user = await requireAuth();
-      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      const user = await requireSocketAuth(ack, "Sign in first.");
+      if (!user) return;
       const orderId = Number(data?.orderId);
       const order = await getRecord("orders", orderId);
       if (!order) return ack?.({ ok: false, error: "Order not found." });
@@ -1985,13 +2424,16 @@ io.on("connection", (socket: Socket) => {
       const tracking = String(
         data?.tracking ?? `TRK${Math.floor(Math.random() * 900000 + 100000)}`,
       );
-      await updateRecord("orders", orderId, {
+      const shippedOk = await updateRecord("orders", orderId, {
         status: "shipped",
         shipped_at: nowIso(),
         carrier,
         tracking,
         updated_at: nowIso(),
       });
+      if (!shippedOk) {
+        return ack?.({ ok: false, error: "Could not update shipment details — please retry." });
+      }
       await notify(
         order.buyer_user,
         "order",
@@ -2011,8 +2453,8 @@ io.on("connection", (socket: Socket) => {
 
   socket.on("order:deliver", async (data: any, ack?: Ack) => {
     try {
-      const user = await requireAuth();
-      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      const user = await requireSocketAuth(ack, "Sign in first.");
+      if (!user) return;
       const orderId = Number(data?.orderId);
       const order = await getRecord("orders", orderId);
       if (!order) return ack?.({ ok: false, error: "Order not found." });
@@ -2020,11 +2462,14 @@ io.on("connection", (socket: Socket) => {
         return ack?.({ ok: false, error: "Only the buyer can confirm delivery." });
       if (order.status !== "shipped")
         return ack?.({ ok: false, error: "Order must be shipped first." });
-      await updateRecord("orders", orderId, {
+      const deliveredOk = await updateRecord("orders", orderId, {
         status: "delivered",
         delivered_at: nowIso(),
         updated_at: nowIso(),
       });
+      if (!deliveredOk) {
+        return ack?.({ ok: false, error: "Could not confirm delivery — please retry." });
+      }
       // Finance (12-b): delivery confirmed → open the dispute window.
       financeEvent("order.delivered", { orderId, deliveredAt: nowIso() });
       await notify(
@@ -2046,8 +2491,8 @@ io.on("connection", (socket: Socket) => {
 
   socket.on("order:rate", async (data: any, ack?: Ack) => {
     try {
-      const user = await requireAuth();
-      if (!user) return ack?.({ ok: false, error: "Sign in to rate." });
+      const user = await requireSocketAuth(ack, "Sign in to rate.");
+      if (!user) return;
       const orderId = Number(data?.orderId);
       const score = Math.max(1, Math.min(5, Number(data?.score) || 5));
       const comment = String(data?.comment ?? "").slice(0, 500);
@@ -2070,6 +2515,9 @@ io.on("connection", (socket: Socket) => {
         comment,
         created_at: nowIso(),
       });
+      if (ratingId == null) {
+        return ack?.({ ok: false, error: "Could not save rating — please retry." });
+      }
       const profiles = await getRecords(
         "profiles",
         `filter[user][$eq]=${encodeURIComponent(rateeUser)}&limit=1`,
@@ -2077,17 +2525,26 @@ io.on("connection", (socket: Socket) => {
       const profile = profiles[0];
       if (profile) {
         const total = profile.rating_avg * profile.rating_count + score;
-        await updateRecord("profiles", profile.id, {
+        const profOk = await updateRecord("profiles", profile.id, {
           rating_count: profile.rating_count + 1,
           rating_avg: Math.round((total / (profile.rating_count + 1)) * 100) / 100,
         });
+        if (!profOk) {
+          console.error(`[order:rate] failed to update profile ${profile.id} rating aggregate`);
+        }
       }
       if (order.status === "delivered") {
-        await updateRecord("orders", orderId, {
+        const compOk = await updateRecord("orders", orderId, {
           status: "completed",
           completed_at: nowIso(),
           updated_at: nowIso(),
         });
+        if (!compOk) {
+          return ack?.({
+            ok: false,
+            error: "Rating saved, but failed to update order status — please refresh.",
+          });
+        }
       }
       await notify(
         rateeUser,
@@ -2097,7 +2554,7 @@ io.on("connection", (socket: Socket) => {
         `#/u/${rateeUsername}`,
       );
       await audit(user.id, "order:rate", "orders", orderId, "web", { score });
-      const rating = await getRecord("ratings", ratingId ?? 0);
+      const rating = await getRecord("ratings", ratingId);
       const updatedOrder = await getRecord("orders", orderId);
       if (updatedOrder) io.emit("order:update", { order: updatedOrder });
       ack?.({ ok: true, rating });
@@ -2113,9 +2570,11 @@ httpServer.listen(PORT, "0.0.0.0", () => {
   console.log(`[trade-engine] listening on :${PORT}`);
   void (async () => {
     try {
-      adminToken = await tbLogin();
-      console.log("[trade-engine] admin session established (TrailBase :3001)");
-      await reviveExpiredAuctions();
+      await ensureAdminToken(true);
+      console.log(`[trade-engine] admin session established (${TRAILBASE})`);
+      if (process.env.TRADE_SKIP_BOOT_REVIVE !== "1") {
+        await reviveExpiredAuctions();
+      }
     } catch (err) {
       console.error("[trade-engine] boot warning:", (err as Error).message);
     }
@@ -2123,24 +2582,41 @@ httpServer.listen(PORT, "0.0.0.0", () => {
 });
 
 // sweeps
-setInterval(() => {
-  void sweepAuctions().catch((err) => console.error("[sweep]", err));
-}, 10_000);
+const sweepTimers = [
+  setInterval(() => {
+    void sweepAuctions().catch((err) => console.error("[sweep]", err));
+  }, 10_000),
+  // Gap-8 sweeps: live-room hammer (snappy 3s), offer expiry, search alerts
+  setInterval(() => {
+    void sweepLiveRooms().catch((err) => console.error("[sweep:rooms]", err));
+  }, 3_000),
+  setInterval(() => {
+    void sweepOfferExpiry().catch((err) => console.error("[sweep:offers]", err));
+  }, 30_000),
+  setInterval(() => {
+    void sweepSavedSearches().catch((err) => console.error("[sweep:searches]", err));
+  }, 60_000),
+  // refresh admin token periodically
+  setInterval(() => {
+    adminToken = null;
+    adminTokenExpMs = 0;
+  }, 30 * 60_000),
+];
 
-// Gap-8 sweeps: live-room hammer (snappy 3s), offer expiry, search alerts
-setInterval(() => {
-  void sweepLiveRooms().catch((err) => console.error("[sweep:rooms]", err));
-}, 3_000);
-setInterval(() => {
-  void sweepOfferExpiry().catch((err) => console.error("[sweep:offers]", err));
-}, 30_000);
-setInterval(() => {
-  void sweepSavedSearches().catch((err) => console.error("[sweep:searches]", err));
-}, 60_000);
+function shutdown(signal: string): void {
+  console.log(`[trade-engine] shutting down (${signal})`);
+  for (const t of sweepTimers) clearInterval(t);
+  canonicalStore?.close();
+  revocationStore?.close?.();
+  try {
+    io.close();
+  } catch {
+    /* ignore */
+  }
+  httpServer.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 2000).unref();
+}
 
-// refresh admin token periodically
-setInterval(() => {
-  adminToken = null;
-}, 30 * 60_000);
-
+process.on("SIGINT", () => shutdown("SIGINT"));
+process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("unhandledRejection", (err) => console.error("[unhandled]", err));

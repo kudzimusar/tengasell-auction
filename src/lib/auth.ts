@@ -1,7 +1,11 @@
+import { randomBytes } from "node:crypto"
 import type { NextAuthOptions } from "next-auth"
 import Credentials from "next-auth/providers/credentials"
 import { db } from "@/lib/db"
 import { verifyPassword } from "@/lib/server/auth-core"
+
+const devEphemeralSecret =
+  process.env.NODE_ENV !== "production" ? randomBytes(32).toString("hex") : undefined
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -51,5 +55,5 @@ export const authOptions: NextAuthOptions = {
       return session
     },
   },
-  secret: process.env.NEXTAUTH_SECRET || "tengasell-dev-secret-change-in-production",
+  secret: process.env.NEXTAUTH_SECRET || devEphemeralSecret,
 }

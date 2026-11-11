@@ -1,0 +1,133 @@
+name: Tengasell Backend Security Gate (SEC-04)
+
+on:
+  push:
+    branches:
+      - main
+      - "fix/tengasell-trade-sec01-*"
+      - "feat/tengasell-mobile-*"
+  pull_request:
+    branches:
+      - main
+      - "fix/tengasell-trade-sec01-*"
+      - "feat/tengasell-mobile-*"
+  workflow_dispatch:
+
+concurrency:
+  group: backend-sec04-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend-security:
+    name: Backend Auth, Bidding & Gateway Security Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DATABASE_URL: file:${{ github.workspace }}/ci-sec04.db
+      NEXT_TELEMETRY_DISABLED: "1"
+      CI: "true"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js (pinned v22)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Setup Bun (pinned 1.3.14)
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+
+      - name: Install root & trade-engine dependencies
+        run: |
+          npm ci --no-audit --no-fund
+          cd mini-services/trade-engine
+          bun install --frozen-lockfile || bun install
+
+      - name: Install TrailBase v0.35.1
+        run: |
+          mkdir -p /tmp/tb
+          curl -fsSL -o /tmp/tb/tb.zip \
+            "https://github.com/trailbaseio/trailbase/releases/download/v0.35.1/trailbase_v0.35.1_x86_64_linux.zip"
+          unzip -o /tmp/tb/tb.zip -d /tmp/tb
+          chmod +x /tmp/tb/trail
+          /tmp/tb/trail --version
+
+      - name: Static scan — ban hardcoded server secrets, default admin passwords & personal paths
+        run: |
+          set -euo pipefail
+          SECRET_TARGETS="mini-services/trade-engine mini-services/trust-service mini-services/finance-service mini-services/govern-service mini-services/comms-service src/lib/server src/lib/auth.ts src/app/api scripts deploy/entrypoint.sh fly.toml"
+          if grep -rnE \
+            "Tengasell#2025|tgs-internal-v1|tengasell-internal-v1|tengasell-dev-secret-change-in-production" \
+            $SECRET_TARGETS \
+            --exclude="seed.ts" \
+            --exclude="*.test.ts"; then
+            echo "::error::Banned hardcoded secret or default admin password found in server/config code!"
+            exit 1
+          fi
+          PATH_TARGETS="mini-services/trade-engine/index.ts mini-services/trust-service/config.ts mini-services/finance-service/config.ts mini-services/govern-service/config.ts mini-services/comms-service/config.ts src/lib/server fly.toml deploy/entrypoint.sh"
+          if grep -rnE "/home/z/my-project" $PATH_TARGETS; then
+            echo "::error::Hardcoded /home/z/my-project runtime path found!"
+            exit 1
+          fi
+          echo "Static secret & path fallback scan passed."
+
+      - name: Generate Prisma client & run TypeScript strict check
+        run: |
+          npx prisma generate
+          npx tsc -p tsconfig.backend.json --noEmit
+
+      - name: Targeted ESLint on modified server & client modules
+        run: |
+          npx eslint \
+            src/lib/auth.ts \
+            src/lib/server/sqlite.ts \
+            src/lib/server/trailbase-admin.ts \
+            src/lib/server/paynow-order.ts \
+            src/lib/server/platform.ts \
+            src/app/api/auth/login/route.ts \
+            src/app/api/auth/logout/route.ts \
+            src/app/api/auth/password/change/route.ts \
+            src/app/api/auth/recovery/confirm/route.ts \
+            src/app/api/auth/status/route.ts \
+            src/app/api/auth/security/state/route.ts \
+            "src/app/api/platform/admin/users/[username]/role/route.ts" \
+            "src/app/api/platform/admin/users/[username]/enforcement/route.ts" \
+            src/lib/tengasell/bus.ts \
+            src/lib/tengasell/types.ts \
+            src/lib/tengasell/socket.ts \
+            src/lib/tengasell/auth.tsx \
+            src/lib/tengasell/api/remote.ts \
+            scripts/gateway.mjs \
+            tests/bff-auth-security.test.ts \
+            tests/gateway-security.test.mjs
+          npx eslint --rule "react-hooks/set-state-in-effect: off" \
+            src/components/tengasell/pages/item/bid-sheet.tsx \
+            src/components/tengasell/pages/live/live-room.tsx
+
+      - name: Trade Engine unit + real TrailBase/Socket.IO integration tests
+        env:
+          TRAIL_BIN: /tmp/tb/trail
+        run: |
+          cd mini-services/trade-engine
+          bun test trade-engine.unit.test.ts
+          bun test trade-engine.integration.test.ts
+
+      - name: BFF fail-closed & canonical SQLite auth tests
+        run: bun test tests/bff-auth-security.test.ts
+
+      - name: Gateway HTTP/WS transform allowlist & internal-path tests
+        run: node --test tests/gateway-security.test.mjs
+
+      - name: Next.js production build smoke
+        run: |
+          npx prisma generate
+          npx prisma db push --skip-generate
+          npm run build

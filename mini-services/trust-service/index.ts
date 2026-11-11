@@ -11,6 +11,7 @@
 // endpoints and `x-tgs-admin: 1` for admin endpoints; /internal/* callers
 // authenticate with the shared secret header `x-tgs-internal`.
 
+import { timingSafeEqual } from "node:crypto";
 import { PORT, DB_PATH, INTERNAL_SECRET } from "./config";
 import { db, scalar } from "./db"; // module load runs idempotent migrations
 import { HttpError, type Ctx, type Method, type RouteHandler } from "./http";
@@ -122,7 +123,11 @@ async function handleRequest(req: Request): Promise<Response> {
 
     const user = req.headers.get("x-tgs-user");
     const admin = req.headers.get("x-tgs-admin") === "1";
-    const internal = req.headers.get("x-tgs-internal") === INTERNAL_SECRET;
+    const internalHdr = req.headers.get("x-tgs-internal") ?? "";
+    const a = Buffer.from(internalHdr, "utf8");
+    const b = Buffer.from(INTERNAL_SECRET, "utf8");
+    const internal =
+      INTERNAL_SECRET.length > 0 && a.length === b.length && timingSafeEqual(a, b);
     const params: Record<string, string> = {};
     const groups = url.pathname.match(match.regex);
     match.keys.forEach((k, i) => {

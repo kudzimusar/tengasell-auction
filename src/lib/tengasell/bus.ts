@@ -13,6 +13,7 @@ type EventMap = {
   "order:update": { order: import("./types").Order };
   "question:update": { question: import("./types").Question };
   "connection:changed": { connected: boolean };
+  "auth:revoked": { code?: string; error?: string };
 };
 
 type Handler<K extends keyof EventMap> = (payload: EventMap[K]) => void;

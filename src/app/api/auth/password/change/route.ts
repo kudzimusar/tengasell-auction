@@ -6,7 +6,7 @@
 // enforced naturally by the client after success).
 
 import { NextRequest, NextResponse } from "next/server";
-import { clientIp, isResponse, requireUser, userB64For, writeAudit } from "@/lib/server/platform";
+import { clientIp, isResponse, requireUser, revokeAuthSession, userB64For, writeAudit } from "@/lib/server/platform";
 
 const TRAILBASE = process.env.TRAILBASE_URL ?? "http://localhost:3001";
 
@@ -56,6 +56,13 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ ok: false, error: "Could not reach the sign-in service." }, { status: 502 });
   }
+
+  await revokeAuthSession({
+    token: gate.token,
+    sub: gate.sub,
+    username: gate.username,
+    cutoffSec: Math.floor(Date.now() / 1000),
+  });
 
   await writeAudit({
     user: userB64For(gate.username),

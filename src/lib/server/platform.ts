@@ -20,7 +20,8 @@
 //   · CSV serialization for the export controls (CTL-025 / DAT-011)
 
 import fs from "node:fs";
-import { DatabaseSync } from "node:sqlite";
+import path from "node:path";
+import { openSqliteDb, type SqliteDb } from "./sqlite";
 import {
   createHash,
   createHmac,
@@ -31,7 +32,7 @@ import {
 import { SignJWT, jwtVerify } from "jose";
 import { NextRequest, NextResponse } from "next/server";
 import { tbCreate, tbFetch, nowIso } from "./trailbase-admin";
-import { resolveUserFromToken } from "./paynow-order";
+import { resolveTrailBaseDataDirForBff, resolveVerifiedSession } from "./paynow-order";
 
 // ── service endpoints (localhost only — the browser never sees ports) ──────
 
@@ -116,13 +117,18 @@ export interface TrustStatus {
 
 let lastTrustWarn = 0;
 
-/** Shared secret for trust-service /internal/* callers (mirror config.ts). */
-const INTERNAL_SECRET = process.env.TGS_INTERNAL_SECRET ?? "tgs-internal-v1";
+/** Shared secret for internal service calls (lazy read, never hardcoded fallback). */
+const internalSecret = (): string => (process.env.TGS_INTERNAL_SECRET ?? "").trim();
+
+function internalHeaders(): Record<string, string> {
+  const s = internalSecret();
+  return s ? { "x-tgs-internal": s } : {};
+}
 
 export async function trustStatus(username: string): Promise<TrustStatus> {
   const res = await svcFetch(PORTS.trust, `/internal/status?username=${encodeURIComponent(username)}`, {
     timeoutMs: TRUST_TIMEOUT_MS,
-    headers: { "x-tgs-internal": INTERNAL_SECRET },
+    headers: internalHeaders(),
   });
   if (!res.ok || !res.data) {
     // FAIL-OPEN doctrine (master contract §F): trust unreachable → we do not
@@ -149,15 +155,15 @@ export async function trustStatus(username: string): Promise<TrustStatus> {
 }
 
 export async function trustPost(
-  path: string,
+  endpointPath: string,
   body: Record<string, unknown>,
   timeoutMs = TRUST_TIMEOUT_MS,
 ): Promise<SvcResult> {
-  return svcFetch(PORTS.trust, path, {
+  return svcFetch(PORTS.trust, endpointPath, {
     method: "POST",
     body: JSON.stringify(body),
     timeoutMs,
-    headers: { "x-tgs-internal": INTERNAL_SECRET },
+    headers: internalHeaders(),
   });
 }
 
@@ -184,11 +190,109 @@ export function trustRecordSignin(input: {
 // TrailBase process (busy_timeout 5s). This is the documented admin-assisted
 // path for recovery (BCP: hash transplant) and TOTP step-up verification.
 
-const MAIN_DB = "/home/z/my-project/mini-services/trailbase-db/traildepot/data/main.db";
+function getProjectRoot(): string {
+  return process.env.TGS_PROJECT_ROOT ? path.resolve(process.env.TGS_PROJECT_ROOT) : process.cwd();
+}
+
+function getDataRoot(): string {
+  return process.env.TGS_DATA_DIR ? path.resolve(process.env.TGS_DATA_DIR) : getProjectRoot();
+}
+
+function getMainDbPath(): string {
+  const dataDir = resolveTrailBaseDataDirForBff();
+  if (dataDir) return path.join(dataDir, "main.db");
+  return path.join(getProjectRoot(), "mini-services", "trailbase-db", "traildepot", "data", "main.db");
+}
+
+function getSessionDbPath(): string | null {
+  const dataDir = resolveTrailBaseDataDirForBff();
+  return dataDir ? path.join(dataDir, "session.db") : null;
+}
+
+function getRevocationsDbPath(): string | null {
+  if (process.env.TGS_REVOCATIONS_DB) return process.env.TGS_REVOCATIONS_DB;
+  const dataDir = resolveTrailBaseDataDirForBff();
+  return dataDir ? path.join(dataDir, "tgs_revocations.db") : null;
+}
+
+const getTrailBaseUrl = () => process.env.TRAILBASE_URL ?? "http://localhost:3001";
+
+/**
+ * Persists a session/token/subject revocation in `tgs_revocations.db` (if available)
+ * and notifies trade-engine `/internal/auth/revoke` so active sockets disconnect immediately.
+ */
+export async function revokeAuthSession(opts: {
+  token?: string;
+  sub?: string;
+  username?: string;
+  cutoffSec?: number;
+}): Promise<void> {
+  const nowMs = Date.now();
+  const revPath = getRevocationsDbPath();
+  if (revPath) {
+    let db: SqliteDb | null = null;
+    try {
+      fs.mkdirSync(path.dirname(revPath), { recursive: true });
+      db = openSqliteDb(revPath);
+      db.exec(`
+        PRAGMA journal_mode = WAL;
+        PRAGMA busy_timeout = 3000;
+        CREATE TABLE IF NOT EXISTS revoked_tokens (digest TEXT PRIMARY KEY, exp_ms INTEGER NOT NULL);
+        CREATE TABLE IF NOT EXISTS revoked_subjects (subject_key TEXT PRIMARY KEY, cutoff_sec INTEGER NOT NULL, updated_ms INTEGER NOT NULL);
+      `);
+      if (opts.token) {
+        const digest = createHash("sha256").update(opts.token, "utf8").digest("hex");
+        let expMs = nowMs + 86_400_000;
+        try {
+          const payloadPart = opts.token.split(".")[1];
+          if (payloadPart) {
+            const parsed = JSON.parse(Buffer.from(payloadPart, "base64url").toString("utf8")) as {
+              exp?: unknown;
+            };
+            if (typeof parsed.exp === "number" && Number.isFinite(parsed.exp)) {
+              expMs = parsed.exp * 1000;
+            }
+          }
+        } catch {
+          /* default 24h */
+        }
+        db.prepare(
+          "INSERT INTO revoked_tokens (digest, exp_ms) VALUES (?, ?) ON CONFLICT(digest) DO UPDATE SET exp_ms = MAX(revoked_tokens.exp_ms, excluded.exp_ms)",
+        ).run(digest, Math.trunc(expMs));
+      }
+      if (opts.sub || opts.username) {
+        const cutoff = opts.cutoffSec ?? Math.floor(nowMs / 1000);
+        if (opts.sub) {
+          db.prepare(
+            "INSERT INTO revoked_subjects (subject_key, cutoff_sec, updated_ms) VALUES (?, ?, ?) ON CONFLICT(subject_key) DO UPDATE SET cutoff_sec = MAX(revoked_subjects.cutoff_sec, excluded.cutoff_sec), updated_ms = excluded.updated_ms",
+          ).run(`sub:${opts.sub}`, Math.trunc(cutoff), Math.trunc(nowMs));
+        }
+        if (opts.username) {
+          db.prepare(
+            "INSERT INTO revoked_subjects (subject_key, cutoff_sec, updated_ms) VALUES (?, ?, ?) ON CONFLICT(subject_key) DO UPDATE SET cutoff_sec = MAX(revoked_subjects.cutoff_sec, excluded.cutoff_sec), updated_ms = excluded.updated_ms",
+          ).run(`user:${opts.username.toLowerCase()}`, Math.trunc(cutoff), Math.trunc(nowMs));
+        }
+      }
+    } catch (err) {
+      console.error("[platform] tgs_revocations.db write failed:", err);
+    } finally {
+      db?.close();
+    }
+  }
+
+  const secret = internalSecret();
+  if (!secret) return;
+  await svcFetch(PORTS.engine, "/internal/auth/revoke", {
+    method: "POST",
+    timeoutMs: 2500,
+    headers: { "x-tgs-internal": secret },
+    body: JSON.stringify(opts),
+  }).catch(() => {});
+}
 
 /** Read-only aggregate query helper against the live TrailBase db (12-e analytics). */
 export function mainDbQuery<T>(sql: string, params: (string | number)[] = []): T[] {
-  let db: DatabaseSync | null = null;
+  let db: SqliteDb | null = null;
   try {
     db = usersDb(true);
     return db.prepare(sql).all(...params) as T[];
@@ -209,14 +313,14 @@ export interface UserRow {
   id_hex: string;
 }
 
-function usersDb(readonly: boolean): DatabaseSync {
-  const db = new DatabaseSync(MAIN_DB, { readOnly: readonly });
+function usersDb(readonly: boolean): SqliteDb {
+  const db = openSqliteDb(getMainDbPath(), { readOnly: readonly });
   db.exec("PRAGMA busy_timeout=5000");
   return db;
 }
 
 export function findUserByUsername(username: string): UserRow | null {
-  let db: DatabaseSync | null = null;
+  let db: SqliteDb | null = null;
   try {
     db = usersDb(true);
     const row = db
@@ -243,7 +347,7 @@ export function findUserByUsername(username: string): UserRow | null {
 }
 
 export function searchUsers(q: string, limit = 40): UserRow[] {
-  let db: DatabaseSync | null = null;
+  let db: SqliteDb | null = null;
   try {
     db = usersDb(true);
     const like = `%${q.toLowerCase()}%`;
@@ -270,7 +374,7 @@ export function searchUsers(q: string, limit = 40): UserRow[] {
 }
 
 export function countUsers(): number {
-  let db: DatabaseSync | null = null;
+  let db: SqliteDb | null = null;
   try {
     db = usersDb(true);
     const row = db.prepare("SELECT COUNT(*) AS n FROM _user").get() as { n: number };
@@ -290,7 +394,8 @@ export function countUsers(): number {
  */
 export async function adminSetPassword(username: string, newPassword: string): Promise<{ ok: boolean; error?: string }> {
   const scratch = "rcv" + randomBytes(5).toString("hex"); // 13 alnum chars
-  const reg = await fetch("http://127.0.0.1:3001/api/auth/v1/register", {
+  const tbBase = getTrailBaseUrl();
+  const reg = await fetch(`${tbBase}/api/auth/v1/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username: scratch, password: newPassword, password_repeat: newPassword }),
@@ -302,31 +407,61 @@ export async function adminSetPassword(username: string, newPassword: string): P
   // invalidate the scratch session TrailBase just issued (best effort)
   const regData = (await reg.json().catch(() => ({}))) as { auth_token?: string };
   if (regData.auth_token) {
-    void fetch("http://127.0.0.1:3001/api/auth/v1/logout", {
-      method: "POST",
+    void fetch(`${tbBase}/api/auth/v1/logout`, {
+      method: "GET",
       headers: { Authorization: `Bearer ${regData.auth_token}` },
       signal: AbortSignal.timeout(4000),
     }).catch(() => {});
   }
-  let db: DatabaseSync | null = null;
+  let targetUserIdHex: string | null = null;
+  let db: SqliteDb | null = null;
   try {
     db = usersDb(false);
     const scratchRow = db.prepare("SELECT password_hash FROM _user WHERE username = ?").get(scratch) as
       | { password_hash: string }
       | undefined;
     if (!scratchRow?.password_hash) return { ok: false, error: "Password hash could not be prepared." };
+    const targetRow = db
+      .prepare("SELECT hex(id) AS id_hex FROM _user WHERE lower(username) = lower(?) LIMIT 1")
+      .get(username) as { id_hex?: string } | undefined;
     const res = db
       .prepare("UPDATE _user SET password_hash = ? WHERE lower(username) = lower(?)")
       .run(scratchRow.password_hash, username);
     if (res.changes === 0) return { ok: false, error: "Account not found." };
     db.prepare("DELETE FROM _user WHERE username = ?").run(scratch);
-    return { ok: true };
+    targetUserIdHex = targetRow?.id_hex ? targetRow.id_hex.toLowerCase() : null;
   } catch (err) {
     console.error("[platform] password transplant failed:", err);
     return { ok: false, error: "Password update failed on the live database." };
   } finally {
     db?.close();
   }
+
+  // Purge existing TrailBase _session rows for this user and revoke all active JWTs.
+  let subB64: string | undefined;
+  if (targetUserIdHex) {
+    const uidBuf = Buffer.from(targetUserIdHex, "hex");
+    subB64 = uidBuf.toString("base64");
+    const sessPath = getSessionDbPath();
+    if (sessPath && fs.existsSync(sessPath)) {
+      let sdb: SqliteDb | null = null;
+      try {
+        sdb = openSqliteDb(sessPath);
+        sdb.exec("PRAGMA busy_timeout=5000");
+        sdb.prepare("DELETE FROM _session WHERE user = ?").run(new Uint8Array(uidBuf));
+      } catch (err) {
+        console.error("[platform] failed to purge _session rows after password reset:", err);
+      } finally {
+        sdb?.close();
+      }
+    }
+  }
+  await revokeAuthSession({
+    sub: subB64,
+    username,
+    cutoffSec: Math.floor(Date.now() / 1000),
+  });
+  return { ok: true };
 }
 
 /** The engine writes audit `user` as the _user uuid base64 string — match it. */
@@ -379,7 +514,7 @@ export function verifyTotp(secretB32: string, code: string): boolean {
 }
 
 export function totpSecretFor(username: string): string | null {
-  let db: DatabaseSync | null = null;
+  let db: SqliteDb | null = null;
   try {
     db = usersDb(true);
     const row = db
@@ -395,7 +530,7 @@ export function totpSecretFor(username: string): string | null {
 
 // ── recovery codes (hashed at rest; shown exactly once) ─────────────────────
 
-const RECOVERY_PATH = "/home/z/my-project/db/mfa-recovery.json";
+const recoveryPath = () => path.join(getDataRoot(), "db", "mfa-recovery.json");
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I confusables
 
 export function generateRecoveryCodes(count = 8): string[] {
@@ -414,21 +549,24 @@ export function sha256(s: string): string {
 
 function readRecoveryFile(): Record<string, { hashes: string[]; created: string; used: string[] }> {
   try {
-    if (!fs.existsSync(RECOVERY_PATH)) return {};
-    return JSON.parse(fs.readFileSync(RECOVERY_PATH, "utf8"));
+    const rp = recoveryPath();
+    if (!fs.existsSync(rp)) return {};
+    return JSON.parse(fs.readFileSync(rp, "utf8"));
   } catch {
     return {};
   }
 }
 
 export function storeRecoveryCodes(username: string, codes: string[]): void {
+  const rp = recoveryPath();
+  fs.mkdirSync(path.dirname(rp), { recursive: true });
   const all = readRecoveryFile();
   all[username.toLowerCase()] = {
     hashes: codes.map((c) => sha256(c)),
     used: [],
     created: nowIso(),
   };
-  fs.writeFileSync(RECOVERY_PATH, JSON.stringify(all, null, 2));
+  fs.writeFileSync(rp, JSON.stringify(all, null, 2));
   // mirror to trust when it's up (trust = intended authority; file = v1 fallback)
   void trustPost("/internal/mfa/recovery-codes", {
     username,
@@ -443,6 +581,7 @@ export function hasRecoveryCodes(username: string): boolean {
 }
 
 export function consumeRecoveryCode(username: string, code: string): boolean {
+  const rp = recoveryPath();
   const all = readRecoveryFile();
   const key = username.toLowerCase();
   const entry = all[key];
@@ -453,7 +592,8 @@ export function consumeRecoveryCode(username: string, code: string): boolean {
   entry.used.push(h);
   all[key] = entry;
   try {
-    fs.writeFileSync(RECOVERY_PATH, JSON.stringify(all, null, 2));
+    fs.mkdirSync(path.dirname(rp), { recursive: true });
+    fs.writeFileSync(rp, JSON.stringify(all, null, 2));
     return true;
   } catch {
     return false;
@@ -461,10 +601,12 @@ export function consumeRecoveryCode(username: string, code: string): boolean {
 }
 
 export function purgeRecoveryCodes(username: string): void {
+  const rp = recoveryPath();
   const all = readRecoveryFile();
   delete all[username.toLowerCase()];
   try {
-    fs.writeFileSync(RECOVERY_PATH, JSON.stringify(all, null, 2));
+    fs.mkdirSync(path.dirname(rp), { recursive: true });
+    fs.writeFileSync(rp, JSON.stringify(all, null, 2));
   } catch {
     /* ignore */
   }
@@ -554,7 +696,7 @@ export interface FlagDef {
   lastReason?: string;
 }
 
-const FLAGS_PATH = "/home/z/my-project/db/flags.json";
+const flagsPath = () => path.join(getDataRoot(), "db", "flags.json");
 
 export const DEFAULT_FLAGS: FlagDef[] = [
   {
@@ -592,8 +734,9 @@ export const DEFAULT_FLAGS: FlagDef[] = [
 
 export function readFlags(): FlagDef[] {
   try {
-    if (!fs.existsSync(FLAGS_PATH)) return DEFAULT_FLAGS.map((f) => ({ ...f }));
-    const stored = JSON.parse(fs.readFileSync(FLAGS_PATH, "utf8")) as { flags?: FlagDef[] };
+    const fp = flagsPath();
+    if (!fs.existsSync(fp)) return DEFAULT_FLAGS.map((f) => ({ ...f }));
+    const stored = JSON.parse(fs.readFileSync(fp, "utf8")) as { flags?: FlagDef[] };
     const byKey = new Map((stored.flags ?? []).map((f) => [f.key, f]));
     return DEFAULT_FLAGS.map((d) => ({ ...d, ...(byKey.get(d.key) ?? {}) }));
   } catch {
@@ -606,6 +749,8 @@ export function flagValue(key: string): boolean {
 }
 
 export function writeFlag(key: string, value: boolean, by: string, reason: string): FlagDef | null {
+  const fp = flagsPath();
+  fs.mkdirSync(path.dirname(fp), { recursive: true });
   const flags = readFlags();
   const f = flags.find((x) => x.key === key);
   if (!f) return null;
@@ -613,7 +758,7 @@ export function writeFlag(key: string, value: boolean, by: string, reason: strin
   f.lastChangedBy = by;
   f.lastChangedAt = nowIso();
   f.lastReason = reason;
-  fs.writeFileSync(FLAGS_PATH, JSON.stringify({ flags, updated_at: nowIso() }, null, 2));
+  fs.writeFileSync(fp, JSON.stringify({ flags, updated_at: nowIso() }, null, 2));
   return f;
 }
 
@@ -658,31 +803,33 @@ export async function writeAudit(input: {
 // ── auth gates for the BFF routes ───────────────────────────────────────────
 
 export interface GateUser {
+  sub?: string;
   username: string;
   admin: boolean;
+  mfa?: boolean;
   token: string;
 }
 
 export async function requireUser(req: NextRequest): Promise<GateUser | NextResponse> {
-  const user = await resolveUserFromToken(req.headers.get("authorization"));
-  if (!user) {
+  const session = await resolveVerifiedSession(req.headers.get("authorization"));
+  if (!session) {
     return NextResponse.json({ ok: false, error: "Sign in to continue." }, { status: 401 });
   }
-  return user;
+  return session;
 }
 
 export async function requireAdmin(req: NextRequest): Promise<GateUser | NextResponse> {
-  const user = await resolveUserFromToken(req.headers.get("authorization"));
-  if (!user) {
+  const session = await resolveVerifiedSession(req.headers.get("authorization"));
+  if (!session) {
     return NextResponse.json({ ok: false, error: "Sign in to continue." }, { status: 401 });
   }
-  if (!user.admin) {
+  if (!session.admin) {
     return NextResponse.json(
       { ok: false, error: "Admins only — this area is restricted." },
       { status: 403 },
     );
   }
-  return user;
+  return session;
 }
 
 export function isResponse(x: GateUser | NextResponse): x is NextResponse {
@@ -706,8 +853,17 @@ export function clientUa(req: NextRequest): string {
 export const STEPUP_COOKIE = "ts_tgs_admin_mfa";
 export const STEPUP_MAX_AGE_SEC = 30 * 60; // re-verify every 30 minutes
 
-const stepupSecret = () =>
-  process.env.PLATFORM_JWT_SECRET ?? "tengasell-dev-stepup-secret-change-me";
+let ephemeralStepupSecret: string | null = null;
+
+const stepupSecret = (): string => {
+  const env = (process.env.PLATFORM_JWT_SECRET ?? "").trim();
+  if (env) return env;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("PLATFORM_JWT_SECRET environment variable is required");
+  }
+  ephemeralStepupSecret ??= randomBytes(32).toString("hex");
+  return ephemeralStepupSecret;
+};
 
 export async function issueStepupToken(username: string): Promise<string> {
   return new SignJWT({ sub: username, typ: "tgs-admin-stepup" })

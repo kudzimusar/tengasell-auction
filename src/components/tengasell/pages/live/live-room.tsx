@@ -1072,6 +1072,12 @@ function LotBidForm({ lot, onChanged }: { lot: Auction; onChanged: () => void })
           });
         }
         onChanged();
+      } else if (res.uncertain) {
+        setError(
+          res.error ??
+            "Your bid may have been recorded before the connection interrupted. Refreshing lot state before you retry.",
+        );
+        onChanged();
       } else {
         setError(res.error ?? t("state.error"));
         onChanged(); // price may have moved — render the new minimum

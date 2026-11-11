@@ -4,9 +4,13 @@
   "private": true,
   "description": "Tengasell trade engine — socket.io RPC on port 3002. Server-side bidding rules (Yahoo-style proxy bidding, anti-snipe soft close, SLA orders, notifications) writing to the TrailBase Rust backend on port 3001.",
   "scripts": {
-    "dev": "bun --hot index.ts"
+    "dev": "bun --hot index.ts",
+    "test": "bun test"
   },
   "dependencies": {
     "socket.io": "^4.8.4"
+  },
+  "devDependencies": {
+    "socket.io-client": "4.8.3"
   }
 }

@@ -17,6 +17,7 @@
 //   · reverses escrow for cancelled orders,
 //   · refreshes the cached seller balances.
 
+import { timingSafeEqual } from "node:crypto";
 import { PORT, DB_PATH, INTERNAL_TOKEN } from "./config";
 import { all, scalar } from "./db"; // module load runs idempotent migrations
 import { HttpError, type Ctx, type Method, type RouteHandler } from "./http";
@@ -151,7 +152,14 @@ async function handleRequest(req: Request): Promise<Response> {
         if (!admin) throw new HttpError(401, "x-tgs-admin: 1 header required", "forbidden");
       },
       requireInternal() {
-        if (internal !== INTERNAL_TOKEN) {
+        const hdr = internal ?? "";
+        const a = Buffer.from(hdr, "utf8");
+        const b = Buffer.from(INTERNAL_TOKEN, "utf8");
+        if (
+          INTERNAL_TOKEN.length === 0 ||
+          a.length !== b.length ||
+          !timingSafeEqual(a, b)
+        ) {
           throw new HttpError(401, "x-tgs-internal header required", "unauthorized");
         }
       },

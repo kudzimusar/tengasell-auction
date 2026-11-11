@@ -5,7 +5,7 @@
 // provisioning state while trust is down. Body: {role, reason?}.
 
 import { NextRequest, NextResponse } from "next/server";
-import { isResponse, maintenanceBlocked, requireAdmin, trustPost, userB64For, writeAudit } from "@/lib/server/platform";
+import { isResponse, maintenanceBlocked, requireAdmin, revokeAuthSession, trustPost, userB64For, writeAudit } from "@/lib/server/platform";
 
 const KNOWN_ROLES = ["user", "support", "moderator", "finance", "compliance"];
 
@@ -51,6 +51,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ use
       { status: 503 },
     );
   }
+
+  await revokeAuthSession({
+    username: uname,
+    cutoffSec: Math.floor(Date.now() / 1000),
+  });
 
   await writeAudit({
     user: userB64For(gate.username),

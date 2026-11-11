@@ -43,12 +43,26 @@ for svc in comms finance govern trust; do
   fi
 done
 
-# The services default to /home/z/my-project paths from the original sandbox.
+export TGS_PROJECT_ROOT="${TGS_PROJECT_ROOT:-/app}"
+export TRAILBASE_DATA_DIR="${TRAILBASE_DATA_DIR:-$DATA_DIR/traildepot/data}"
+export TRAILBASE_REQUIRE_SESSION_DB="1"
 export COMMS_DB_PATH="$DATA_DIR/db/comms.db"
 export FINANCE_DB_PATH="$DATA_DIR/db/finance.db"
 export GOVERN_DB_PATH="$DATA_DIR/db/govern.db"
 export TRUST_DB_PATH="$DATA_DIR/db/trust.db"
 export MSCS_WORKSHEET_PATH="${MSCS_WORKSHEET_PATH:-/app/agent-ctx/mscs-worksheet-12.json}"
+
+gen_secret() {
+  node -e 'console.log(require("node:crypto").randomBytes(32).toString("hex"))'
+}
+
+export TGS_INTERNAL_SECRET="${TGS_INTERNAL_SECRET:-$(gen_secret)}"
+export TGS_INTERNAL_TOKEN="${TGS_INTERNAL_TOKEN:-$TGS_INTERNAL_SECRET}"
+export PLATFORM_JWT_SECRET="${PLATFORM_JWT_SECRET:-$(gen_secret)}"
+export NEXTAUTH_SECRET="${NEXTAUTH_SECRET:-$(gen_secret)}"
+if [ -z "${ADMIN_PASSWORD:-}" ]; then
+  log "WARNING: ADMIN_PASSWORD is not set — admin backend login calls will fail closed until configured"
+fi
 
 # ── Trailbase (Rust) ──────────────────────────────────────────────────
 log "starting trailbase on :3001"
@@ -85,6 +99,10 @@ log "starting app on :3000"
 # Next standalone binds to $HOSTNAME when it is set — Docker sets it to the
 # container id, which makes the app unreachable from the gateway.
 HOSTNAME=0.0.0.0 PORT=3000 \
+  TGS_PROJECT_ROOT="$TGS_PROJECT_ROOT" \
+  TGS_DATA_DIR="$DATA_DIR" \
+  TRAILBASE_DATA_DIR="$TRAILBASE_DATA_DIR" \
+  TRAILBASE_REQUIRE_SESSION_DB="1" \
   DATABASE_URL="file:$DATA_DIR/db/custom.db" \
   TRAILBASE_URL="http://127.0.0.1:3001" \
   node /app/server.js &

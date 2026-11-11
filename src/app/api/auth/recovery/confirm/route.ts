@@ -8,8 +8,8 @@
 //    "hash transplant" — TrailBase itself hashes the new password through a
 //    throwaway registration, the argon2id encoded hash is copied into the
 //    target _user row and the throwaway is deleted (lib/server/platform.ts).
-// Audit: account:password_reset. Revocation note: existing JWTs live to
-// their natural expiry (24h TTL); the runbook documents forced rotation.
+// Audit: account:password_reset. Password change purges TrailBase _session
+// rows and records a subject revocation cutoff via adminSetPassword().
 
 import { NextRequest, NextResponse } from "next/server";
 import {
