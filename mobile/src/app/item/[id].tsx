@@ -21,11 +21,13 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { BottomNav } from "../../components/BottomNav";
 import { formatDateTime, formatRemaining, formatUSD, minNextBid, remainingSeverity } from "../../lib/format";
 import { fetchAuction } from "../../lib/trailbase";
+import { fetchAuctionBids, readCanonicalBidSnapshot } from "../../lib/trailbase-bids";
 import { biddingOwnershipToken, connectBidding, disconnectBidding, placeBid } from "../../lib/socket";
 import { presentBidOutcome } from "../../lib/bid-copy";
 import { runGuardedBid } from "../../bids/bid-completion";
+import { reconcileBidOutcome } from "../../bids/bid-reconcile";
 import { useSession } from "../../auth/session-context";
-import { toAuctionView, type AuctionView } from "../../lib/types";
+import { toAuctionView, type AuctionView, type Bid } from "../../lib/types";
 
 export default function ItemScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -47,19 +49,32 @@ export default function ItemScreen() {
   // The session object captured by this render cannot observe a later account
   // switch. Read identity through a ref that tracks the latest snapshot.
   const identityRef = useRef<string | null>(session.identity?.id ?? null);
+  const bidsSnapshotRef = useRef<{ auctionId: number; loaded: boolean; bids: Bid[] }>({
+    auctionId: 0,
+    loaded: false,
+    bids: [],
+  });
 
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    const auctionId = Number(id);
     try {
-      const record = await fetchAuction(Number(id));
+      const [record, recentBids] = await Promise.all([
+        fetchAuction(auctionId),
+        fetchAuctionBids(auctionId, 15).catch(() => null),
+      ]);
       if (!record) {
         setError("This listing could not be found.");
         setItem(null);
+        bidsSnapshotRef.current = { auctionId, loaded: false, bids: [] };
       } else {
         const view = toAuctionView(record);
         setItem(view);
+        if (recentBids !== null) {
+          bidsSnapshotRef.current = { auctionId, loaded: true, bids: recentBids };
+        }
         setBidAmount((current) => current || String(minNextBid(view.current_price, view.bid_count)));
       }
     } catch (e) {
@@ -349,7 +364,17 @@ export default function ItemScreen() {
                     setBidding(true);
                     setBidNote(null);
 
-                    // CLOSE-02: the completion is published only while this
+                    const targetAuctionId = item.id;
+                    const buyerIdentityId = identityRef.current;
+                    const baselineBidCount = item.bid_count;
+                    const snap = bidsSnapshotRef.current;
+                    const baselineTopBidId =
+                      snap.auctionId === targetAuctionId && snap.loaded
+                        ? (snap.bids[0]?.id ?? 0)
+                        : null;
+
+                    // CLOSE-02 / CERT-02: the completion and any canonical
+                    // post-ack reconciliation are published only while this
                     // screen, this session and this connection still own it.
                     await runGuardedBid({
                       guard: {
@@ -360,17 +385,47 @@ export default function ItemScreen() {
                       },
                       takeOwnership: () => ({
                         sessionGeneration: session.sessionGeneration(),
-                        identityId: identityRef.current,
+                        identityId: buyerIdentityId,
                         connectionEpoch: biddingOwnershipToken(),
                       }),
-                      place: () => placeBid(item.id, amount),
-                      publish: (outcome) => {
-                        const presented = presentBidOutcome(outcome, formatUSD);
+                      place: () => placeBid(targetAuctionId, amount),
+                      reconcile: async (outcome) => {
+                        const reconciled = await reconcileBidOutcome(
+                          outcome,
+                          {
+                            auctionId: targetAuctionId,
+                            identityId: buyerIdentityId,
+                            maxAmount: amount,
+                            beforeTopBidId: baselineTopBidId,
+                            beforeBidCount: baselineBidCount,
+                          },
+                          formatUSD,
+                          readCanonicalBidSnapshot,
+                        );
+                        return (
+                          reconciled ?? {
+                            outcome,
+                            presentation: presentBidOutcome(outcome, formatUSD),
+                            auction: null,
+                          }
+                        );
+                      },
+                      publish: (reconciled) => {
+                        const presented = reconciled.presentation ?? presentBidOutcome(reconciled.outcome, formatUSD);
+                        if (reconciled.auction) {
+                          setItem(toAuctionView(reconciled.auction));
+                        }
+                        if (reconciled.bids) {
+                          bidsSnapshotRef.current = {
+                            auctionId: targetAuctionId,
+                            loaded: true,
+                            bids: reconciled.bids,
+                          };
+                        }
                         setBidNote({ tone: presented.tone, text: presented.text });
                         setBidding(false);
-                        // CLOSE-01: an unconfirmed acknowledgement is reconciled
-                        // against canonical auction state, never assumed.
-                        if (outcome.ok || presented.reconcile) void load();
+                        // CLOSE-01: keep UI synchronized with canonical state.
+                        if (reconciled.outcome.ok || presented.reconcile) void load();
                       },
                       onDiscarded: () => {
                         // No result is claimed. The screen may still be mounted

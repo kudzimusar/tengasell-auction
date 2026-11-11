@@ -235,3 +235,91 @@ test("BID-09 settlement is pure: no state change is applied by the decision", ()
     reason: "unmounted",
   });
 });
+
+test("BID-10 logout during post-ack canonical reconciliation discards output and never replays bid", async () => {
+  const a = arena({ identityId: "takudzwa" });
+  const reconcileDeferred = deferred();
+  const published = [];
+  let placeCalls = 0;
+  let discarded = 0;
+
+  const task = runGuardedBid({
+    guard: a.guard,
+    takeOwnership: a.takeOwnership,
+    place: async () => {
+      placeCalls += 1;
+      return { ok: false, uncertain: true, reason: "unverified" };
+    },
+    reconcile: async () => reconcileDeferred.promise,
+    publish: (settled) => published.push(settled),
+    onDiscarded: () => {
+      discarded += 1;
+    },
+  });
+
+  // Yield until reconcile has started, then log out before canonical HTTP read finishes.
+  await new Promise((r) => setTimeout(r, 10));
+  a.logout();
+  reconcileDeferred.resolve({ ok: true, winning: true, amount: 122 });
+
+  const verdict = await task;
+  assert.deepEqual(verdict, { state: "discarded", reason: "session-changed" });
+  assert.equal(placeCalls, 1);
+  assert.equal(published.length, 0);
+  assert.equal(discarded, 1);
+});
+
+test("BID-11 account switch during canonical reconciliation discards output and never replays", async () => {
+  const a = arena({ identityId: "nyasha" });
+  const reconcileDeferred = deferred();
+  const published = [];
+  let placeCalls = 0;
+
+  const task = runGuardedBid({
+    guard: a.guard,
+    takeOwnership: a.takeOwnership,
+    place: async () => {
+      placeCalls += 1;
+      return { ok: false, uncertain: true, reason: "timeout" };
+    },
+    reconcile: async () => reconcileDeferred.promise,
+    publish: (settled) => published.push(settled),
+  });
+
+  await new Promise((r) => setTimeout(r, 10));
+  a.switchAccount("rufaro");
+  reconcileDeferred.resolve({ ok: true, winning: true, amount: 175 });
+
+  const verdict = await task;
+  assert.equal(verdict.state, "discarded");
+  assert.equal(placeCalls, 1);
+  assert.equal(published.length, 0);
+});
+
+test("BID-12 reconciled bid publishes once after canonical read and never auto-replays", async () => {
+  const a = arena({ identityId: "takudzwa" });
+  const reconcileDeferred = deferred();
+  const published = [];
+  let placeCalls = 0;
+
+  const task = runGuardedBid({
+    guard: a.guard,
+    takeOwnership: a.takeOwnership,
+    place: async () => {
+      placeCalls += 1;
+      return { ok: false, uncertain: true, reason: "unverified" };
+    },
+    reconcile: async () => reconcileDeferred.promise,
+    publish: (settled) => published.push(settled),
+  });
+
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(published.length, 0, "must not publish before reconciliation resolves");
+
+  reconcileDeferred.resolve({ ok: true, winning: true, amount: 122 });
+  const verdict = await task;
+  assert.equal(verdict.state, "applied");
+  assert.equal(placeCalls, 1);
+  assert.equal(published.length, 1);
+  assert.equal(published[0].amount, 122);
+});

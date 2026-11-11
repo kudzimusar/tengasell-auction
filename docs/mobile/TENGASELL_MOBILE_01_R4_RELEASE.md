@@ -87,8 +87,10 @@ Identity: `com.tengasell.app` · versionName `0.1.0` · versionCode `1` · minSd
 
 ---
 
-## 6. `ICR03-LR01` Reconciliation Note
+## 6. `ICR03-LR01` & `CLOSE-01` Reconciliation Note
 
-- **Superseded stack base:** Base candidate moved from historical `1fd73a8` ← `3b373ea` to reconciled PR #7 code freeze `4660ffa` ← PR #6 `395205a` (plus doc sync commits).
-- **PR #8 supersession:** PR #8 was automatically marked `MERGED` by GitHub (`2026-11-10T12:53:08Z`, `d24a0bfd`) when `d24a0bfd` leaked into `feat/tengasell-mobile-mob02-item-detail`; Draft PR #9 supersedes PR #8 for final MOB-03 certification (`d42d8d4` code freeze + doc sync).
-- **Artefact custody:** As directed by Owner, the Android APK/AAB binary was **not rebuilt** for post-`5011c35` commits; `REL-004` artefact signatures above remain bound strictly to earlier build `5011c35`.
+- **Superseded emulator note:** Physical/emulator bid walkthrough above (auction `1015`, `bids` row `444`, `@nyasha`) documents **historical commit `5011c35` only** and must **not** be treated as current-SHA or physical-device certification.
+- **PR #8 supersession:** PR #8 was automatically marked `MERGED` by GitHub (`2026-11-10T12:53:08Z`, `d24a0bfd`) when `d24a0bfd` leaked into `feat/tengasell-mobile-mob02-item-detail`; Draft PR #9 supersedes PR #8 for final MOB-03 review.
+- **`CERT-02` client remediation (PR #9 `CLOSE-01`):** `parseBidAck` (`mobile/src/lib/bid-ack.ts`), `placeBid` (`mobile/src/lib/socket.ts`), `presentBidOutcome` (`mobile/src/lib/bid-copy.ts`), `reconcileBidOutcome` (`mobile/src/bids/bid-reconcile.ts`), `runGuardedBid` (`mobile/src/bids/bid-completion.ts`), and `ItemScreen` (`mobile/src/app/item/[id].tsx`) now classify any uncoded server `ok: false` ack lacking structured `stage: "pre_commit"` / `committed: false` proof as uncertain (`reason: "unverified"`) without string-matching heuristics, never invite immediate retry, and reconcile read-only against canonical TrailBase `auctions` + `bids` state before releasing the Bid CTA or publishing status (re-checking ownership both before and after canonical read).
+- **Trade Engine backend findings (`CERT-02` + `CERT-03`):** Documented separately in `docs/mobile/TENGASELL_MOBILE_01_TRADE_ENGINE_REMEDIATION_PACKET.md`; `mini-services/trade-engine/index.ts` remains unmodified in PR #6/#7/#9 per authority scope.
+- **Artefact custody:** Android APK/AAB binaries were **not rebuilt** for post-`5011c35` commits; signed build artifacts in `§2–§3` remain tied exclusively to historical `5011c35`. Physical hardware UAT remains blocked (`§1` of `TENGASELL_MOBILE_01_CLOSE01_CLOSURE.md`).

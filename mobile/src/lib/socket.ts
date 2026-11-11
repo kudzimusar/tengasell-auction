@@ -72,7 +72,13 @@ export function placeBid(auctionId: number, maxAmount: number, timeoutMs = 9000)
   return new Promise((resolve) => {
     const s = socket;
     if (!s || !s.connected) {
-      resolve({ ok: false, error: "Not connected to the live auction engine." });
+      // Nothing was emitted on the transport; safe authoritative pre-commit refusal.
+      resolve({
+        ok: false,
+        rejected: true,
+        stage: "pre_commit",
+        error: "Not connected to the live auction engine.",
+      });
       return;
     }
     let settled = false;

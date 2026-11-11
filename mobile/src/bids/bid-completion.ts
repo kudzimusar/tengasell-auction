@@ -42,8 +42,8 @@ export type BidDiscardReason =
   | "connection-superseded"
   | "unmounted";
 
-export type BidSettlement =
-  | { state: "applied"; outcome: BidOutcome }
+export type BidSettlement<TSettled = BidOutcome> =
+  | { state: "applied"; outcome: TSettled }
   | { state: "discarded"; reason: BidDiscardReason };
 
 /** Decide whether a pending bid may still be published. Pure. */
@@ -64,19 +64,27 @@ export function settleBidAttempt(
   return { state: "applied" };
 }
 
-export interface GuardedBidDeps {
+export interface GuardedBidDeps<TSettled = BidOutcome> {
   guard: BidCompletionGuard;
   /** Capture ownership synchronously, before the transport call is awaited. */
   takeOwnership: () => BidOwnership;
   /** The commercial command. Must not be retried by this module. */
   place: () => Promise<BidOutcome>;
+  /**
+   * Optional pre-display resolution (e.g., canonical TrailBase check for
+   * unconfirmed outcomes). Ownership is checked both before and after. Must
+   * never replay `place`.
+   */
+  reconcile?: (outcome: BidOutcome) => Promise<TSettled>;
   /** Called only when the completion is still owned by the current context. */
-  publish: (outcome: BidOutcome) => void;
+  publish: (outcome: TSettled) => void;
   /** Called when the completion is dropped; must not claim any result. */
   onDiscarded?: (reason: BidDiscardReason) => void;
 }
 
-export async function runGuardedBid(deps: GuardedBidDeps): Promise<BidSettlement> {
+export async function runGuardedBid<TSettled = BidOutcome>(
+  deps: GuardedBidDeps<TSettled>,
+): Promise<BidSettlement<TSettled>> {
   // Ownership first, synchronously: anything that signs out or switches
   // account after this point invalidates the attempt.
   const ownership = deps.takeOwnership();
@@ -89,6 +97,18 @@ export async function runGuardedBid(deps: GuardedBidDeps): Promise<BidSettlement
     return verdict;
   }
 
-  deps.publish(outcome);
-  return { state: "applied", outcome };
+  let settled: TSettled;
+  if (deps.reconcile) {
+    settled = await deps.reconcile(outcome);
+    const postReconcileVerdict = settleBidAttempt(ownership, deps.guard);
+    if (postReconcileVerdict.state === "discarded") {
+      deps.onDiscarded?.(postReconcileVerdict.reason);
+      return postReconcileVerdict;
+    }
+  } else {
+    settled = outcome as unknown as TSettled;
+  }
+
+  deps.publish(settled);
+  return { state: "applied", outcome: settled };
 }

@@ -70,10 +70,18 @@ test("SOCK-08 ok-but-not-leading is surfaced as a warning, not success", () => {
   assert.match(presented.text, /not leading/i);
 });
 
-test("SOCK-09 engine rejection is an error with the engine message", () => {
-  const presented = presentBidOutcome({ ok: false, error: "This auction has ended." }, usd);
-  assert.equal(presented?.tone, "error");
-  assert.equal(presented.text, "This auction has ended.");
+test("SOCK-09 uncoded engine rejection stays uncertain; structured rejection shows error", () => {
+  const uncoded = presentBidOutcome({ ok: false, error: "This auction has ended." }, usd);
+  assert.equal(uncoded?.tone, "unknown");
+  assert.equal(uncoded.reconcile, true);
+  assert.doesNotMatch(uncoded.text, /ended|retry|failed/i);
+
+  const structured = presentBidOutcome(
+    { ok: false, rejected: true, stage: "pre_commit", error: "This auction has ended." },
+    usd,
+  );
+  assert.equal(structured?.tone, "error");
+  assert.equal(structured.text, "This auction has ended.");
 });
 
 test("SOCK-10 source: disconnect invalidates ownership and late connects are dropped", () => {
@@ -112,4 +120,13 @@ test("SOCK-12 source: bidding reconnects when the account identity changes", () 
 test("SOCK-13 detail screen keeps bidding authority with the trade engine", () => {
   assert.match(itemSource, /placeBid/);
   assert.doesNotMatch(itemSource, /api\/records\/v1\/bids/);
+});
+
+test("SOCK-14 pre-emit disconnect sets rejected=true, parser uses no string heuristics, ItemScreen reconciles before display", () => {
+  const ackSource = readFileSync("src/lib/bid-ack.ts", "utf8");
+  const copySource = readFileSync("src/lib/bid-copy.ts", "utf8");
+  assert.match(socketSource, /rejected:\s*true/);
+  assert.match(itemSource, /reconcileBidOutcome/);
+  assert.doesNotMatch(ackSource, /please retry|unexpected error|error\.includes/i);
+  assert.doesNotMatch(copySource, /try again|please retry/i);
 });

@@ -44,14 +44,15 @@ export function presentBidOutcome(
   outcome: BidOutcome,
   formatAmount: (value: number) => string,
 ): BidPresentation {
-  // An undetermined result (timeout, transport loss mid-command) proves nothing:
-  // not that the engine rejected the bid, not that it accepted it.
-  if (outcome.uncertain) {
+  // An unconfirmed result (timeout, transport loss, or an uncoded `ok: false`
+  // lacking structured pre-commit non-commit authority) proves nothing: never
+  // claim the bid failed or invite an immediate retry.
+  if (outcome.uncertain || (!outcome.ok && outcome.rejected !== true)) {
     return {
       tone: "unknown",
       text:
         "We could not confirm this bid. It may still have reached the auction — " +
-        "checking the current bid before you try again.",
+        "checking the current bid before you place another bid.",
       reconcile: true,
     };
   }
@@ -59,10 +60,8 @@ export function presentBidOutcome(
   if (!outcome.ok) {
     return {
       tone: "error",
-      // The engine's failure acknowledgement can arrive after it has recorded
-      // the bid (audit hold, delegated decision), and it does not mark those.
-      // So a rejection is reported, but never as proof that nothing happened:
-      // the caller re-reads canonical state before the user acts again.
+      // Structured pre-commit non-commit proof (local pre-emit guard or explicit
+      // engine stage/committed=false authority); still refresh canonical state.
       text: outcome.error ?? "The bid was not accepted.",
       reconcile: true,
     };

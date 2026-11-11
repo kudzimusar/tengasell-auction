@@ -13,6 +13,8 @@
 // already have been executed and the confirmation lost, so it is reported as
 // uncertain and reconciled against canonical auction state by the caller.
 
+export type BidRejectionStage = "pre_commit";
+
 export interface BidOutcome {
   ok: boolean;
   amount?: number;
@@ -22,17 +24,27 @@ export interface BidOutcome {
   /** True when the bidder is now the leading bidder. */
   winning?: boolean;
   /**
+   * True ONLY when an authoritative structured pre-commit refusal (client
+   * pre-emit check or explicit structured engine stage/committed=false proof)
+   * confirms no bid mutation occurred.
+   */
+  rejected?: boolean;
+  stage?: BidRejectionStage;
+  /**
    * True when the outcome is genuinely unknown (timeout, transport loss
-   * mid-command, or an unreadable confirmation). `ok` is false, but that does
-   * NOT mean the engine rejected the bid.
+   * mid-command, an unreadable confirmation, or an uncoded `ok: false` reply
+   * lacking structured non-commit proof). `ok` is false, but that does NOT
+   * mean the engine rejected the bid.
    */
   uncertain?: boolean;
-  reason?: "timeout" | "disconnected" | "malformed";
+  reason?: "timeout" | "disconnected" | "malformed" | "unverified";
 }
 
 /**
  * Parse an engine acknowledgement. Non-boolean flags are unknown, never
- * inferred: only an explicit `true` sets `winning`/`outbid`.
+ * inferred: only an explicit `true` sets `winning`/`outbid`, and an uncoded
+ * `ok: false` without structured pre-commit authority stays uncertain so post-
+ * commit failures are never misrepresented as definite rejections.
  */
 export function parseBidAck(res: unknown): BidOutcome {
   const payload = (res ?? {}) as {
@@ -43,6 +55,10 @@ export function parseBidAck(res: unknown): BidOutcome {
     winning?: unknown;
     uncertain?: unknown;
     reason?: unknown;
+    rejected?: unknown;
+    stage?: unknown;
+    committed?: unknown;
+    definite?: unknown;
   };
 
   if (typeof payload.ok !== "boolean") {
@@ -55,21 +71,40 @@ export function parseBidAck(res: unknown): BidOutcome {
   }
 
   if (!payload.ok) {
-    // The engine can answer ok:false after it has already recorded the bid
-    // (audit holds, delegated decisions). If it says the outcome is uncertain,
-    // that must survive parsing — reporting a rejection would invite a retry
-    // that re-bids against the same maximum.
-    const uncertain = payload.uncertain === true;
-    const allowed = ["timeout", "disconnected", "malformed"] as const;
+    // Current mini-services/trade-engine/index.ts can emit { ok: false, error }
+    // both before mutation and inside post-commit catch blocks (antiSnipe /
+    // audit failures). Only treat `ok: false` as a definite rejection when an
+    // explicit structured contract field rules out commit; never match error text.
+    const authoritativePreCommit =
+      payload.uncertain !== true &&
+      (payload.rejected === true ||
+        payload.stage === "pre_commit" ||
+        payload.committed === false ||
+        (payload.definite === true && payload.committed !== true));
+
+    if (authoritativePreCommit) {
+      return {
+        ok: false,
+        rejected: true,
+        stage: "pre_commit",
+        error: typeof payload.error === "string" ? payload.error : "The bid was not accepted.",
+      };
+    }
+
+    const allowed = ["timeout", "disconnected", "malformed", "unverified"] as const;
     const reason =
-      typeof payload.reason === "string" && (allowed as readonly string[]).includes(payload.reason)
-        ? (payload.reason as (typeof allowed)[number])
-        : undefined;
+      typeof payload.reason === "string"
+        ? (allowed as readonly string[]).includes(payload.reason)
+          ? (payload.reason as (typeof allowed)[number])
+          : undefined
+        : payload.uncertain === true
+          ? undefined
+          : "unverified";
     return {
       ok: false,
-      uncertain: uncertain ? true : undefined,
+      uncertain: true,
       reason,
-      error: typeof payload.error === "string" ? payload.error : "The bid was not accepted.",
+      error: typeof payload.error === "string" ? payload.error : undefined,
     };
   }
 

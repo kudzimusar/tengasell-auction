@@ -10,6 +10,7 @@ import test from "node:test";
 
 import { presentBidOutcome } from "../src/lib/bid-copy.ts";
 import { parseBidAck } from "../src/lib/bid-ack.ts";
+import { reconcileBidOutcome } from "../src/bids/bid-reconcile.ts";
 
 const money = (value) => `US$${value.toLocaleString("en-US")}`;
 
@@ -134,10 +135,11 @@ test("ACK-10 the parser preserves explicit flags and invents none", () => {
   assert.equal(silent.amount, undefined);
   assert.equal(presentBidOutcome(silent, money).tone, "unknown");
 
-  const rejected = parseBidAck({ ok: false, error: "Auction closed." });
-  assert.equal(rejected.ok, false);
-  assert.equal(rejected.uncertain, undefined);
-  assert.equal(presentBidOutcome(rejected, money).tone, "error");
+  const uncoded = parseBidAck({ ok: false, error: "Auction closed." });
+  assert.equal(uncoded.ok, false);
+  assert.equal(uncoded.uncertain, true);
+  assert.equal(uncoded.reason, "unverified");
+  assert.equal(presentBidOutcome(uncoded, money).tone, "unknown");
 });
 
 test("ACK-11 an engine rejection that is uncertain stays uncertain", () => {
@@ -157,16 +159,28 @@ test("ACK-11 an engine rejection that is uncertain stays uncertain", () => {
   const shown = presentBidOutcome(parsed, money);
   assert.equal(shown.tone, "unknown");
   assert.equal(shown.reconcile, true);
-  assert.doesNotMatch(shown.text, /not accepted/i);
+  assert.doesNotMatch(shown.text, /not accepted|please retry/i);
 });
 
-test("ACK-12 a plain engine rejection is still a rejection", () => {
-  const parsed = parseBidAck({ ok: false, error: "Bid below the minimum." });
-  assert.equal(parsed.uncertain, undefined);
-  const shown = presentBidOutcome(parsed, money);
-  assert.equal(shown.tone, "error");
-  // The engine's rejection can follow a commit, so it still reconciles.
-  assert.equal(shown.reconcile, true);
+test("ACK-12 uncoded engine error including 'Please retry.' stays uncertain without substring guessing", () => {
+  // Exact post-commit catch string emitted by mini-services/trade-engine/index.ts:
+  const postCommitCatch = parseBidAck({
+    ok: false,
+    error: "The trade engine hit an unexpected error. Please retry.",
+  });
+  // Uncoded pre-commit validation message from unmodified engine is equally uncoded:
+  const uncodedValidation = parseBidAck({ ok: false, error: "Bid below the minimum." });
+
+  for (const parsed of [postCommitCatch, uncodedValidation]) {
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.uncertain, true);
+    assert.equal(parsed.rejected, undefined);
+    assert.equal(parsed.reason, "unverified");
+    const shown = presentBidOutcome(parsed, money);
+    assert.equal(shown.tone, "unknown");
+    assert.equal(shown.reconcile, true);
+    assert.doesNotMatch(shown.text, /please retry|unexpected error|not accepted|failed/i);
+  }
 });
 
 test("ACK-13 an unrecognised uncertain reason is not trusted", () => {
@@ -174,4 +188,133 @@ test("ACK-13 an unrecognised uncertain reason is not trusted", () => {
   assert.equal(parsed.uncertain, true);
   assert.equal(parsed.reason, undefined);
   assert.equal(presentBidOutcome(parsed, money).tone, "unknown");
+});
+
+test("ACK-14 structured pre-commit non-commit authority reports definite error without substring checks", () => {
+  const byStage = parseBidAck({
+    ok: false,
+    stage: "pre_commit",
+    error: "The trade engine hit an unexpected error. Please retry.",
+  });
+  const byCommitted = parseBidAck({
+    ok: false,
+    committed: false,
+    error: "Opening bid is US$50.",
+  });
+  for (const parsed of [byStage, byCommitted]) {
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.rejected, true);
+    assert.equal(parsed.stage, "pre_commit");
+    assert.equal(parsed.uncertain, undefined);
+    const shown = presentBidOutcome(parsed, money);
+    assert.equal(shown.tone, "error");
+    assert.equal(shown.reconcile, true);
+  }
+});
+
+test("ACK-15 reconcileBidOutcome recovers post-commit audit/anti-snipe error as canonical lead", async () => {
+  let readCalls = 0;
+  const raw = parseBidAck({
+    ok: false,
+    error: "The trade engine hit an unexpected error. Please retry.",
+  });
+  const reconciled = await reconcileBidOutcome(
+    raw,
+    {
+      auctionId: 9001,
+      identityId: "buyer-takudzwa",
+      maxAmount: 150,
+      beforeTopBidId: 441,
+      beforeBidCount: 3,
+    },
+    money,
+    async () => {
+      readCalls += 1;
+      return {
+        auction: { id: 9001, current_price: 122, bid_count: 4 },
+        bids: [
+          { id: 442, auction_id: 9001, user: "buyer-takudzwa", bidder_username: "takudzwa", amount: 122, max_amount: 150, is_auto: 1, status: "active", created_at: "2026-11-11T01:37:46Z" },
+          { id: 441, auction_id: 9001, user: "buyer-nyasha", bidder_username: "nyasha", amount: 102, max_amount: 120, is_auto: 1, status: "superseded", created_at: "2026-11-11T01:37:46Z" },
+        ],
+      };
+    },
+  );
+  assert.equal(readCalls, 1);
+  assert.equal(reconciled.outcome.ok, true);
+  assert.equal(reconciled.outcome.winning, true);
+  assert.equal(reconciled.outcome.amount, 122);
+  assert.equal(reconciled.presentation.tone, "success");
+  assert.match(reconciled.presentation.text, /US\$122/);
+  assert.doesNotMatch(reconciled.presentation.text, /please retry|error/i);
+});
+
+test("ACK-16 reconcileBidOutcome reports outbid when post-ack records show buyer bid was superseded", async () => {
+  const reconciled = await reconcileBidOutcome(
+    { ok: false, uncertain: true, reason: "timeout" },
+    {
+      auctionId: 9001,
+      identityId: "buyer-nyasha",
+      maxAmount: 130,
+      beforeTopBidId: 441,
+      beforeBidCount: 3,
+    },
+    money,
+    async () => ({
+      auction: { id: 9001, current_price: 132, bid_count: 5 },
+      bids: [
+        { id: 443, auction_id: 9001, user: "buyer-takudzwa", bidder_username: "takudzwa", amount: 132, max_amount: 150, is_auto: 1, status: "active", created_at: "2026-11-11T01:37:46Z" },
+        { id: 442, auction_id: 9001, user: "buyer-nyasha", bidder_username: "nyasha", amount: 130, max_amount: 130, is_auto: 1, status: "superseded", created_at: "2026-11-11T01:37:46Z" },
+      ],
+    }),
+  );
+  assert.equal(reconciled.outcome.ok, true);
+  assert.equal(reconciled.outcome.outbid, true);
+  assert.equal(reconciled.presentation.tone, "warning");
+  assert.match(reconciled.presentation.text, /outbid/i);
+});
+
+test("ACK-17 reconcileBidOutcome stays unknown and never invites retry when unrecorded or unreachable", async () => {
+  const raw = parseBidAck({
+    ok: false,
+    error: "The trade engine hit an unexpected error. Please retry.",
+  });
+  const unrecorded = await reconcileBidOutcome(
+    raw,
+    { auctionId: 9001, identityId: "buyer-takudzwa", maxAmount: 25, beforeTopBidId: 438, beforeBidCount: 0 },
+    money,
+    async () => ({
+      auction: { id: 9001, current_price: 50, bid_count: 0 },
+      bids: [],
+    }),
+  );
+  assert.equal(unrecorded.presentation.tone, "unknown");
+  assert.doesNotMatch(unrecorded.presentation.text, /please retry|failed/i);
+
+  const offline = await reconcileBidOutcome(
+    raw,
+    { auctionId: 9001, identityId: "buyer-takudzwa", maxAmount: 120, beforeTopBidId: 440, beforeBidCount: 2 },
+    money,
+    async () => {
+      throw new Error("Network down");
+    },
+  );
+  assert.equal(offline.presentation.tone, "unknown");
+  assert.doesNotMatch(offline.presentation.text, /please retry|failed/i);
+});
+
+test("ACK-18 structured rejection skips unnecessary canonical blocking lookup", async () => {
+  let called = 0;
+  const raw = parseBidAck({ ok: false, rejected: true, stage: "pre_commit", error: "Not connected to the live auction engine." });
+  const settled = await reconcileBidOutcome(
+    raw,
+    { auctionId: 9001, identityId: "buyer-takudzwa", maxAmount: 120, beforeTopBidId: 440, beforeBidCount: 2 },
+    money,
+    async () => {
+      called += 1;
+      return { auction: null, bids: [] };
+    },
+  );
+  assert.equal(called, 0);
+  assert.equal(settled, null);
+  assert.equal(presentBidOutcome(raw, money).tone, "error");
 });
