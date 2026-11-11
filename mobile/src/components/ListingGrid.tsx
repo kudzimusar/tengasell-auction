@@ -1,11 +1,14 @@
-// Shared two-column listing grid (Temu-style density).
+// Shared two-column listing grid built on responsive NXS layout metrics.
 
 import { useRouter } from "expo-router";
-import { useWindowDimensions } from "react-native";
-import { FlatList, StyleSheet, Text, View } from "react-native";
+import { useMemo } from "react";
+import { FlatList, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 
-import { AuctionCard } from "./AuctionCard";
+import { computeGridMetrics } from "../lib/grid-layout";
 import type { AuctionView } from "../lib/types";
+import { useNxs } from "../nxs/context/NxsProvider";
+import { type NxsTheme } from "../nxs/tokens";
+import { AuctionCard } from "./AuctionCard";
 
 interface Props {
   items: AuctionView[];
@@ -15,10 +18,26 @@ interface Props {
   contentPadding?: number;
 }
 
-export function ListingGrid({ items, now, empty, header, contentPadding = 10 }: Props) {
+export function ListingGrid({ items, now, empty, header, contentPadding }: Props) {
   const { width } = useWindowDimensions();
+  const { theme, screenPadding, safeArea } = useNxs();
   const router = useRouter();
-  const cardWidth = Math.floor((width - contentPadding * 2 - 10) / 2);
+  const padding = contentPadding ?? screenPadding;
+  const metrics = useMemo(
+    () =>
+      computeGridMetrics({
+        viewportWidth: width,
+        columns: 2,
+        padding,
+        safeLeft: safeArea.left,
+        safeRight: safeArea.right,
+      }),
+    [padding, safeArea.left, safeArea.right, width],
+  );
+  const styles = useMemo(
+    () => makeStyles(theme, metrics.containerWidth, metrics.padding),
+    [theme, metrics.containerWidth, metrics.padding],
+  );
 
   return (
     <FlatList
@@ -26,8 +45,8 @@ export function ListingGrid({ items, now, empty, header, contentPadding = 10 }: 
       numColumns={2}
       keyExtractor={(i) => String(i.id)}
       ListHeaderComponent={header ?? undefined}
-      columnWrapperStyle={{ gap: 10, paddingHorizontal: contentPadding }}
-      contentContainerStyle={{ paddingTop: 8, paddingBottom: 16 }}
+      columnWrapperStyle={{ gap: metrics.gap }}
+      contentContainerStyle={styles.listContent}
       ListEmptyComponent={
         empty ? (
           <View style={styles.empty}>
@@ -38,7 +57,7 @@ export function ListingGrid({ items, now, empty, header, contentPadding = 10 }: 
       renderItem={({ item }) => (
         <AuctionCard
           item={item}
-          width={cardWidth}
+          width={metrics.cardWidth}
           now={now}
           onPress={() => router.push(`/item/${item.id}` as never)}
         />
@@ -47,7 +66,18 @@ export function ListingGrid({ items, now, empty, header, contentPadding = 10 }: 
   );
 }
 
-const styles = StyleSheet.create({
-  empty: { padding: 28, alignItems: "center" },
-  emptyText: { fontSize: 13, color: "#5C6B72", textAlign: "center" },
-});
+function makeStyles(theme: NxsTheme, containerWidth: number, padding: number) {
+  return StyleSheet.create({
+    listContent: {
+      width: "100%",
+      maxWidth: containerWidth,
+      alignSelf: "center",
+      flexGrow: 1,
+      paddingTop: 8,
+      paddingBottom: 16,
+      paddingHorizontal: padding,
+    },
+    empty: { padding: 28, alignItems: "center", justifyContent: "center" },
+    emptyText: { fontSize: 14, lineHeight: 20, color: theme.text.secondary, textAlign: "center" },
+  });
+}

@@ -1,10 +1,7 @@
-// MOB-02 — auction detail.
-// Reads one record from the canonical authority (Trailbase via gateway).
-// Bidding is intentionally not wired here: it belongs to MOB-03 and must go
-// through the Socket.IO trade engine, never a direct record write.
+// MOB-02 — auction detail built on NXS tokens, localization, and responsive geometry.
 
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -19,40 +16,53 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BottomNav } from "../../components/BottomNav";
 import { formatDateTime, formatRemaining, formatUSD, minNextBid, remainingSeverity } from "../../lib/format";
+import { createRequestGuard } from "../../lib/request-guard";
 import { fetchAuction } from "../../lib/trailbase";
 import { toAuctionView, type AuctionView } from "../../lib/types";
+import { NxsButton } from "../../nxs/components/NxsButton";
+import { useNxs } from "../../nxs/context/NxsProvider";
+import { useNxsText } from "../../nxs/localization/useNxsText";
+import { nxsTokens, type NxsTheme } from "../../nxs/tokens";
 
 export default function ItemScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const { theme, screenPadding, safeArea, writingDirection } = useNxs();
+  const t = useNxsText();
+
   const [item, setItem] = useState<AuctionView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState<number>(() => Date.now());
   const [hero, setHero] = useState(0);
+  const loadGuard = useRef(createRequestGuard()).current;
 
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(t);
+    const timer = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(timer);
   }, []);
 
   const load = useCallback(async () => {
+    const req = loadGuard.next();
     setLoading(true);
     setError(null);
     try {
       const record = await fetchAuction(Number(id));
+      if (!loadGuard.isCurrent(req)) return;
       if (!record) {
-        setError("This listing could not be found.");
+        setError(t("item.notFound"));
         setItem(null);
       } else {
         setItem(toAuctionView(record));
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not reach the marketplace.");
+      if (!loadGuard.isCurrent(req)) return;
+      setError(e instanceof Error ? e.message : t("item.reachFailed"));
     } finally {
-      setLoading(false);
+      if (loadGuard.isCurrent(req)) setLoading(false);
     }
-  }, [id]);
+  }, [id, loadGuard, t]);
 
   useEffect(() => {
     const task = setTimeout(() => {
@@ -61,40 +71,55 @@ export default function ItemScreen() {
     return () => clearTimeout(task);
   }, [load]);
 
-  const { width } = useWindowDimensions();
-  const heroWidth = Math.max(width, 320);
-  const styles = useMemo(() => makeStyles(heroWidth), [heroWidth]);
+  const usableWidth = Math.max(320, width - safeArea.left - safeArea.right);
+  const containerWidth = Math.min(usableWidth, 720);
+  const heroWidth = containerWidth;
+  const styles = useMemo(
+    () => makeStyles(theme, screenPadding, writingDirection, containerWidth, heroWidth),
+    [containerWidth, heroWidth, screenPadding, theme, writingDirection],
+  );
   const remainingMs = item ? Date.parse(item.ends_at) - now : 0;
-  // The record status can lag the clock: an auction past ends_at is closed here
-  // too so detail matches the listing card.
+  // Status can lag the clock: an auction past ends_at is closed here too.
   const sold = item
     ? ["sold", "ended", "cancelled"].includes(item.status) || remainingMs <= 0
     : false;
   const severity = item ? remainingSeverity(remainingMs) : "normal";
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <View style={styles.topBar}>
-        <Pressable hitSlop={4} onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Back" style={styles.backBtn}>
+        <Pressable
+          hitSlop={4}
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel={t("item.backA11y")}
+          style={({ pressed }) => [styles.backBtn, pressed && styles.pressed]}
+        >
           <Text style={styles.backGlyph}>‹</Text>
         </Pressable>
-        <Text style={styles.topTitle} numberOfLines={1}>
-          {item ? item.title : "Listing"}
+        <Text style={styles.topTitle} numberOfLines={1} accessibilityRole="header">
+          {item ? item.title : t("item.fallbackTitle")}
         </Text>
         <View style={styles.backBtn} />
       </View>
 
       {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator color="#19717B" size="large" />
+        <View style={styles.center} accessible accessibilityLiveRegion="polite">
+          <ActivityIndicator
+            color={theme.state.loading}
+            size="large"
+            accessibilityLabel={t("item.loadingA11y")}
+          />
         </View>
       ) : error || !item ? (
         <View style={styles.center}>
-          <Text style={styles.errorTitle}>Not available</Text>
-          <Text style={styles.errorBody}>{error ?? "This listing is no longer published."}</Text>
-          <Pressable hitSlop={4} style={styles.retry} onPress={() => void load()} accessibilityRole="button">
-            <Text style={styles.retryText}>Try again</Text>
-          </Pressable>
+          <Text style={styles.errorTitle} accessibilityRole="header">
+            {t("item.unavailableTitle")}
+          </Text>
+          <Text style={styles.errorBody} accessibilityRole="alert">
+            {error ?? t("item.unavailableFallback")}
+          </Text>
+          <NxsButton label={t("common.tryAgain")} onPress={() => void load()} />
         </View>
       ) : (
         <>
@@ -114,7 +139,7 @@ export default function ItemScreen() {
                     {uri ? (
                       <Image source={{ uri }} style={styles.heroImg} resizeMode="cover" />
                     ) : (
-                      <View style={[styles.heroImg, { backgroundColor: "#E7EDF0" }]} />
+                      <View style={[styles.heroImg, styles.heroPlaceholder]} />
                     )}
                   </View>
                 ))}
@@ -125,7 +150,7 @@ export default function ItemScreen() {
                   <View style={styles.soldVeil} pointerEvents="none" />
                   <View style={styles.soldBandWrap} pointerEvents="none">
                     <View style={styles.soldBand}>
-                      <Text style={styles.soldBandText}>SOLD</Text>
+                      <Text style={styles.soldBandText}>{t("auction.soldBadge")}</Text>
                     </View>
                   </View>
                 </>
@@ -145,50 +170,66 @@ export default function ItemScreen() {
               <View style={styles.badges}>
                 <Text style={styles.badge}>{item.condition}</Text>
                 <Text style={styles.badge}>{item.category}</Text>
-                {item.featured ? <Text style={[styles.badge, styles.badgeGold]}>Featured</Text> : null}
+                {item.featured ? <Text style={[styles.badge, styles.badgeGold]}>{t("item.featured")}</Text> : null}
               </View>
 
-              <Text style={styles.title}>{item.title}</Text>
+              <Text style={styles.title} accessibilityRole="header">
+                {item.title}
+              </Text>
 
               <View style={styles.statRow}>
-                <Stat label="Bids" value={String(item.bid_count)} />
-                <Stat label="Watching" value={String(item.watch_count)} />
-                <Stat label="Views" value={String(item.views)} />
+                <Stat label={t("item.bidsLabel")} value={String(item.bid_count)} styles={styles} />
+                <Stat label={t("item.watchingLabel")} value={String(item.watch_count)} styles={styles} />
+                <Stat label={t("item.viewsLabel")} value={String(item.views)} styles={styles} />
               </View>
 
               {sold ? (
-                <Text style={styles.closed}>This auction has closed.</Text>
+                <Text style={styles.closed}>{t("item.closedBanner")}</Text>
               ) : (
                 <Text style={[styles.timer, severity === "urgent" && styles.timerUrgent]}>
-                  Ends in {formatRemaining(remainingMs)} · {formatDateTime(item.ends_at, { withTime: true })}
+                  {t("item.endsInBanner", {
+                    remaining: formatRemaining(remainingMs),
+                    date: formatDateTime(item.ends_at, { withTime: true }),
+                  })}
                 </Text>
               )}
             </View>
 
             <View style={styles.block}>
-              <Text style={styles.sectionTitle}>Seller</Text>
+              <Text style={styles.sectionTitle} accessibilityRole="header">
+                {t("item.sellerTitle")}
+              </Text>
               <View style={styles.sellerRow}>
                 <View style={styles.avatar}>
                   <Text style={styles.avatarText}>{item.seller_username.slice(0, 1).toUpperCase()}</Text>
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.sellerName}>@{item.seller_username}</Text>
-                  <Text style={styles.sellerMeta}>{item.city || "Zimbabwe"} · ships: {item.shipping}</Text>
+                  <Text style={styles.sellerMeta}>
+                    {t("item.sellerMeta", {
+                      city: item.city || t("item.defaultLocation"),
+                      shipping: item.shipping,
+                    })}
+                  </Text>
                 </View>
               </View>
             </View>
 
             <View style={styles.block}>
-              <Text style={styles.sectionTitle}>Description</Text>
-              <Text style={styles.body}>{item.description || "No description provided."}</Text>
+              <Text style={styles.sectionTitle} accessibilityRole="header">
+                {t("item.descriptionTitle")}
+              </Text>
+              <Text style={styles.body}>{item.description || t("item.noDescription")}</Text>
             </View>
 
             <View style={styles.block}>
-              <Text style={styles.sectionTitle}>Details</Text>
-              <Row k="Starting price" v={formatUSD(item.start_price)} />
-              <Row k="Shipping fee" v={formatUSD(item.shipping_fee)} />
-              <Row k="Location" v={item.city || "—"} />
-              <Row k="Listing ID" v={String(item.id)} />
+              <Text style={styles.sectionTitle} accessibilityRole="header">
+                {t("item.detailsTitle")}
+              </Text>
+              <Row k={t("item.startingPrice")} v={formatUSD(item.start_price)} styles={styles} />
+              <Row k={t("item.shippingFee")} v={formatUSD(item.shipping_fee)} styles={styles} />
+              <Row k={t("item.location")} v={item.city || "—"} styles={styles} />
+              <Row k={t("item.listingId")} v={String(item.id)} styles={styles} />
             </View>
           </ScrollView>
 
@@ -197,17 +238,21 @@ export default function ItemScreen() {
               <Text style={styles.ctaPrice}>{formatUSD(item.current_price)}</Text>
               <Text style={styles.ctaSub}>
                 {sold
-                  ? "Auction closed"
-                  : `Next bid ${formatUSD(minNextBid(item.current_price, item.bid_count))}`}
+                  ? t("auction.closedLabel")
+                  : t("item.nextBid", {
+                      amount: formatUSD(minNextBid(item.current_price, item.bid_count)),
+                    })}
               </Text>
             </View>
-            <Pressable hitSlop={4}
+            <Pressable
+              hitSlop={4}
               disabled
               style={[styles.cta, styles.ctaDisabled]}
               accessibilityRole="button"
               accessibilityState={{ disabled: true }}
+              accessibilityLabel={sold ? t("item.closedCta") : t("item.biddingNextCta")}
             >
-              <Text style={styles.ctaText}>{sold ? "Closed" : "Bidding in MOB-03"}</Text>
+              <Text style={styles.ctaText}>{sold ? t("item.closedCta") : t("item.biddingNextCta")}</Text>
             </Pressable>
           </View>
         </>
@@ -217,145 +262,203 @@ export default function ItemScreen() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({
+  label,
+  value,
+  styles,
+}: {
+  label: string;
+  value: string;
+  styles: ReturnType<typeof makeStyles>;
+}) {
   return (
-    <View style={statStyle.wrap}>
-      <Text style={statStyle.value}>{value}</Text>
-      <Text style={statStyle.label}>{label}</Text>
+    <View style={styles.statWrap}>
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
     </View>
   );
 }
 
-function Row({ k, v }: { k: string; v: string }) {
+function Row({
+  k,
+  v,
+  styles,
+}: {
+  k: string;
+  v: string;
+  styles: ReturnType<typeof makeStyles>;
+}) {
   return (
-    <View style={rowStyle.row}>
-      <Text style={rowStyle.k}>{k}</Text>
-      <Text style={rowStyle.v}>{v}</Text>
+    <View style={styles.detailRow}>
+      <Text style={styles.detailKey}>{k}</Text>
+      <Text style={styles.detailValue}>{v}</Text>
     </View>
   );
 }
 
-const statStyle = StyleSheet.create({
-  wrap: { alignItems: "center", flex: 1 },
-  value: { fontSize: 15, fontWeight: "800", color: "#101619" },
-  label: { fontSize: 10.5, color: "#6B7A82", marginTop: 2 },
-});
+function makeStyles(
+  theme: NxsTheme,
+  screenPadding: number,
+  writingDirection: "ltr" | "rtl",
+  containerWidth: number,
+  heroWidth: number,
+) {
+  const rowDirection = writingDirection === "rtl" ? "row-reverse" : "row";
+  const textAlign = writingDirection === "rtl" ? "right" : "left";
 
-const rowStyle = StyleSheet.create({
-  row: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 6 },
-  k: { fontSize: 13, color: "#6B7A82" },
-  v: { fontSize: 13, color: "#101619", fontWeight: "600" },
-});
-
-function makeStyles(heroWidth: number) {
   return StyleSheet.create({
-    safe: { flex: 1, backgroundColor: "#F6F9FA" },
+    safe: { flex: 1, backgroundColor: theme.surface.canvas },
     topBar: {
-      flexDirection: "row",
+      flexDirection: rowDirection,
       alignItems: "center",
       paddingHorizontal: 10,
       paddingVertical: 8,
-      backgroundColor: "#FFFFFF",
+      backgroundColor: theme.surface.section,
       borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: "#DCE4E8",
+      borderBottomColor: theme.border.subtle,
     },
-    backBtn: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
-    backGlyph: { fontSize: 26, color: "#19717B", lineHeight: 28 },
-    topTitle: { flex: 1, textAlign: "center", fontSize: 13, fontWeight: "700", color: "#101619" },
-
-    center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24, gap: 8 },
-    errorTitle: { fontSize: 18, fontWeight: "800", color: "#101619" },
-    errorBody: { fontSize: 13, color: "#5C6B72", textAlign: "center" },
-    retry: {
-      marginTop: 10,
-      backgroundColor: "#19717B",
-      paddingHorizontal: 18,
-      paddingVertical: 10,
-      minHeight: 48,
-      minWidth: 48,
+    backBtn: {
+      width: nxsTokens.touch.minimum,
+      height: nxsTokens.touch.minimum,
       alignItems: "center",
       justifyContent: "center",
-      borderRadius: 10,
     },
-    retryText: { color: "#FFFFFF", fontWeight: "700", fontSize: 13 },
+    backGlyph: { fontSize: 26, color: theme.action.primary, lineHeight: 28 },
+    pressed: { opacity: 0.78 },
+    topTitle: {
+      flex: 1,
+      textAlign: "center",
+      fontSize: 14,
+      fontWeight: "700",
+      color: theme.text.primary,
+    },
 
-    scroll: { paddingBottom: 24 },
-    heroWrap: { backgroundColor: "#FFFFFF" },
-    hero: { width: heroWidth, height: heroWidth },
+    center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24, gap: 12 },
+    errorTitle: { fontSize: 18, fontWeight: "800", color: theme.text.primary },
+    errorBody: { fontSize: 14, color: theme.text.secondary, textAlign: "center" },
+
+    scroll: {
+      width: "100%",
+      maxWidth: containerWidth,
+      alignSelf: "center",
+      paddingBottom: 24,
+    },
+    heroWrap: { backgroundColor: theme.surface.raised },
+    hero: { width: heroWidth, height: Math.min(heroWidth, 440) },
     heroImg: { width: "100%", height: "100%" },
-    soldVeil: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(10,13,16,0.35)" },
-    soldBandWrap: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center" },
+    heroPlaceholder: { backgroundColor: theme.surface.overlay },
+    soldVeil: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: theme.surface.scrim,
+    },
+    soldBandWrap: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      alignItems: "center",
+      justifyContent: "center",
+    },
     soldBand: {
-      width: 460,
+      width: heroWidth * 1.4,
       paddingVertical: 12,
-      backgroundColor: "#D62828",
+      backgroundColor: theme.state.error,
       borderTopWidth: 3,
       borderBottomWidth: 3,
-      borderColor: "#FFFFFF",
+      borderColor: theme.text.inverse,
       transform: [{ rotate: "-30deg" }],
       alignItems: "center",
     },
-    soldBandText: { color: "#FFFFFF", fontWeight: "900", fontSize: 26, letterSpacing: 8 },
+    soldBandText: { color: theme.text.inverse, fontWeight: "900", fontSize: 26, letterSpacing: 8 },
     dots: { position: "absolute", bottom: 10, alignSelf: "center", flexDirection: "row", gap: 5 },
-    dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.5)" },
-    dotOn: { backgroundColor: "#FFFFFF" },
+    dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: theme.surface.scrim },
+    dotOn: { backgroundColor: theme.text.inverse },
 
     block: {
-      backgroundColor: "#FFFFFF",
+      backgroundColor: theme.surface.raised,
       marginTop: 8,
-      paddingHorizontal: 14,
+      paddingHorizontal: screenPadding,
       paddingVertical: 14,
       gap: 8,
     },
-    price: { fontSize: 26, fontWeight: "900", color: "#8A5F0B", letterSpacing: -0.6 },
-    priceSold: { color: "#7A848A", textDecorationLine: "line-through" },
-    badges: { flexDirection: "row", gap: 6, flexWrap: "wrap" },
+    price: { fontSize: 26, fontWeight: "900", color: theme.state.warning, letterSpacing: -0.6, textAlign },
+    priceSold: { color: theme.state.disabled, textDecorationLine: "line-through" },
+    badges: { flexDirection: rowDirection, gap: 6, flexWrap: "wrap" },
     badge: {
-      fontSize: 10.5,
+      fontSize: 12,
       fontWeight: "700",
-      color: "#19717B",
-      backgroundColor: "rgba(25,113,123,0.10)",
+      color: theme.action.primary,
+      backgroundColor: theme.surface.primaryTint,
       paddingHorizontal: 8,
       paddingVertical: 3,
-      borderRadius: 999,
+      borderRadius: nxsTokens.radius.pill,
       overflow: "hidden",
     },
-    badgeGold: { color: "#8A5F0B", backgroundColor: "rgba(223,174,46,0.18)" },
-    title: { fontSize: 16, lineHeight: 22, fontWeight: "600", color: "#101619" },
+    badgeGold: { color: theme.state.warning, backgroundColor: theme.surface.accentTint },
+    title: { fontSize: 17, lineHeight: 23, fontWeight: "700", color: theme.text.primary, textAlign },
     statRow: {
-      flexDirection: "row",
+      flexDirection: rowDirection,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderBottomWidth: StyleSheet.hairlineWidth,
-      borderColor: "#E2E8EC",
+      borderColor: theme.border.subtle,
       paddingVertical: 10,
       marginTop: 4,
     },
-    timer: { fontSize: 12.5, color: "#5C6B72" },
-    timerUrgent: { color: "#C0392B", fontWeight: "700" },
-    closed: { fontSize: 12.5, color: "#C0392B", fontWeight: "700" },
+    statWrap: { alignItems: "center", flex: 1 },
+    statValue: { fontSize: 15, fontWeight: "800", color: theme.text.primary },
+    statLabel: { fontSize: 11, color: theme.text.secondary, marginTop: 2 },
+    timer: { fontSize: 13, color: theme.text.secondary, textAlign },
+    timerUrgent: { color: theme.state.error, fontWeight: "700" },
+    closed: { fontSize: 13, color: theme.state.error, fontWeight: "700", textAlign },
 
-    sectionTitle: { fontSize: 13, fontWeight: "800", color: "#101619" },
-    sellerRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-    avatar: { width: 38, height: 38, borderRadius: 19, backgroundColor: "#19717B", alignItems: "center", justifyContent: "center" },
-    avatarText: { color: "#FFFFFF", fontWeight: "800", fontSize: 16 },
-    sellerName: { fontSize: 14, fontWeight: "700", color: "#101619" },
-    sellerMeta: { fontSize: 11.5, color: "#6B7A82", marginTop: 2 },
-    body: { fontSize: 13.5, lineHeight: 20, color: "#33424A" },
+    sectionTitle: { fontSize: 14, fontWeight: "800", color: theme.text.primary, textAlign },
+    sellerRow: { flexDirection: rowDirection, alignItems: "center", gap: 10 },
+    avatar: {
+      width: 38,
+      height: 38,
+      borderRadius: 19,
+      backgroundColor: theme.action.primary,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    avatarText: { color: theme.text.inverse, fontWeight: "800", fontSize: 16 },
+    sellerName: { fontSize: 14, fontWeight: "700", color: theme.text.primary, textAlign },
+    sellerMeta: { fontSize: 12, color: theme.text.secondary, marginTop: 2, textAlign },
+    body: { fontSize: 14, lineHeight: 21, color: theme.text.primary, textAlign },
+
+    detailRow: { flexDirection: rowDirection, justifyContent: "space-between", paddingVertical: 6 },
+    detailKey: { fontSize: 13, color: theme.text.secondary },
+    detailValue: { fontSize: 13, color: theme.text.primary, fontWeight: "600" },
 
     ctaBar: {
-      flexDirection: "row",
+      width: "100%",
+      maxWidth: containerWidth,
+      alignSelf: "center",
+      flexDirection: rowDirection,
       alignItems: "center",
       gap: 12,
-      paddingHorizontal: 14,
+      paddingHorizontal: screenPadding,
       paddingVertical: 10,
       borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: "#DCE4E8",
-      backgroundColor: "#FFFFFF",
+      borderTopColor: theme.border.subtle,
+      backgroundColor: theme.surface.section,
     },
-    ctaPrice: { fontSize: 18, fontWeight: "900", color: "#8A5F0B" },
-    ctaSub: { fontSize: 11, color: "#6B7A82" },
-    cta: { paddingHorizontal: 18, minHeight: 48, justifyContent: "center", borderRadius: 12, backgroundColor: "#19717B" },
-    ctaDisabled: { backgroundColor: "#9FB3B8" },
-    ctaText: { color: "#FFFFFF", fontWeight: "800", fontSize: 13.5 },
+    ctaPrice: { fontSize: 18, fontWeight: "900", color: theme.state.warning, textAlign },
+    ctaSub: { fontSize: 12, color: theme.text.secondary, textAlign },
+    cta: {
+      paddingHorizontal: 18,
+      minHeight: nxsTokens.touch.minimum,
+      minWidth: nxsTokens.touch.minimum,
+      justifyContent: "center",
+      borderRadius: nxsTokens.radius.card,
+      backgroundColor: theme.action.primary,
+    },
+    ctaDisabled: { backgroundColor: theme.state.disabled },
+    ctaText: { color: theme.text.inverse, fontWeight: "800", fontSize: 14 },
   });
 }

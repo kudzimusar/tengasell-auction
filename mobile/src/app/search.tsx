@@ -1,4 +1,4 @@
-// Search tab — title search against the canonical records API.
+// Search tab — title search across currently live auctions via canonical API.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -13,10 +13,17 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BottomNav } from "../components/BottomNav";
 import { ListingGrid } from "../components/ListingGrid";
+import { createRequestGuard } from "../lib/request-guard";
 import { fetchAuctions, fetchCategories } from "../lib/trailbase";
 import { toAuctionView, type AuctionView, type Category } from "../lib/types";
+import { useNxs } from "../nxs/context/NxsProvider";
+import { useNxsText } from "../nxs/localization/useNxsText";
+import { nxsTokens, type NxsTheme } from "../nxs/tokens";
 
 export default function SearchScreen() {
+  const { theme, screenPadding, writingDirection } = useNxs();
+  const t = useNxsText();
+
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<AuctionView[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -26,68 +33,89 @@ export default function SearchScreen() {
   const [now, setNow] = useState<number>(() => Date.now());
 
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(t);
+    const timer = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {
     fetchCategories().then(setCategories).catch(() => undefined);
   }, []);
 
-  const requestRef = useRef(0);
+  const requestGuard = useRef(createRequestGuard()).current;
 
-  const run = useCallback(async (q: string) => {
-    const term = q.trim();
-    if (!term) return;
-    // Every run owns a sequence number: an older response that resolves after a
-    // newer query (or a newer failure) must not write into the current state.
-    const request = ++requestRef.current;
-    setBusy(true);
-    setError(null);
-    try {
-      const rows = await fetchAuctions({ search: term, limit: 40 });
-      if (request !== requestRef.current) return;
-      setItems(rows.map(toAuctionView));
+  const run = useCallback(
+    async (q: string) => {
+      const term = q.trim();
+      if (!term) return;
+      const request = requestGuard.next();
+      setBusy(true);
       setError(null);
-      setSearched(true);
-    } catch {
-      if (request !== requestRef.current) return;
-      // Never leave the previous query's rows under a failure message: the user
-      // would read stale results as the answer to this search.
-      setItems([]);
-      setSearched(true);
-      setError("Search is unavailable right now. Try again.");
-    } finally {
-      if (request === requestRef.current) setBusy(false);
-    }
-  }, []);
+      try {
+        const rows = await fetchAuctions({ search: term, limit: 40 });
+        if (!requestGuard.isCurrent(request)) return;
+        setItems(rows.map(toAuctionView));
+        setError(null);
+        setSearched(true);
+      } catch {
+        if (!requestGuard.isCurrent(request)) return;
+        // Never leave the previous query's rows under a failure message.
+        setItems([]);
+        setSearched(true);
+        setError(t("search.unavailableError"));
+      } finally {
+        if (requestGuard.isCurrent(request)) setBusy(false);
+      }
+    },
+    [requestGuard, t],
+  );
 
-  const styles = useMemo(() => makeStyles(), []);
+  const styles = useMemo(
+    () => makeStyles(theme, screenPadding, writingDirection),
+    [screenPadding, theme, writingDirection],
+  );
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <View style={styles.searchBar}>
         <TextInput
           value={query}
           onChangeText={setQuery}
-          placeholder="Search auctions — iPhone, solar, Hilux…"
-          placeholderTextColor="#8A979E"
+          placeholder={t("search.placeholder")}
+          placeholderTextColor={theme.text.secondary}
           returnKeyType="search"
           onSubmitEditing={() => void run(query)}
           style={styles.input}
-          accessibilityLabel="Search auctions"
+          accessibilityLabel={t("search.inputA11y")}
         />
-        <Pressable hitSlop={4} style={styles.go} onPress={() => void run(query)} accessibilityRole="button" accessibilityLabel="Search">
-          <Text style={styles.goText}>Search</Text>
+        <Pressable
+          hitSlop={4}
+          style={({ pressed }) => [styles.go, pressed && styles.pressed]}
+          onPress={() => void run(query)}
+          accessibilityRole="button"
+          accessibilityLabel={t("search.submit")}
+        >
+          <Text style={styles.goText}>{t("search.submit")}</Text>
         </Pressable>
       </View>
 
       {!searched && (
         <View style={styles.suggestWrap}>
-          <Text style={styles.suggestTitle}>Browse by category</Text>
+          <Text style={styles.suggestTitle} accessibilityRole="header">
+            {t("search.browseCategoryTitle")}
+          </Text>
           <View style={styles.chips}>
             {categories.slice(0, 8).map((c) => (
-              <Pressable hitSlop={4} key={c.id} style={styles.chip} onPress={() => { setQuery(c.name); void run(c.name); }}>
+              <Pressable
+                hitSlop={4}
+                key={c.id}
+                style={({ pressed }) => [styles.chip, pressed && styles.pressed]}
+                onPress={() => {
+                  setQuery(c.name);
+                  void run(c.name);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={t("search.chipA11y", { category: c.name })}
+              >
                 <Text style={styles.chipText}>{c.name}</Text>
               </Pressable>
             ))}
@@ -96,52 +124,95 @@ export default function SearchScreen() {
       )}
 
       {busy ? (
-        <View style={styles.center}>
-          <ActivityIndicator color="#19717B" />
+        <View style={styles.center} accessible accessibilityLiveRegion="polite">
+          <ActivityIndicator color={theme.state.loading} accessibilityLabel={t("search.loadingA11y")} />
         </View>
       ) : (
         <ListingGrid
           items={items}
           now={now}
-          empty={searched ? (error ?? "No auctions match that search.") : "Search live and sold auctions."}
+          empty={
+            searched
+              ? (error ?? t("search.emptyNoResults"))
+              : t("search.promptLiveOnly")
+          }
         />
       )}
-      <BottomNav />
+      <BottomNav active="search" />
     </SafeAreaView>
   );
 }
 
-function makeStyles() {
+function makeStyles(
+  theme: NxsTheme,
+  screenPadding: number,
+  writingDirection: "ltr" | "rtl",
+) {
+  const rowDirection = writingDirection === "rtl" ? "row-reverse" : "row";
+  const textAlign = writingDirection === "rtl" ? "right" : "left";
+
   return StyleSheet.create({
-    safe: { flex: 1, backgroundColor: "#F6F9FA" },
+    safe: { flex: 1, backgroundColor: theme.surface.canvas },
     searchBar: {
-      flexDirection: "row",
+      flexDirection: rowDirection,
       alignItems: "center",
       gap: 8,
-      paddingHorizontal: 12,
+      paddingHorizontal: screenPadding,
       paddingVertical: 10,
-      backgroundColor: "#FFFFFF",
+      backgroundColor: theme.surface.section,
       borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: "#DCE4E8",
+      borderBottomColor: theme.border.subtle,
     },
     input: {
       flex: 1,
-      height: 48,
-      borderRadius: 24,
+      minHeight: nxsTokens.touch.minimum,
+      borderRadius: nxsTokens.radius.expressive,
       borderWidth: 1.5,
-      borderColor: "#19717B",
+      borderColor: theme.action.primary,
       paddingHorizontal: 14,
-      fontSize: 13.5,
-      color: "#101619",
-      backgroundColor: "#FFFFFF",
+      fontSize: 14,
+      color: theme.text.primary,
+      backgroundColor: theme.surface.raised,
+      textAlign,
     },
-    go: { backgroundColor: "#19717B", paddingHorizontal: 16, height: 48, minHeight: 48, borderRadius: 24, alignItems: "center", justifyContent: "center" },
-    goText: { color: "#FFFFFF", fontWeight: "800", fontSize: 13 },
-    suggestWrap: { padding: 14, gap: 10 },
-    suggestTitle: { fontSize: 12.5, fontWeight: "800", color: "#101619" },
-    chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-    chip: { borderWidth: 1, borderColor: "#DCE4E8", backgroundColor: "#FFFFFF", borderRadius: 999, paddingHorizontal: 14, minHeight: 48, justifyContent: "center" },
-    chipText: { fontSize: 12, color: "#33424A", fontWeight: "600" },
+    go: {
+      backgroundColor: theme.action.primary,
+      paddingHorizontal: 16,
+      minHeight: nxsTokens.touch.minimum,
+      minWidth: nxsTokens.touch.minimum,
+      borderRadius: nxsTokens.radius.expressive,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    goText: { color: theme.text.inverse, fontWeight: "800", fontSize: 14 },
+    pressed: { opacity: 0.8 },
+    suggestWrap: {
+      width: "100%",
+      maxWidth: 920,
+      alignSelf: "center",
+      paddingHorizontal: screenPadding,
+      paddingVertical: 14,
+      gap: 10,
+    },
+    suggestTitle: {
+      fontSize: 13,
+      fontWeight: "800",
+      color: theme.text.primary,
+      textAlign,
+    },
+    chips: { flexDirection: rowDirection, flexWrap: "wrap", gap: 8 },
+    chip: {
+      borderWidth: 1,
+      borderColor: theme.border.subtle,
+      backgroundColor: theme.surface.raised,
+      borderRadius: nxsTokens.radius.pill,
+      paddingHorizontal: 14,
+      minHeight: nxsTokens.touch.minimum,
+      minWidth: nxsTokens.touch.minimum,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    chipText: { fontSize: 13, color: theme.text.primary, fontWeight: "600" },
     center: { flex: 1, alignItems: "center", justifyContent: "center" },
   });
 }

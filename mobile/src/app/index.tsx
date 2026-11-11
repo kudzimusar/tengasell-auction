@@ -1,30 +1,28 @@
 import { Link, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useWindowDimensions } from "react-native";
 
 import { useSession } from "../auth/session-context";
-import { formatRemaining, formatUSD, remainingSeverity } from "../lib/format";
-import { fetchAuctions, fetchCategories, probeCanonical } from "../lib/trailbase";
-import { toAuctionView, type AuctionView, type Category } from "../lib/types";
 import { AuctionCard } from "../components/AuctionCard";
 import { BottomNav } from "../components/BottomNav";
+import { computeGridMetrics } from "../lib/grid-layout";
+import { createRequestGuard } from "../lib/request-guard";
+import { fetchAuctions, fetchCategories, probeCanonical } from "../lib/trailbase";
+import { toAuctionView, type AuctionView, type Category } from "../lib/types";
 import { NxsButton } from "../nxs/components/NxsButton";
 import { useNxs } from "../nxs/context/NxsProvider";
+import { type NxsTranslator } from "../nxs/localization/catalog";
 import { localizeKnownRuntimeMessage } from "../nxs/localization/runtimeMessages";
-import {
-  type NxsTranslator,
-} from "../nxs/localization/catalog";
 import { useNxsText } from "../nxs/localization/useNxsText";
 import type { NxsTheme } from "../nxs/tokens";
 
@@ -44,12 +42,24 @@ export default function HomeScreen() {
   const session = useSession();
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const { theme, screenPadding, windowClass, writingDirection } = useNxs();
+  const { theme, screenPadding, safeArea, writingDirection } = useNxs();
   const t = useNxsText();
-  const styles = useMemo(
-    () => createStyles(theme, screenPadding, windowClass, writingDirection),
-    [screenPadding, theme, windowClass, writingDirection],
+  const grid = useMemo(
+    () =>
+      computeGridMetrics({
+        viewportWidth: width,
+        columns: 2,
+        padding: screenPadding,
+        safeLeft: safeArea.left,
+        safeRight: safeArea.right,
+      }),
+    [safeArea.left, safeArea.right, screenPadding, width],
   );
+  const styles = useMemo(
+    () => createStyles(theme, screenPadding, writingDirection, grid.containerWidth, grid.gap),
+    [grid.containerWidth, grid.gap, screenPadding, theme, writingDirection],
+  );
+  const listRequestGuard = useRef(createRequestGuard()).current;
   const [authorityState, setAuthorityState] = useState<AuthorityState>("checking");
   const [categories, setCategories] = useState<Category[]>([]);
   const [auctions, setAuctions] = useState<AuctionView[]>([]);
@@ -69,25 +79,28 @@ export default function HomeScreen() {
   }, []);
 
   const boot = useCallback(async () => {
+    const request = listRequestGuard.next();
     try {
       await probeCanonical();
       const [nextCategories, nextAuctions, nextSold] = await Promise.all([
         fetchCategories(),
         fetchAuctions({ limit: 20 }),
-        fetchAuctions({ status: "sold", limit: 6 }).catch(() => [] as AuctionView[]),
+        fetchAuctions({ status: "sold", limit: 6 }).catch(() => []),
       ]);
+      if (!listRequestGuard.isCurrent(request)) return;
       setCategories(nextCategories);
       setAuctions(nextAuctions.map(toAuctionView));
       setSold(nextSold.map(toAuctionView));
       setAuthorityState("live");
       setError(null);
     } catch (bootError) {
+      if (!listRequestGuard.isCurrent(request)) return;
       setCategories([]);
       setAuctions([]);
       setAuthorityState("unavailable");
       setError(errorMessage(bootError, t));
     }
-  }, [t]);
+  }, [listRequestGuard, t]);
 
   useEffect(() => {
     const task = setTimeout(() => {
@@ -104,20 +117,24 @@ export default function HomeScreen() {
 
   const loadCategory = useCallback(
     async (slug?: string) => {
+      const request = listRequestGuard.next();
       setCategory(slug);
       setListLoading(true);
       setError(null);
       try {
         const nextAuctions = await fetchAuctions({ category: slug, limit: 40 });
+        if (!listRequestGuard.isCurrent(request)) return;
         setAuctions(nextAuctions.map(toAuctionView));
         setAuthorityState("live");
       } catch (loadError) {
+        if (!listRequestGuard.isCurrent(request)) return;
+        setAuctions([]);
         setError(errorMessage(loadError, t));
       } finally {
-        setListLoading(false);
+        if (listRequestGuard.isCurrent(request)) setListLoading(false);
       }
     },
-    [t],
+    [listRequestGuard, t],
   );
 
   const emptyAction = category ? (
@@ -146,7 +163,7 @@ export default function HomeScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>
+    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <View style={styles.header}>
         <Text style={styles.wordmark} accessibilityRole="header">
           {BRAND_PREFIX}
@@ -335,7 +352,7 @@ export default function HomeScreen() {
             data={auctions}
             keyExtractor={(item) => String(item.id)}
             numColumns={2}
-            columnWrapperStyle={{ gap: 10, paddingHorizontal: 10 }}
+            columnWrapperStyle={styles.columnRow}
             contentContainerStyle={styles.list}
             ListEmptyComponent={
               <View style={styles.emptyState}>
@@ -351,21 +368,23 @@ export default function HomeScreen() {
             renderItem={({ item }) => (
               <AuctionCard
                 item={item}
-                width={Math.floor((width - 10 * 2 - 10) / 2)}
+                width={grid.cardWidth}
                 now={now}
                 onPress={() => router.push(`/item/${item.id}` as never)}
               />
             )}
             ListFooterComponent={
               sold.length > 0 ? (
-                <View style={{ paddingTop: 6 }}>
-                  <Text style={styles.soldTitle}>Recently sold</Text>
+                <View style={styles.soldSection}>
+                  <Text style={styles.soldTitle} accessibilityRole="header">
+                    {t("home.recentlySold")}
+                  </Text>
                   <View style={styles.soldWrap}>
                     {sold.map((row) => (
                       <AuctionCard
                         key={`sold-${row.id}`}
                         item={row}
-                        width={Math.floor((width - 10 * 2 - 10) / 2)}
+                        width={grid.cardWidth}
                         now={now}
                         onPress={() => router.push(`/item/${row.id}` as never)}
                       />
@@ -386,10 +405,10 @@ export default function HomeScreen() {
 function createStyles(
   theme: NxsTheme,
   screenPadding: number,
-  windowClass: "compact" | "regular" | "wide",
   writingDirection: "ltr" | "rtl",
+  containerWidth: number,
+  gridGap: number,
 ) {
-  const imageSize = windowClass === "compact" ? 104 : 120;
   const textAlign = writingDirection === "rtl" ? "right" : "left";
   const rowDirection = writingDirection === "rtl" ? "row-reverse" : "row";
 
@@ -542,13 +561,17 @@ function createStyles(
       gap: 8,
       paddingHorizontal: screenPadding,
     },
+    columnRow: {
+      flexDirection: rowDirection,
+      gap: gridGap,
+    },
     list: {
       width: "100%",
-      maxWidth: 920,
+      maxWidth: containerWidth,
       alignSelf: "center",
       flexGrow: 1,
-      padding: screenPadding,
-      gap: 12,
+      paddingHorizontal: screenPadding,
+      paddingVertical: 12,
     },
     emptyState: {
       flexGrow: 1,
@@ -557,43 +580,21 @@ function createStyles(
       gap: 12,
       paddingVertical: 32,
     },
+    soldSection: {
+      paddingTop: 6,
+    },
     soldTitle: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: theme.text.primary,
-    paddingHorizontal: 12,
-    paddingBottom: 8,
-  },
-  soldWrap: { flexDirection: "row", flexWrap: "wrap", gap: 10, paddingHorizontal: 10 },
-  card: {
-      flexDirection: rowDirection,
-      backgroundColor: theme.surface.raised,
-      borderRadius: 14,
-      overflow: "hidden",
-    },
-    cardImg: { width: imageSize, height: imageSize },
-    cardImgFallback: { backgroundColor: theme.brand.deep },
-    cardBody: { flex: 1, padding: 12, justifyContent: "center", gap: 4 },
-    cardTitle: {
+      fontSize: 15,
+      lineHeight: 20,
+      fontWeight: "800",
       color: theme.text.primary,
-      fontSize: 16,
-      lineHeight: 24,
-      fontWeight: "700",
+      paddingBottom: 8,
       textAlign,
     },
-    cardMeta: {
-      color: theme.text.secondary,
-      fontSize: 13,
-      lineHeight: 18,
-      textAlign,
+    soldWrap: {
+      flexDirection: rowDirection,
+      flexWrap: "wrap",
+      gap: gridGap,
     },
-    cardTimer: {
-      color: theme.state.warning,
-      fontSize: 13,
-      lineHeight: 18,
-      fontWeight: "700",
-      textAlign,
-    },
-    urgentTimer: { color: theme.state.error, fontWeight: "800" },
   });
 }

@@ -114,19 +114,40 @@ requireText(
   "pseudolocale runtime override is missing",
 );
 
-for (const route of [
-  "src/app/_layout.tsx",
-  "src/app/index.tsx",
-  "src/app/auth/login.tsx",
-  "src/app/account/index.tsx",
-]) {
-  requireText(route, "useNxsText", `route is not consuming string resources: ${route}`);
+const routeFiles = walk("src/app").filter((path) => /\.(ts|tsx|js|jsx)$/.test(path));
+if (routeFiles.length === 0) {
+  fail("no route files found under src/app; refusing to pass vacuously");
+}
+
+const componentFiles = walk("src/components").filter((path) => /\.(ts|tsx|js|jsx)$/.test(path));
+if (componentFiles.length === 0) {
+  fail("no component files found under src/components; refusing to pass vacuously");
+}
+
+for (const route of routeFiles) {
   const source = read(route);
+  if (!source.includes("useNxsText")) {
+    fail(`route is not consuming string resources: ${relative(".", route)}`);
+  }
+}
+
+for (const uiFile of [...routeFiles, ...componentFiles]) {
+  const source = codeOnly(read(uiFile));
+  const rel = relative(".", uiFile);
   if (/accessibilityLabel\s*=\s*["']/.test(source)) {
-    fail(`hard-coded accessibility label found in ${route}`);
+    fail(`hard-coded accessibility label found in ${rel}`);
   }
   if (/\blabel\s*=\s*["']/.test(source)) {
-    fail(`hard-coded custom-control label found in ${route}`);
+    fail(`hard-coded custom-control label found in ${rel}`);
+  }
+  if (/\bplaceholder\s*=\s*["']/.test(source)) {
+    fail(`hard-coded placeholder literal found in ${rel}`);
+  }
+  if (/#[0-9A-Fa-f]{3,8}\b/.test(source) || /\brgba\s*\(/.test(source)) {
+    fail(`hard-coded color literal found outside NXS tokens in ${rel}`);
+  }
+  if (source.includes("StyleSheet") && !source.includes("useNxs")) {
+    fail(`component or route uses StyleSheet without useNxs theme tokens in ${rel}`);
   }
 }
 
@@ -209,6 +230,9 @@ for (const path of interactiveFiles) {
   }
 
   for (const element of elements) {
+    if (!/\baccessibilityRole\s*=/.test(element)) {
+      fail(`custom Pressable lacks an explicit accessibilityRole in ${relative(".", path)}`);
+    }
     const slop = hitSlopOf(element);
     if (slop === null || slop < 4) {
       fail(`custom Pressable lacks an explicit hitSlop >= 4 in ${relative(".", path)}`);
