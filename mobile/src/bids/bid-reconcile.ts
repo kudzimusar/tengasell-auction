@@ -6,6 +6,10 @@
 import type { BidOutcome } from "../lib/bid-ack";
 import type { BidPresentation } from "../lib/bid-copy";
 import type { CanonicalBidSnapshot } from "../lib/trailbase-bids";
+import { translateNxs, type NxsTranslator } from "../nxs/localization/catalog.ts";
+
+const defaultTranslate: NxsTranslator = (key, values) =>
+  translateNxs(key, "en", values);
 
 export interface ReconcileContext {
   auctionId: number;
@@ -38,6 +42,7 @@ export async function reconcileBidOutcome(
   context: ReconcileContext,
   formatAmount: (value: number) => string,
   readSnapshot: (auctionId: number) => Promise<CanonicalBidSnapshot>,
+  t: NxsTranslator = defaultTranslate,
 ): Promise<ReconciledBidState | null> {
   const needsCanonicalResolution =
     rawOutcome.rejected !== true &&
@@ -57,9 +62,7 @@ export async function reconcileBidOutcome(
       outcome: { ...rawOutcome, uncertain: true, reason: rawOutcome.reason ?? "unverified" },
       presentation: {
         tone: "unknown",
-        text:
-          "We could not confirm this bid — it may still have reached the auction, and live records " +
-          "are unreachable right now. Refresh before placing another bid.",
+        text: t("bid.reconcileUnreachable"),
         reconcile: true,
       },
       auction: null,
@@ -73,9 +76,7 @@ export async function reconcileBidOutcome(
       outcome: { ...rawOutcome, uncertain: true, reason: rawOutcome.reason ?? "unverified" },
       presentation: {
         tone: "unknown",
-        text:
-          "We could not confirm this bid because the listing record is unavailable. " +
-          "Refresh before placing another bid.",
+        text: t("bid.reconcileAuctionMissing"),
         reconcile: true,
       },
       auction: null,
@@ -86,6 +87,11 @@ export async function reconcileBidOutcome(
   const sortedBids = [...bids].sort((a, b) => b.id - a.id);
   const topBid = sortedBids.find((b) => b.status === "active") ?? sortedBids[0];
   const minNewId = context.beforeTopBidId ?? 0;
+  // When beforeTopBidId could not be captured before submit, only credit a
+  // matching user bid if the auction's bid_count strictly increased past baseline.
+  const fallbackBidCommitted =
+    context.beforeTopBidId === null &&
+    auction.bid_count > context.beforeBidCount;
 
   const committedUserBid =
     context.identityId != null
@@ -94,7 +100,8 @@ export async function reconcileBidOutcome(
             b.user === context.identityId &&
             (context.beforeTopBidId !== null
               ? b.id > minNewId
-              : b.max_amount === context.maxAmount || b.amount >= context.maxAmount),
+              : fallbackBidCommitted &&
+                (b.max_amount === context.maxAmount || b.amount >= context.maxAmount)),
         )
       : undefined;
 
@@ -107,8 +114,8 @@ export async function reconcileBidOutcome(
         presentation: {
           tone: "success",
           text: amt
-            ? `Live auction records confirm you're the leading bidder at ${amt}.`
-            : "Live auction records confirm you're the leading bidder.",
+            ? t("bid.reconcileLeadingAt", { amount: amt })
+            : t("bid.reconcileLeading"),
           reconcile: false,
         },
         auction,
@@ -122,8 +129,8 @@ export async function reconcileBidOutcome(
       presentation: {
         tone: "warning",
         text: standing
-          ? `Live auction records confirm your bid reached the auction (current price ${standing}), and you were outbid.`
-          : "Live auction records confirm your bid reached the auction, and you were outbid.",
+          ? t("bid.reconcileOutbidAt", { amount: standing })
+          : t("bid.reconcileOutbid"),
         reconcile: false,
       },
       auction,
@@ -143,11 +150,11 @@ export async function reconcileBidOutcome(
       tone: "unknown",
       text: stillInFlight
         ? currentStr
-          ? `We could not confirm this bid — it may still have reached the auction (live price ${currentStr}). Refresh and verify bid history before bidding again.`
-          : "We could not confirm this bid — it may still have reached the auction. Refresh and verify bid history before bidding again."
+          ? t("bid.reconcileStillInFlightAt", { amount: currentStr })
+          : t("bid.reconcileStillInFlight")
         : currentStr
-          ? `No new bid from your account appears in live records (current price ${currentStr}). Verify bid history before placing another bid.`
-          : "No new bid from your account appears in live records. Verify bid history before placing another bid.",
+          ? t("bid.reconcileUnrecordedAt", { amount: currentStr })
+          : t("bid.reconcileUnrecorded"),
       reconcile: true,
     },
     auction,

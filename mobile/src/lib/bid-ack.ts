@@ -19,6 +19,7 @@ export interface BidOutcome {
   ok: boolean;
   amount?: number;
   error?: string;
+  errorCode?: string;
   /** True when the engine's standing auto-bid immediately covered this bid. */
   outbid?: boolean;
   /** True when the bidder is now the leading bidder. */
@@ -51,6 +52,7 @@ export function parseBidAck(res: unknown): BidOutcome {
     ok?: unknown;
     amount?: unknown;
     error?: unknown;
+    code?: unknown;
     outbid?: unknown;
     winning?: unknown;
     uncertain?: unknown;
@@ -66,28 +68,35 @@ export function parseBidAck(res: unknown): BidOutcome {
       ok: false,
       uncertain: true,
       reason: "malformed",
-      error: "The auction engine returned an unreadable confirmation.",
+      ...(typeof payload.error === "string" && payload.error.trim() ? { error: payload.error } : {}),
     };
   }
 
   if (!payload.ok) {
     // Current mini-services/trade-engine/index.ts can emit { ok: false, error }
     // both before mutation and inside post-commit catch blocks (antiSnipe /
-    // audit failures). Only treat `ok: false` as a definite rejection when an
-    // explicit structured contract field rules out commit; never match error text.
+    // audit failures). Only treat `ok: false` as a definite rejection when
+    // commit is ruled out (`committed !== true`) and an explicit structured
+    // contract field confirms pre-commit non-commit; never match error text.
     const authoritativePreCommit =
       payload.uncertain !== true &&
+      payload.committed !== true &&
       (payload.rejected === true ||
         payload.stage === "pre_commit" ||
         payload.committed === false ||
-        (payload.definite === true && payload.committed !== true));
+        payload.definite === true);
 
     if (authoritativePreCommit) {
       return {
         ok: false,
         rejected: true,
         stage: "pre_commit",
-        error: typeof payload.error === "string" ? payload.error : "The bid was not accepted.",
+        ...(typeof payload.code === "string" && payload.code.trim()
+          ? { errorCode: payload.code.trim() }
+          : {}),
+        ...(typeof payload.error === "string" && payload.error.trim()
+          ? { error: payload.error }
+          : {}),
       };
     }
 
@@ -104,7 +113,12 @@ export function parseBidAck(res: unknown): BidOutcome {
       ok: false,
       uncertain: true,
       reason,
-      error: typeof payload.error === "string" ? payload.error : undefined,
+      ...(typeof payload.code === "string" && payload.code.trim()
+        ? { errorCode: payload.code.trim() }
+        : {}),
+      ...(typeof payload.error === "string" && payload.error.trim()
+        ? { error: payload.error }
+        : {}),
     };
   }
 

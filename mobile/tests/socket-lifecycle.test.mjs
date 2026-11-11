@@ -81,7 +81,14 @@ test("SOCK-09 uncoded engine rejection stays uncertain; structured rejection sho
     usd,
   );
   assert.equal(structured?.tone, "error");
-  assert.equal(structured.text, "This auction has ended.");
+  assert.match(structured.text, /This auction has ended\./);
+
+  const coded = presentBidOutcome(
+    { ok: false, rejected: true, stage: "pre_commit", errorCode: "AUCTION_ENDED" },
+    usd,
+  );
+  assert.equal(coded?.tone, "error");
+  assert.equal(coded.text, "This auction has ended.");
 });
 
 test("SOCK-10 source: disconnect invalidates ownership and late connects are dropped", () => {
@@ -136,4 +143,18 @@ test("SOCK-15 live updates and post-bid sync stay silent, sequenced, and safely 
   assert.match(itemSource, /load\(\{\s*silent:\s*true\s*\}\)/);
   assert.match(itemSource, /overflow:\s*"hidden"/);
   assert.match(itemSource, /!Number\.isFinite\(endsMs\)/);
+});
+
+test("SOCK-16 source: double-tap biddingRef, bidAttemptRef sequence, clientRequestId, auth:revoked, and error surfacing", () => {
+  assert.match(itemSource, /biddingRef\.current/, "double-tap synchronous ref guard required");
+  assert.match(itemSource, /bidAttemptRef\.current/, "attempt sequence ref guard required");
+  assert.match(itemSource, /clientRequestId/, "idempotent clientRequestId must be passed per bid");
+  assert.doesNotMatch(itemSource, /\.catch\(\(\)\s*=>\s*undefined\)/, "withAuthenticatedToken failure must surface visibly");
+  assert.match(itemSource, /onAuthRevoked/, "ItemScreen must wire auth:revoked session invalidation");
+
+  assert.match(socketSource, /"auth:revoked"/, "socket must listen for auth:revoked");
+  assert.match(socketSource, /"connect_error"/, "socket must surface connect_error");
+  assert.match(socketSource, /clientRequestId/, "placeBid must transmit clientRequestId");
+  assert.match(socketSource, /errorCode:\s*"NOT_CONNECTED"/, "pre-emit guard uses localized code");
+  assert.doesNotMatch(socketSource, /Not connected to the live auction engine/);
 });

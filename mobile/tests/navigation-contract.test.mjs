@@ -7,6 +7,12 @@ import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 import { computeGridMetrics } from "../src/lib/grid-layout.ts";
+import {
+  formatRemaining,
+  localizedCategoryLabel,
+  localizedConditionLabel,
+  localizedShippingLabel,
+} from "../src/lib/format.ts";
 import { createRequestGuard } from "../src/lib/request-guard.ts";
 import {
   englishStrings,
@@ -197,6 +203,10 @@ test("MOB2-04 strict NXS gating covers all routes/components, live-only search c
     url: "https://example.com",
     label: "Saving",
     message: "msg",
+    value: "custom",
+    fee: "$5",
+    name: "Tech",
+    reason: "timeout",
   };
   for (const key of Object.keys(englishStrings)) {
     const en = translateNxs(key, "en", sampleValues);
@@ -205,4 +215,41 @@ test("MOB2-04 strict NXS gating covers all routes/components, live-only search c
     assert.ok(xa.length > en.length, `en-XA did not expand ${key}`);
     assert.ok(xb.includes("\u2067⟦"), `ar-XB missing RLI marker on ${key}`);
   }
+});
+
+test("MOB2-R1..R4 remediation checks (hero clip, malformed dates, narrow viewport, RTL, search reset, localized labels)", () => {
+  assert.equal(formatRemaining(Number.NaN), "0s");
+  assert.equal(formatRemaining(-500), "0s");
+  assert.equal(formatRemaining(65_000), "1m 5s");
+
+  const tXa = (key, values) => translateNxs(key, "en-XA", values);
+  const tXb = (key, values) => translateNxs(key, "ar-XB", values);
+  assert.match(localizedConditionLabel(tXa, "new"), /^⟦ /);
+  assert.match(localizedConditionLabel(tXb, "custom_cond"), /^\u2067⟦ /);
+  assert.match(localizedShippingLabel(tXa, "courier", 10), /^⟦ /);
+  assert.match(localizedCategoryLabel(tXa, "Electronics"), /^⟦ /);
+  assert.match(localizedCategoryLabel(tXb, "Vintage"), /^\u2067⟦ /);
+
+  const itemDetail = read("src/app/item/[id].tsx");
+  assert.match(itemDetail, /heroWrap:\s*\{[^}]*overflow:\s*"hidden"/);
+  assert.match(itemDetail, /Number\.isFinite\(endsMs\)/);
+  assert.match(itemDetail, /Math\.max\(0,\s*width - safeArea\.left - safeArea\.right\)/);
+  assert.doesNotMatch(itemDetail, /Math\.max\(320,/);
+  assert.match(itemDetail, /localizedConditionLabel\(t,\s*item\.condition\)/);
+  assert.match(itemDetail, /localizedCategoryLabel\(t,\s*item\.category\)/);
+  assert.match(itemDetail, /localizedShippingLabel\(t,\s*item\.shipping\)/);
+  assert.match(itemDetail, /biddingRef\.current/);
+  assert.match(itemDetail, /bidAttemptRef\.current/);
+  assert.match(itemDetail, /clientRequestId/);
+
+  const card = read("src/components/AuctionCard.tsx");
+  assert.match(card, /Number\.isFinite\(endsMs\)/);
+  assert.match(card, /writingDirection === "rtl"\s*\?\s*\{\s*right:\s*8\s*\}\s*:\s*\{\s*left:\s*8\s*\}/);
+
+  const grid = read("src/components/ListingGrid.tsx");
+  assert.match(grid, /flexDirection:\s*rowDirection/);
+
+  const search = read("src/app/search.tsx");
+  assert.match(search, /categoriesGuard\.isCurrent\(/);
+  assert.match(search, /if\s*\(!term\)\s*\{[\s\S]*requestGuard\.invalidate\(\)[\s\S]*setItems\(\[\]\)[\s\S]*setError\(null\)[\s\S]*setSearched\(false\)/);
 });

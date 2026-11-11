@@ -20,7 +20,8 @@ interface Props {
 
 export function ListingGrid({ items, now, empty, header, contentPadding }: Props) {
   const { width } = useWindowDimensions();
-  const { theme, screenPadding, safeArea } = useNxs();
+  const { theme, screenPadding, safeArea, writingDirection } = useNxs();
+  const rowDirection = writingDirection === "rtl" ? "row-reverse" : "row";
   const router = useRouter();
   const padding = contentPadding ?? screenPadding;
   const metrics = useMemo(
@@ -45,7 +46,7 @@ export function ListingGrid({ items, now, empty, header, contentPadding }: Props
       numColumns={2}
       keyExtractor={(i) => String(i.id)}
       ListHeaderComponent={header ?? undefined}
-      columnWrapperStyle={{ gap: metrics.gap }}
+      columnWrapperStyle={{ flexDirection: rowDirection, gap: metrics.gap }}
       contentContainerStyle={styles.listContent}
       ListEmptyComponent={
         empty ? (

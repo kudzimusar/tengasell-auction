@@ -23,8 +23,23 @@ import { runGuardedBid } from "../../bids/bid-completion";
 import { reconcileBidOutcome } from "../../bids/bid-reconcile";
 import { BottomNav } from "../../components/BottomNav";
 import { presentBidOutcome } from "../../lib/bid-copy";
-import { formatDateTime, formatRemaining, formatUSD, minNextBid, remainingSeverity } from "../../lib/format";
-import { biddingOwnershipToken, connectBidding, disconnectBidding, placeBid } from "../../lib/socket";
+import {
+  formatDateTime,
+  formatRemaining,
+  formatUSD,
+  localizedCategoryLabel,
+  localizedConditionLabel,
+  localizedShippingLabel,
+  minNextBid,
+  remainingSeverity,
+} from "../../lib/format";
+import {
+  biddingOwnershipToken,
+  connectBidding,
+  createClientRequestId,
+  disconnectBidding,
+  placeBid,
+} from "../../lib/socket";
 import { fetchAuction } from "../../lib/trailbase";
 import { fetchAuctionBids, readCanonicalBidSnapshot } from "../../lib/trailbase-bids";
 import { toAuctionView, type AuctionView, type Bid } from "../../lib/types";
@@ -39,6 +54,10 @@ export default function ItemScreen() {
   const { width } = useWindowDimensions();
   const { theme, screenPadding, safeArea, writingDirection } = useNxs();
   const t = useNxsText();
+  const formatMoney = useCallback(
+    (amount: number, opts?: { compact?: boolean }) => formatUSD(amount, { ...opts, t }),
+    [t],
+  );
 
   const [item, setItem] = useState<AuctionView | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -52,8 +71,16 @@ export default function ItemScreen() {
     tone: "success" | "warning" | "error" | "unknown";
     text: string;
   } | null>(null);
-  const [engineUp, setEngineUp] = useState(false);
+  const [engineStatus, setEngineStatus] = useState<
+    "connecting" | "connected" | "error" | "revoked"
+  >("connecting");
+  const engineUp = engineStatus === "connected";
+  const [engineAttempt, setEngineAttempt] = useState(0);
   const mountedRef = useRef(true);
+  const biddingRef = useRef(false);
+  const bidAttemptRef = useRef(0);
+  const sessionPhaseRef = useRef(session.phase);
+  const withAuthenticatedTokenRef = useRef(session.withAuthenticatedToken);
   // The session object captured by this render cannot observe a later account
   // switch. Read identity through a ref that tracks the latest snapshot.
   const identityRef = useRef<string | null>(session.identity?.id ?? null);
@@ -115,7 +142,14 @@ export default function ItemScreen() {
 
   // Live engine connection (MOB-03): token from the session, socket to :3002.
   useEffect(() => {
+    sessionPhaseRef.current = session.phase;
+    withAuthenticatedTokenRef.current = session.withAuthenticatedToken;
+  }, [session.phase, session.withAuthenticatedToken]);
+
+  useEffect(() => {
     let cancelled = false;
+    biddingRef.current = false;
+    bidAttemptRef.current += 1;
     // Clear any prior account's bid banner/pending flag whenever auth or item shifts.
     const clearStale = setTimeout(() => {
       if (!cancelled) {
@@ -128,7 +162,7 @@ export default function ItemScreen() {
       // Deferred: resetting the flag synchronously inside the effect would
       // cascade a render. The CTA must not stay enabled once the session is gone.
       const reset = setTimeout(() => {
-        if (!cancelled) setEngineUp(false);
+        if (!cancelled) setEngineStatus("connecting");
       }, 0);
       return () => {
         cancelled = true;
@@ -136,26 +170,61 @@ export default function ItemScreen() {
         clearTimeout(reset);
       };
     }
+
+    const markConnecting = setTimeout(() => {
+      if (!cancelled) setEngineStatus("connecting");
+    }, 0);
+
     void session
       .withAuthenticatedToken(async (token) => {
         // The token refresh can resolve after this effect was torn down; a
         // connect at that point would dispose whatever socket now owns bidding.
         if (cancelled) return;
-        const s = connectBidding(token);
-        s.on("connect", () => !cancelled && setEngineUp(true));
-        s.on("disconnect", () => !cancelled && setEngineUp(false));
+        const s = connectBidding(token, {
+          getToken: async () => {
+            if (cancelled || sessionPhaseRef.current !== "authenticated") return null;
+            return withAuthenticatedTokenRef.current(async (fresh) => fresh);
+          },
+          onAuthRevoked: (revoked) => {
+            if (cancelled || !mountedRef.current) return;
+            biddingRef.current = false;
+            bidAttemptRef.current += 1;
+            const message = t(
+              revoked.code === "AUTH_EXPIRED" ? "bid.code.AUTH_EXPIRED" : "bid.code.AUTH_REVOKED",
+            );
+            setBidding(false);
+            setEngineStatus("revoked");
+            setBidNote({ tone: "error", text: message });
+            void session.invalidateSession(message);
+          },
+          onConnectError: () => {
+            if (cancelled || !mountedRef.current) return;
+            setEngineStatus((prev) => (prev === "revoked" ? "revoked" : "error"));
+          },
+        });
+        s.on("connect", () => !cancelled && setEngineStatus("connected"));
+        s.on("disconnect", () => {
+          if (!cancelled) {
+            setEngineStatus((prev) => (prev === "revoked" ? "revoked" : "connecting"));
+          }
+        });
         s.on("auction:update", (payload: { auction?: { id: number } }) => {
           if (!cancelled && payload?.auction?.id === Number(id)) void load({ silent: true });
         });
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (cancelled || !mountedRef.current) return;
+        setEngineStatus("error");
+        setBidNote({ tone: "error", text: t("item.engineError") });
+      });
     return () => {
       cancelled = true;
       clearTimeout(clearStale);
+      clearTimeout(markConnecting);
       disconnectBidding();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.phase, session.identity?.id, id]);
+  }, [session.phase, session.identity?.id, id, engineAttempt]);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 30_000);
@@ -186,18 +255,16 @@ export default function ItemScreen() {
     return () => clearTimeout(task);
   }, [load]);
 
-  const usableWidth = Math.max(320, width - safeArea.left - safeArea.right);
+  const usableWidth = Math.max(0, width - safeArea.left - safeArea.right);
   const containerWidth = Math.min(usableWidth, 720);
   const heroWidth = containerWidth;
   const styles = useMemo(
     () => makeStyles(theme, screenPadding, writingDirection, containerWidth, heroWidth),
     [containerWidth, heroWidth, screenPadding, theme, writingDirection],
   );
-  const endsMs = item ? Date.parse(item.ends_at) : NaN;
+  const endsMs = item ? Date.parse(item.ends_at) : Number.NaN;
   const remainingMs = Number.isFinite(endsMs) ? endsMs - now : 0;
-  // The record status can lag the clock. An auction past its end time or with a
-  // malformed end timestamp is closed here too, otherwise the detail screen
-  // offers a bid on an ended lot while the card already says it is closed.
+  // Status can lag the clock, and malformed end timestamps fail closed as sold/closed.
   const sold = item
     ? ["sold", "ended", "cancelled"].includes(item.status) || !Number.isFinite(endsMs) || remainingMs <= 0
     : false;
@@ -284,10 +351,10 @@ export default function ItemScreen() {
             </View>
 
             <View style={styles.block}>
-              <Text style={[styles.price, sold && styles.priceSold]}>{formatUSD(item.current_price)}</Text>
+              <Text style={[styles.price, sold && styles.priceSold]}>{formatMoney(item.current_price)}</Text>
               <View style={styles.badges}>
-                <Text style={styles.badge}>{item.condition}</Text>
-                <Text style={styles.badge}>{item.category}</Text>
+                <Text style={styles.badge}>{localizedConditionLabel(t, item.condition)}</Text>
+                <Text style={styles.badge}>{localizedCategoryLabel(t, item.category)}</Text>
                 {item.featured ? <Text style={[styles.badge, styles.badgeGold]}>{t("item.featured")}</Text> : null}
               </View>
 
@@ -326,7 +393,7 @@ export default function ItemScreen() {
                   <Text style={styles.sellerMeta}>
                     {t("item.sellerMeta", {
                       city: item.city || t("item.defaultLocation"),
-                      shipping: item.shipping,
+                      shipping: localizedShippingLabel(t, item.shipping),
                     })}
                   </Text>
                 </View>
@@ -344,8 +411,8 @@ export default function ItemScreen() {
               <Text style={styles.sectionTitle} accessibilityRole="header">
                 {t("item.detailsTitle")}
               </Text>
-              <Row k={t("item.startingPrice")} v={formatUSD(item.start_price)} styles={styles} />
-              <Row k={t("item.shippingFee")} v={formatUSD(item.shipping_fee)} styles={styles} />
+              <Row k={t("item.startingPrice")} v={formatMoney(item.start_price)} styles={styles} />
+              <Row k={t("item.shippingFee")} v={formatMoney(item.shipping_fee)} styles={styles} />
               <Row k={t("item.location")} v={item.city || "—"} styles={styles} />
               <Row k={t("item.listingId")} v={String(item.id)} styles={styles} />
             </View>
@@ -355,17 +422,19 @@ export default function ItemScreen() {
             {sold ? (
               <View style={{ flex: 1, alignItems: "center" }}>
                 <Text style={styles.closed}>
-                  {t("item.closedSummary", { amount: formatUSD(item.current_price) })}
+                  {t("item.closedSummary", { amount: formatMoney(item.current_price) })}
                 </Text>
               </View>
             ) : session.phase !== "authenticated" ? (
               <>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.ctaPrice}>{formatUSD(item.current_price)}</Text>
+                  <Text style={styles.ctaPrice}>{formatMoney(item.current_price)}</Text>
                   <Text style={styles.ctaSub}>
-                    {t("item.nextMinimum", {
-                      amount: formatUSD(minNextBid(item.current_price, item.bid_count)),
-                    })}
+                    {session.phase === "session-invalid"
+                      ? t("item.authRevokedBanner")
+                      : t("item.nextMinimum", {
+                          amount: formatMoney(minNextBid(item.current_price, item.bid_count)),
+                        })}
                   </Text>
                 </View>
                 <Pressable
@@ -382,7 +451,13 @@ export default function ItemScreen() {
               <>
                 <View style={{ flex: 1, gap: 2 }}>
                   <Text style={styles.ctaSub}>
-                    {engineUp ? t("item.engineConnected") : t("item.engineConnecting")}
+                    {engineStatus === "connected"
+                      ? t("item.engineConnected")
+                      : engineStatus === "revoked"
+                        ? t("item.engineRevoked")
+                        : engineStatus === "error"
+                          ? t("item.engineError")
+                          : t("item.engineConnecting")}
                   </Text>
                   <View style={styles.amountRow}>
                     <Text style={styles.amountPrefix}>{t("item.currencyPrefix")}</Text>
@@ -411,124 +486,171 @@ export default function ItemScreen() {
                     </Text>
                   )}
                 </View>
-                <Pressable
-                  hitSlop={4}
-                  disabled={bidding || !engineUp || sold}
-                  style={({ pressed }) => [
-                    styles.cta,
-                    (bidding || !engineUp || sold) && styles.ctaDisabled,
-                    pressed && styles.pressed,
-                  ]}
-                  onPress={async () => {
-                    const amount = Number(bidAmount);
-                    if (!Number.isFinite(amount) || amount <= 0) {
-                      setBidNote({ tone: "error", text: t("item.enterBidAmount") });
-                      return;
-                    }
-                    // The field is prefilled from the tiered minimum, but typing
-                    // is free: refuse locally rather than round-tripping a bid
-                    // the engine will reject.
-                    const minimum = minNextBid(item.current_price, item.bid_count);
-                    if (amount < minimum) {
-                      setBidNote({
-                        tone: "error",
-                        text: t("item.minBidError", { amount: formatUSD(minimum) }),
-                      });
-                      return;
-                    }
-                    setBidding(true);
-                    setBidNote(null);
+                {engineStatus === "revoked" ? (
+                  <Pressable
+                    hitSlop={4}
+                    style={({ pressed }) => [styles.cta, pressed && styles.pressed]}
+                    onPress={() => router.push("/auth/login" as never)}
+                    accessibilityRole="button"
+                    accessibilityLabel={t("item.engineRevokedSignInA11y")}
+                  >
+                    <Text style={styles.ctaText}>{t("item.signInToBid")}</Text>
+                  </Pressable>
+                ) : engineStatus === "error" ? (
+                  <Pressable
+                    hitSlop={4}
+                    style={({ pressed }) => [styles.cta, pressed && styles.pressed]}
+                    onPress={() => {
+                      setBidNote(null);
+                      setEngineStatus("connecting");
+                      setEngineAttempt((n) => n + 1);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={t("item.engineErrorRetryA11y")}
+                  >
+                    <Text style={styles.ctaText}>{t("item.engineRetry")}</Text>
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    hitSlop={4}
+                    disabled={bidding || !engineUp || sold}
+                    style={({ pressed }) => [
+                      styles.cta,
+                      (bidding || !engineUp || sold) && styles.ctaDisabled,
+                      pressed && styles.pressed,
+                    ]}
+                    onPress={async () => {
+                      if (biddingRef.current || !engineUp || sold) return;
+                      const amount = Number(bidAmount);
+                      if (!Number.isFinite(amount) || amount <= 0) {
+                        setBidNote({ tone: "error", text: t("item.enterBidAmount") });
+                        return;
+                      }
+                      // The field is prefilled from the tiered minimum, but typing
+                      // is free: refuse locally rather than round-tripping a bid
+                      // the engine will reject.
+                      const minimum = minNextBid(item.current_price, item.bid_count);
+                      if (amount < minimum) {
+                        setBidNote({
+                          tone: "error",
+                          text: t("item.minBidError", { amount: formatMoney(minimum) }),
+                        });
+                        return;
+                      }
+                      biddingRef.current = true;
+                      const attemptSeq = ++bidAttemptRef.current;
+                      const clientRequestId = createClientRequestId();
+                      setBidding(true);
+                      setBidNote(null);
 
-                    const targetAuctionId = item.id;
-                    const buyerIdentityId = identityRef.current;
-                    const baselineBidCount = item.bid_count;
-                    const snap = bidsSnapshotRef.current;
-                    const baselineTopBidId =
-                      snap.auctionId === targetAuctionId && snap.loaded
-                        ? (snap.bids[0]?.id ?? 0)
-                        : null;
+                      const targetAuctionId = item.id;
+                      const buyerIdentityId = identityRef.current;
+                      const baselineBidCount = item.bid_count;
+                      const snap = bidsSnapshotRef.current;
+                      const baselineTopBidId =
+                        snap.auctionId === targetAuctionId && snap.loaded
+                          ? (snap.bids[0]?.id ?? 0)
+                          : null;
 
-                    // CLOSE-02 / CERT-02: the completion and any canonical
-                    // post-ack reconciliation are published only while this
-                    // screen, this session and this connection still own it.
-                    await runGuardedBid({
-                      guard: {
-                        sessionGeneration: () => session.sessionGeneration(),
-                        identityId: () => identityRef.current,
-                        isConnectionCurrent: (epoch) => biddingOwnershipToken() === epoch,
-                        isMounted: () => mountedRef.current,
-                      },
-                      takeOwnership: () => ({
-                        sessionGeneration: session.sessionGeneration(),
-                        identityId: buyerIdentityId,
-                        connectionEpoch: biddingOwnershipToken(),
-                      }),
-                      place: () => placeBid(targetAuctionId, amount),
-                      reconcile: async (outcome) => {
-                        const reconciled = await reconcileBidOutcome(
-                          outcome,
-                          {
-                            auctionId: targetAuctionId,
-                            identityId: buyerIdentityId,
-                            maxAmount: amount,
-                            beforeTopBidId: baselineTopBidId,
-                            beforeBidCount: baselineBidCount,
+                      // CLOSE-02 / CERT-02: the completion and any canonical
+                      // post-ack reconciliation are published only while this
+                      // screen, this session, this connection, and this attempt
+                      // still own it.
+                      try {
+                        await runGuardedBid({
+                          guard: {
+                            sessionGeneration: () => session.sessionGeneration(),
+                            identityId: () => identityRef.current,
+                            isConnectionCurrent: (epoch) => biddingOwnershipToken() === epoch,
+                            isMounted: () => mountedRef.current,
                           },
-                          formatUSD,
-                          readCanonicalBidSnapshot,
-                        );
-                        return (
-                          reconciled ?? {
-                            outcome,
-                            presentation: presentBidOutcome(outcome, formatUSD),
-                            auction: null,
-                          }
-                        );
-                      },
-                      publish: (reconciled) => {
-                        const presented = reconciled.presentation ?? presentBidOutcome(reconciled.outcome, formatUSD);
-                        if (reconciled.auction) {
-                          const nextView = toAuctionView(reconciled.auction);
-                          itemRef.current = nextView;
-                          setItem(nextView);
+                          takeOwnership: () => ({
+                            sessionGeneration: session.sessionGeneration(),
+                            identityId: buyerIdentityId,
+                            connectionEpoch: biddingOwnershipToken(),
+                          }),
+                          place: () => placeBid(targetAuctionId, amount, { clientRequestId }),
+                          reconcile: async (outcome) => {
+                            const reconciled = await reconcileBidOutcome(
+                              outcome,
+                              {
+                                auctionId: targetAuctionId,
+                                identityId: buyerIdentityId,
+                                maxAmount: amount,
+                                beforeTopBidId: baselineTopBidId,
+                                beforeBidCount: baselineBidCount,
+                              },
+                              formatMoney,
+                              readCanonicalBidSnapshot,
+                              t,
+                            );
+                            return (
+                              reconciled ?? {
+                                outcome,
+                                presentation: presentBidOutcome(outcome, formatMoney, t),
+                                auction: null,
+                              }
+                            );
+                          },
+                          publish: (reconciled) => {
+                            if (bidAttemptRef.current !== attemptSeq) return;
+                            biddingRef.current = false;
+                            const presented =
+                              reconciled.presentation ??
+                              presentBidOutcome(reconciled.outcome, formatMoney, t);
+                            if (reconciled.auction) {
+                              const nextView = toAuctionView(reconciled.auction);
+                              itemRef.current = nextView;
+                              setItem(nextView);
+                            }
+                            if (reconciled.bids) {
+                              bidsSnapshotRef.current = {
+                                auctionId: targetAuctionId,
+                                loaded: true,
+                                bids: reconciled.bids,
+                              };
+                            }
+                            setBidNote({ tone: presented.tone, text: presented.text });
+                            setBidding(false);
+                            // CLOSE-01: keep UI synchronized silently without blanking bidNote.
+                            if (reconciled.outcome.ok || presented.reconcile) {
+                              void load({ silent: true });
+                            }
+                          },
+                          onDiscarded: () => {
+                            // No result is claimed. Only clear busy state if no newer
+                            // bid attempt owns the ref/spinner.
+                            if (bidAttemptRef.current !== attemptSeq) return;
+                            biddingRef.current = false;
+                            if (mountedRef.current) setBidding(false);
+                          },
+                        });
+                      } finally {
+                        if (bidAttemptRef.current === attemptSeq) {
+                          biddingRef.current = false;
+                          if (mountedRef.current) setBidding(false);
                         }
-                        if (reconciled.bids) {
-                          bidsSnapshotRef.current = {
-                            auctionId: targetAuctionId,
-                            loaded: true,
-                            bids: reconciled.bids,
-                          };
-                        }
-                        setBidNote({ tone: presented.tone, text: presented.text });
-                        setBidding(false);
-                        // CLOSE-01: keep UI synchronized silently without blanking bidNote.
-                        if (reconciled.outcome.ok || presented.reconcile) void load({ silent: true });
-                      },
-                      onDiscarded: () => {
-                        // No result is claimed. The screen may still be mounted
-                        // after an account switch, so release the busy state.
-                        if (mountedRef.current) setBidding(false);
-                      },
-                    });
-                  }}
-                  accessibilityRole="button"
-                  accessibilityState={{ disabled: bidding || !engineUp || sold }}
-                  accessibilityLabel={
-                    sold
-                      ? t("item.ctaClosed")
-                      : bidding
-                        ? t("item.ctaPlacing")
-                        : t("item.ctaPlaceBid")
-                  }
-                >
-                  <Text style={styles.ctaText}>
-                    {sold
-                      ? t("item.ctaClosed")
-                      : bidding
-                        ? t("item.ctaPlacing")
-                        : t("item.ctaPlaceBid")}
-                  </Text>
-                </Pressable>
+                      }
+                    }}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: bidding || !engineUp || sold }}
+                    accessibilityLabel={
+                      sold
+                        ? t("item.ctaClosed")
+                        : bidding
+                          ? t("item.ctaPlacing")
+                          : t("item.ctaPlaceBid")
+                    }
+                  >
+                    <Text style={styles.ctaText}>
+                      {sold
+                        ? t("item.ctaClosed")
+                        : bidding
+                          ? t("item.ctaPlacing")
+                          : t("item.ctaPlaceBid")}
+                    </Text>
+                  </Pressable>
+                )}
               </>
             )}
           </View>

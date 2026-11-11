@@ -18,6 +18,11 @@
 //   - a malformed or timed-out acknowledgement yields an UNKNOWN state that
 //     must be reconciled against canonical auction state, never a success.
 
+import {
+  translateNxs,
+  type NxsStringKey,
+  type NxsTranslator,
+} from "../nxs/localization/catalog.ts";
 import type { BidOutcome } from "./socket";
 
 export type BidTone = "success" | "warning" | "error" | "unknown";
@@ -32,6 +37,30 @@ export interface BidPresentation {
   reconcile: boolean;
 }
 
+const defaultTranslate: NxsTranslator = (key, values) =>
+  translateNxs(key, "en", values);
+
+const ERROR_CODE_KEY_MAP: Record<string, NxsStringKey> = {
+  NOT_CONNECTED: "bid.notConnected",
+  AUTH_REQUIRED: "bid.code.AUTH_REQUIRED",
+  AUTH_EXPIRED: "bid.code.AUTH_EXPIRED",
+  AUTH_REVOKED: "bid.code.AUTH_REVOKED",
+  AUTH_UNAVAILABLE: "bid.code.AUTH_UNAVAILABLE",
+  PROFILE_MISSING: "bid.code.PROFILE_MISSING",
+  AUCTION_NOT_FOUND: "bid.code.AUCTION_NOT_FOUND",
+  AUCTION_NOT_LIVE: "bid.code.AUCTION_NOT_LIVE",
+  AUCTION_ENDED: "bid.code.AUCTION_ENDED",
+  SELF_BID: "bid.code.SELF_BID",
+  INVALID_AMOUNT: "bid.code.INVALID_AMOUNT",
+  BELOW_MINIMUM: "bid.code.BELOW_MINIMUM",
+  BELOW_START_PRICE: "bid.code.BELOW_START_PRICE",
+  INVALID_AUCTION: "bid.code.INVALID_AUCTION",
+  INVALID_REQUEST_ID: "bid.code.INVALID_REQUEST_ID",
+  IDEMPOTENCY_CONFLICT: "bid.code.IDEMPOTENCY_CONFLICT",
+  RATE_LIMITED: "bid.code.RATE_LIMITED",
+  WRITE_REJECTED: "bid.code.WRITE_REJECTED",
+};
+
 function amountText(
   amount: number | undefined,
   formatAmount: (value: number) => string,
@@ -43,6 +72,7 @@ function amountText(
 export function presentBidOutcome(
   outcome: BidOutcome,
   formatAmount: (value: number) => string,
+  t: NxsTranslator = defaultTranslate,
 ): BidPresentation {
   // An unconfirmed result (timeout, transport loss, or an uncoded `ok: false`
   // lacking structured pre-commit non-commit authority) proves nothing: never
@@ -50,19 +80,23 @@ export function presentBidOutcome(
   if (outcome.uncertain || (!outcome.ok && outcome.rejected !== true)) {
     return {
       tone: "unknown",
-      text:
-        "We could not confirm this bid. It may still have reached the auction — " +
-        "checking the current bid before you place another bid.",
+      text: t("bid.unconfirmed"),
       reconcile: true,
     };
   }
 
   if (!outcome.ok) {
+    const mappedKey = outcome.errorCode ? ERROR_CODE_KEY_MAP[outcome.errorCode] : undefined;
+    const text = mappedKey
+      ? t(mappedKey)
+      : outcome.error
+        ? t("bid.rejectedWithReason", { reason: outcome.error })
+        : t("bid.notAccepted");
     return {
       tone: "error",
       // Structured pre-commit non-commit proof (local pre-emit guard or explicit
       // engine stage/committed=false authority); still refresh canonical state.
-      text: outcome.error ?? "The bid was not accepted.",
+      text,
       reconcile: true,
     };
   }
@@ -71,9 +105,7 @@ export function presentBidOutcome(
   if (outcome.outbid === true && outcome.winning === true) {
     return {
       tone: "unknown",
-      text:
-        "The auction engine returned an inconsistent confirmation. " +
-        "Checking the current bid before showing a result.",
+      text: t("bid.inconsistent"),
       reconcile: true,
     };
   }
@@ -83,8 +115,8 @@ export function presentBidOutcome(
     return {
       tone: "warning",
       text: standing
-        ? `You were outbid — the standing bid is ${standing}.`
-        : "You were outbid — a standing automatic bid covered your maximum.",
+        ? t("bid.outbidStanding", { amount: standing })
+        : t("bid.outbidCovered"),
       reconcile: true,
     };
   }
@@ -95,8 +127,8 @@ export function presentBidOutcome(
     return {
       tone: "success",
       text: accepted
-        ? `You're the leading bidder at ${accepted}.`
-        : "You're the leading bidder.",
+        ? t("bid.leadingAt", { amount: accepted })
+        : t("bid.leading"),
       reconcile: false,
     };
   }
@@ -106,8 +138,8 @@ export function presentBidOutcome(
     return {
       tone: "warning",
       text: accepted
-        ? `Bid accepted at ${accepted}, but you are not leading.`
-        : "Bid accepted, but you are not leading.",
+        ? t("bid.acceptedNotLeadingAt", { amount: accepted })
+        : t("bid.acceptedNotLeading"),
       reconcile: false,
     };
   }
@@ -116,9 +148,7 @@ export function presentBidOutcome(
   // report the acceptance and the uncertainty, never the lead.
   return {
     tone: "unknown",
-    text:
-      "Your bid was accepted. The engine did not confirm your position — " +
-      "checking the current bid.",
+    text: t("bid.acceptedPositionUnknown"),
     reconcile: true,
   };
 }

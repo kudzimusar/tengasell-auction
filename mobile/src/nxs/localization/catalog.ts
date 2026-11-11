@@ -202,6 +202,12 @@ export const englishStrings = {
   "item.signInToBidA11y": "Sign in to place a bid",
   "item.engineConnected": "Live engine connected",
   "item.engineConnecting": "Connecting to engine…",
+  "item.engineError": "Could not connect to live bidding engine.",
+  "item.engineRetry": "Retry connection",
+  "item.engineErrorRetryA11y": "Retry live bidding connection",
+  "item.engineRevoked": "Session revoked or expired — sign in again to bid.",
+  "item.engineRevokedSignInA11y": "Session invalidated. Sign in again to bid",
+  "item.authRevokedBanner": "Your session is no longer active. Sign in again to place bids.",
   "item.currencyPrefix": "US$",
   "item.yourMaxBidA11y": "Your maximum bid",
   "item.enterBidAmount": "Enter a bid amount.",
@@ -209,6 +215,91 @@ export const englishStrings = {
   "item.ctaClosed": "Auction closed",
   "item.ctaPlacing": "Placing…",
   "item.ctaPlaceBid": "Place bid",
+
+  "currency.usdAmount": "US${amount}",
+
+  "bid.unconfirmed":
+    "We could not confirm this bid. It may still have reached the auction — checking the current bid before you place another bid.",
+  "bid.notAccepted": "The bid was not accepted.",
+  "bid.rejectedWithReason": "Bid rejected: {reason}",
+  "bid.inconsistent":
+    "The auction engine returned an inconsistent confirmation. Checking the current bid before showing a result.",
+  "bid.outbidStanding": "You were outbid — the standing bid is {amount}.",
+  "bid.outbidCovered": "You were outbid — a standing automatic bid covered your maximum.",
+  "bid.leadingAt": "You're the leading bidder at {amount}.",
+  "bid.leading": "You're the leading bidder.",
+  "bid.acceptedNotLeadingAt": "Bid accepted at {amount}, but you are not leading.",
+  "bid.acceptedNotLeading": "Bid accepted, but you are not leading.",
+  "bid.acceptedPositionUnknown":
+    "Your bid was accepted. The engine did not confirm your position — checking the current bid.",
+
+  "bid.notConnected": "Not connected to the live auction engine.",
+  "bid.code.AUTH_REQUIRED": "Sign in to place bids.",
+  "bid.code.AUTH_EXPIRED": "Your session expired. Sign in again.",
+  "bid.code.AUTH_REVOKED": "Your session was revoked. Sign in again.",
+  "bid.code.AUTH_UNAVAILABLE": "Could not verify your session right now. Check your connection.",
+  "bid.code.PROFILE_MISSING": "Account profile missing — reload and try again.",
+  "bid.code.AUCTION_NOT_FOUND": "This auction could not be found.",
+  "bid.code.AUCTION_NOT_LIVE": "This auction is no longer live.",
+  "bid.code.AUCTION_ENDED": "This auction has ended.",
+  "bid.code.SELF_BID": "You cannot bid on your own auction.",
+  "bid.code.INVALID_AMOUNT": "Enter a valid maximum bid.",
+  "bid.code.BELOW_MINIMUM": "Your bid is below the current minimum increment.",
+  "bid.code.BELOW_START_PRICE": "Your bid is below the opening price.",
+  "bid.code.INVALID_AUCTION": "Invalid auction selected.",
+  "bid.code.INVALID_REQUEST_ID": "Invalid bid request reference.",
+  "bid.code.IDEMPOTENCY_CONFLICT": "This bid request conflicted with an earlier bid reference.",
+  "bid.code.RATE_LIMITED": "Too many bid attempts — wait a moment before bidding.",
+  "bid.code.WRITE_REJECTED": "The auction rejected the bid before recording it.",
+
+  "bid.reconcileUnreachable":
+    "We could not confirm this bid — it may still have reached the auction, and live records are unreachable right now. Refresh before placing another bid.",
+  "bid.reconcileAuctionMissing":
+    "We could not confirm this bid because the listing record is unavailable. Refresh before placing another bid.",
+  "bid.reconcileLeadingAt": "Live auction records confirm you're the leading bidder at {amount}.",
+  "bid.reconcileLeading": "Live auction records confirm you're the leading bidder.",
+  "bid.reconcileOutbidAt":
+    "Live auction records confirm your bid reached the auction (current price {amount}), and you were outbid.",
+  "bid.reconcileOutbid":
+    "Live auction records confirm your bid reached the auction, and you were outbid.",
+  "bid.reconcileStillInFlightAt":
+    "We could not confirm this bid — it may still have reached the auction (live price {amount}). Refresh and verify bid history before bidding again.",
+  "bid.reconcileStillInFlight":
+    "We could not confirm this bid — it may still have reached the auction. Refresh and verify bid history before bidding again.",
+  "bid.reconcileUnrecordedAt":
+    "No new bid from your account appears in live records (current price {amount}). Verify bid history before placing another bid.",
+  "bid.reconcileUnrecorded":
+    "No new bid from your account appears in live records. Verify bid history before placing another bid.",
+
+  "condition.new": "Brand new",
+  "condition.likeNew": "Like new",
+  "condition.mint": "Mint",
+  "condition.used": "Used — good",
+  "condition.good": "Good",
+  "condition.fair": "Used — fair",
+  "condition.refurbished": "Refurbished",
+  "condition.forParts": "For parts / not working",
+  "condition.unknown": "Condition: {value}",
+
+  "shipping.pickup": "Local pickup only",
+  "shipping.pickupPaid": "Pickup + delivery — {fee}",
+  "shipping.courierFree": "Free courier nationwide",
+  "shipping.courierPaid": "Courier — {fee}",
+  "shipping.nationalFree": "Free nationwide shipping",
+  "shipping.nationalPaid": "Nationwide — {fee}",
+  "shipping.both": "Pickup or delivery",
+  "shipping.custom": "Shipping: {value}",
+
+  "category.electronics": "Electronics",
+  "category.phones": "Phones & tablets",
+  "category.solar": "Solar & power",
+  "category.vehicles": "Vehicles",
+  "category.home": "Home & garden",
+  "category.fashion": "Fashion",
+  "category.tools": "Tools",
+  "category.collectibles": "Collectibles",
+  "category.other": "Other",
+  "category.custom": "Category: {value}",
 } as const;
 
 export type NxsStringKey = keyof typeof englishStrings;

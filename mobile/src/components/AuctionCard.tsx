@@ -26,16 +26,18 @@ export function AuctionCard({ item, width, now, onPress }: Props) {
     [theme, width, writingDirection],
   );
 
-  const remainingMs = Date.parse(item.ends_at) - now;
-  // Status can lag the clock: a live record past its end time is closed, not "0s".
+  const endsMs = Date.parse(item.ends_at);
+  const remainingMs = Number.isFinite(endsMs) ? endsMs - now : 0;
+  // Status can lag the clock, and malformed timestamps fail closed as sold/closed.
   const sold =
     item.status === "sold" ||
     item.status === "ended" ||
     item.status === "cancelled" ||
+    !Number.isFinite(endsMs) ||
     remainingMs <= 0;
   const urgent = !sold && remainingMs > 0 && remainingMs < 3600_000;
-  const priceLabel = formatUSD(item.current_price);
-  const remainingLabel = formatRemaining(remainingMs);
+  const priceLabel = formatUSD(item.current_price, { t });
+  const remainingLabel = formatRemaining(Math.max(0, remainingMs));
   const statusText = sold
     ? t("auction.closedLabel")
     : t("auction.endsRemaining", { remaining: remainingLabel });
@@ -168,7 +170,7 @@ function makeStyles(theme: NxsTheme, width: number, writingDirection: "ltr" | "r
 
     urgentChip: {
       position: "absolute",
-      left: 8,
+      ...(writingDirection === "rtl" ? { right: 8 } : { left: 8 }),
       bottom: 8,
       backgroundColor: theme.state.error,
       borderRadius: nxsTokens.radius.pill,

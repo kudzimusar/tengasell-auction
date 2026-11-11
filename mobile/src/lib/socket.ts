@@ -14,7 +14,31 @@ import { parseBidAck, type BidOutcome } from "./bid-ack";
 let socket: Socket | null = null;
 const ownership = new ConnectionEpoch();
 
-export function connectBidding(token: string | null): Socket {
+export interface ConnectBiddingOptions {
+  /** Dynamic token supplier for reconnects after token rotation or expiry. */
+  getToken?: () => Promise<string | null> | string | null;
+  /** Called when the trade engine emits `auth:revoked` and disconnects this session. */
+  onAuthRevoked?: (payload: { code: string; error?: string }) => void;
+  /** Called when Socket.IO encounters a connection handshake or transport error. */
+  onConnectError?: (error: Error) => void;
+}
+
+export interface PlaceBidOptions {
+  timeoutMs?: number;
+  clientRequestId?: string;
+}
+
+export function createClientRequestId(): string {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return `mob-${globalThis.crypto.randomUUID()}`;
+  }
+  return `mob-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export function connectBidding(
+  token: string | null,
+  options?: ConnectBiddingOptions,
+): Socket {
   const base = getCanonicalBaseUrl();
   if (!base) throw new Error("Canonical API is not configured.");
   if (socket) {
@@ -23,9 +47,27 @@ export function connectBidding(token: string | null): Socket {
     socket = null;
   }
   const attempt = ownership.next();
+  let latestToken = token;
   const attemptSocket = io(`${base}/?XTransformPort=3002`, {
     transports: ["websocket", "polling"],
-    auth: token ? { token } : {},
+    auth: (cb) => {
+      if (!options?.getToken) {
+        cb(latestToken ? { token: latestToken } : {});
+        return;
+      }
+      void Promise.resolve(options.getToken())
+        .then((fresh) => {
+          if (!ownership.isCurrent(attempt)) {
+            cb({});
+            return;
+          }
+          latestToken = fresh ?? null;
+          cb(latestToken ? { token: latestToken } : {});
+        })
+        .catch(() => {
+          cb({});
+        });
+    },
     reconnection: true,
     reconnectionAttempts: Infinity,
     reconnectionDelay: 1500,
@@ -42,6 +84,20 @@ export function connectBidding(token: string | null): Socket {
     attemptSocket.removeAllListeners();
     attemptSocket.disconnect();
     if (socket === attemptSocket) socket = null;
+  });
+
+  attemptSocket.on("auth:revoked", (payload: { code?: unknown; error?: unknown } | undefined) => {
+    if (!ownership.isCurrent(attempt)) return;
+    disconnectBidding();
+    options?.onAuthRevoked?.({
+      code: typeof payload?.code === "string" && payload.code ? payload.code : "AUTH_REVOKED",
+      error: typeof payload?.error === "string" ? payload.error : undefined,
+    });
+  });
+
+  attemptSocket.on("connect_error", (error: Error) => {
+    if (!ownership.isCurrent(attempt)) return;
+    options?.onConnectError?.(error);
   });
 
   return attemptSocket;
@@ -67,8 +123,19 @@ export function biddingOwnershipToken(): number {
   return ownership.current();
 }
 
-/** Place a proxy bid; resolves with the engine's ack or a timeout. */
-export function placeBid(auctionId: number, maxAmount: number, timeoutMs = 9000): Promise<BidOutcome> {
+/** Place a proxy bid; resolves with the engine's ack or an uncertain outcome. */
+export function placeBid(
+  auctionId: number,
+  maxAmount: number,
+  timeoutOrOptions: number | PlaceBidOptions = 9000,
+): Promise<BidOutcome> {
+  const timeoutMs =
+    typeof timeoutOrOptions === "number" ? timeoutOrOptions : (timeoutOrOptions.timeoutMs ?? 9000);
+  const clientRequestId =
+    typeof timeoutOrOptions === "number"
+      ? createClientRequestId()
+      : (timeoutOrOptions.clientRequestId ?? createClientRequestId());
+
   return new Promise((resolve) => {
     const s = socket;
     if (!s || !s.connected) {
@@ -77,7 +144,7 @@ export function placeBid(auctionId: number, maxAmount: number, timeoutMs = 9000)
         ok: false,
         rejected: true,
         stage: "pre_commit",
-        error: "Not connected to the live auction engine.",
+        errorCode: "NOT_CONNECTED",
       });
       return;
     }
@@ -96,7 +163,6 @@ export function placeBid(auctionId: number, maxAmount: number, timeoutMs = 9000)
         ok: false,
         uncertain: true,
         reason: "timeout",
-        error: "The auction engine did not respond.",
       });
     }, timeoutMs);
 
@@ -106,7 +172,6 @@ export function placeBid(auctionId: number, maxAmount: number, timeoutMs = 9000)
         ok: false,
         uncertain: true,
         reason: "disconnected",
-        error: "The connection to the auction engine was lost.",
       });
     };
     s.once("disconnect", onDisconnect);
@@ -114,7 +179,7 @@ export function placeBid(auctionId: number, maxAmount: number, timeoutMs = 9000)
       s.off("disconnect", onDisconnect);
     };
 
-    s.emit("bid:place", { auctionId, maxAmount }, (res: unknown) => {
+    s.emit("bid:place", { auctionId, maxAmount, clientRequestId }, (res: unknown) => {
       finish(parseBidAck(res));
     });
   });

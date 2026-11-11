@@ -11,6 +11,8 @@ import test from "node:test";
 import { presentBidOutcome } from "../src/lib/bid-copy.ts";
 import { parseBidAck } from "../src/lib/bid-ack.ts";
 import { reconcileBidOutcome } from "../src/bids/bid-reconcile.ts";
+import { translateNxs } from "../src/nxs/localization/catalog.ts";
+import { formatUSD } from "../src/lib/format.ts";
 
 const money = (value) => `US$${value.toLocaleString("en-US")}`;
 
@@ -317,4 +319,105 @@ test("ACK-18 structured rejection skips unnecessary canonical blocking lookup", 
   assert.equal(called, 0);
   assert.equal(settled, null);
   assert.equal(presentBidOutcome(raw, money).tone, "error");
+});
+
+test("ACK-19 committed=true forces uncertain outcome across ALL authoritativePreCommit branches", () => {
+  const contradictory = [
+    { ok: false, rejected: true, committed: true, error: "Should not trust pre-commit" },
+    { ok: false, stage: "pre_commit", committed: true, error: "Post-commit error" },
+    { ok: false, definite: true, committed: true, error: "Late audit fail" },
+    { ok: false, rejected: true, stage: "pre_commit", definite: true, committed: true },
+  ];
+
+  for (const payload of contradictory) {
+    const parsed = parseBidAck(payload);
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.rejected, undefined, `committed=true must block rejected=true: ${JSON.stringify(payload)}`);
+    assert.equal(parsed.uncertain, true);
+    const shown = presentBidOutcome(parsed, money);
+    assert.equal(shown.tone, "unknown");
+    assert.equal(shown.reconcile, true);
+  }
+});
+
+test("ACK-20 reconcileBidOutcome enforces bid_count > beforeBidCount when beforeTopBidId is null", async () => {
+  // Buyer already had an earlier bid matching maxAmount=150 from an earlier session/turn,
+  // but beforeTopBidId was null because initial recentBids failed to load.
+  // If auction.bid_count did NOT increase above beforeBidCount, we MUST NOT claim committed!
+  const unchangedCount = await reconcileBidOutcome(
+    { ok: false, uncertain: true, reason: "timeout" },
+    {
+      auctionId: 9001,
+      identityId: "buyer-takudzwa",
+      maxAmount: 150,
+      beforeTopBidId: null,
+      beforeBidCount: 3,
+    },
+    money,
+    async () => ({
+      auction: { id: 9001, current_price: 122, bid_count: 3 },
+      bids: [
+        { id: 441, auction_id: 9001, user: "buyer-takudzwa", bidder_username: "takudzwa", amount: 122, max_amount: 150, is_auto: 1, status: "active", created_at: "2026-11-11T01:37:46Z" },
+      ],
+    }),
+  );
+  assert.equal(unchangedCount.outcome.ok, false);
+  assert.equal(unchangedCount.outcome.uncertain, true);
+  assert.equal(unchangedCount.presentation.tone, "unknown");
+
+  const increasedCount = await reconcileBidOutcome(
+    { ok: false, uncertain: true, reason: "timeout" },
+    {
+      auctionId: 9001,
+      identityId: "buyer-takudzwa",
+      maxAmount: 150,
+      beforeTopBidId: null,
+      beforeBidCount: 3,
+    },
+    money,
+    async () => ({
+      auction: { id: 9001, current_price: 122, bid_count: 4 },
+      bids: [
+        { id: 442, auction_id: 9001, user: "buyer-takudzwa", bidder_username: "takudzwa", amount: 122, max_amount: 150, is_auto: 1, status: "active", created_at: "2026-11-11T01:37:46Z" },
+      ],
+    }),
+  );
+  assert.equal(increasedCount.outcome.ok, true);
+  assert.equal(increasedCount.outcome.winning, true);
+  assert.equal(increasedCount.presentation.tone, "success");
+});
+
+test("ACK-21 en-XA and ar-XB pseudolocalization covers all bid, reconcile, currency, and engine code outputs", async () => {
+  const tXa = (key, values) => translateNxs(key, "en-XA", values);
+  const tXb = (key, values) => translateNxs(key, "ar-XB", values);
+  const moneyXa = (v) => formatUSD(v, { t: tXa });
+  const moneyXb = (v) => formatUSD(v, { t: tXb });
+
+  for (const outcome of [
+    { ok: true, winning: true, amount: 700 },
+    { ok: true, outbid: true, amount: 750 },
+    { ok: true, winning: false, amount: 700 },
+    { ok: true },
+    { ok: false, uncertain: true, reason: "timeout" },
+    { ok: false, rejected: true, stage: "pre_commit", errorCode: "AUTH_REVOKED" },
+    { ok: false, rejected: true, stage: "pre_commit", errorCode: "PROFILE_MISSING" },
+    { ok: false, rejected: true, stage: "pre_commit", errorCode: "SELF_BID" },
+    { ok: false, rejected: true, stage: "pre_commit", errorCode: "NOT_CONNECTED" },
+  ]) {
+    const en = presentBidOutcome(outcome, (v) => formatUSD(v));
+    const xa = presentBidOutcome(outcome, moneyXa, tXa);
+    const xb = presentBidOutcome(outcome, moneyXb, tXb);
+    assert.ok(xa.text.includes("⟦"), `en-XA missing marker on ${JSON.stringify(outcome)}`);
+    assert.ok(xa.text.length > en.text.length, `en-XA did not expand ${JSON.stringify(outcome)}`);
+    assert.ok(xb.text.includes("\u2067⟦"), `ar-XB missing RLI on ${JSON.stringify(outcome)}`);
+  }
+
+  const recXa = await reconcileBidOutcome(
+    { ok: false, uncertain: true, reason: "timeout" },
+    { auctionId: 9001, identityId: "buyer", maxAmount: 200, beforeTopBidId: 10, beforeBidCount: 1 },
+    moneyXa,
+    async () => ({ auction: { id: 9001, current_price: 200, bid_count: 2 }, bids: [{ id: 11, auction_id: 9001, user: "buyer", bidder_username: "b", amount: 180, max_amount: 200, is_auto: 1, status: "active", created_at: "2026-11-11T00:00:00Z" }] }),
+    tXa,
+  );
+  assert.ok(recXa.presentation.text.includes("⟦"));
 });

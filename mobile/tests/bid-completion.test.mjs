@@ -323,3 +323,52 @@ test("BID-12 reconciled bid publishes once after canonical read and never auto-r
   assert.equal(published.length, 1);
   assert.equal(published[0].amount, 122);
 });
+
+test("BID-13 overlapping attempt sequence prevents stale onDiscarded from clearing newer attempt busy flag", async () => {
+  const a = arena({ identityId: "nyasha" });
+  const firstPlace = deferred();
+  const secondPlace = deferred();
+
+  let bidding = true;
+  let attemptSeq = 1;
+  const seq1 = attemptSeq;
+
+  const firstTask = runGuardedBid({
+    guard: a.guard,
+    takeOwnership: a.takeOwnership,
+    place: () => firstPlace.promise,
+    publish: () => {
+      if (attemptSeq === seq1) bidding = false;
+    },
+    onDiscarded: () => {
+      if (attemptSeq === seq1) bidding = false;
+    },
+  });
+
+  // Disconnect & reconnect before firstTask settles, then start attempt 2.
+  a.invalidateConnection();
+  attemptSeq += 1;
+  const seq2 = attemptSeq;
+  bidding = true;
+
+  const secondTask = runGuardedBid({
+    guard: a.guard,
+    takeOwnership: a.takeOwnership,
+    place: () => secondPlace.promise,
+    publish: () => {
+      if (attemptSeq === seq2) bidding = false;
+    },
+    onDiscarded: () => {
+      if (attemptSeq === seq2) bidding = false;
+    },
+  });
+
+  // First attempt is discarded now; must NOT clear busy flag owned by attempt 2.
+  firstPlace.resolve({ ok: false, uncertain: true, reason: "disconnected" });
+  assert.equal((await firstTask).state, "discarded");
+  assert.equal(bidding, true, "stale onDiscarded must not release newer in-flight bid lock");
+
+  secondPlace.resolve({ ok: true, winning: true, amount: 720 });
+  assert.equal((await secondTask).state, "applied");
+  assert.equal(bidding, false);
+});
