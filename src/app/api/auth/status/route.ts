@@ -21,8 +21,10 @@ export async function GET(req: NextRequest) {
       signal: AbortSignal.timeout(5000),
     });
     if (res.ok) {
-      const data = (await res.json()) as { auth_token?: string };
-      mfaActive = decodeJwt(data.auth_token ?? gate.token).mfa === true;
+      const data = (await res.json()) as { auth_token?: unknown };
+      if (typeof data.auth_token === "string" && data.auth_token) {
+        mfaActive = decodeJwt(data.auth_token).mfa === true;
+      }
     }
   } catch {
     /* degrade */

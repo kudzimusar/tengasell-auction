@@ -303,7 +303,7 @@ export async function adminSetPassword(username: string, newPassword: string): P
   const regData = (await reg.json().catch(() => ({}))) as { auth_token?: string };
   if (regData.auth_token) {
     void fetch("http://127.0.0.1:3001/api/auth/v1/logout", {
-      method: "POST",
+      method: "GET",
       headers: { Authorization: `Bearer ${regData.auth_token}` },
       signal: AbortSignal.timeout(4000),
     }).catch(() => {});

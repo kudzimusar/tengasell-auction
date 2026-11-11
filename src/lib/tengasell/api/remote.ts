@@ -229,7 +229,7 @@ export class RemoteApi {
 
   async logout(): Promise<void> {
     try {
-      await tbFetch("/api/auth/v1/logout", { method: "POST", headers: this.authHeaders() });
+      await tbFetch("/api/auth/v1/logout", { method: "GET", headers: this.authHeaders() });
     } catch {
       /* best effort */
     }

@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
     if (token) {
       // invalidate the just-issued session — suspended users get nothing
       void fetch(`${TRAILBASE}/api/auth/v1/logout`, {
-        method: "POST",
+        method: "GET",
         headers: { Authorization: `Bearer ${token}` },
         signal: AbortSignal.timeout(4000),
       }).catch(() => {});

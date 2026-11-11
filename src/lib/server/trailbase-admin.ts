@@ -15,7 +15,19 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "Tengasell#2025";
 
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // TrailBase auth_token_ttl_sec: 86400
 
-let cached: { token: string; fetchedAt: number } | null = null;
+let cached: { token: string; fetchedAt: number; expMs: number } | null = null;
+
+function tokenExpMs(token: string): number {
+  try {
+    const part = token.split(".")[1] ?? "";
+    const payload = JSON.parse(Buffer.from(part, "base64url").toString("utf8")) as { exp?: unknown };
+    return typeof payload?.exp === "number" && Number.isFinite(payload.exp)
+      ? payload.exp * 1000
+      : Date.now() + TOKEN_TTL_MS;
+  } catch {
+    return Date.now() + TOKEN_TTL_MS;
+  }
+}
 
 /** POST /api/auth/v1/login → auth_token (same as the trade engine's tbLogin). */
 export async function tbLogin(): Promise<string> {
@@ -31,11 +43,16 @@ export async function tbLogin(): Promise<string> {
   return data.auth_token;
 }
 
-/** Cached admin token — refreshed when older than 24h or after a 401. */
+/** Cached admin token — refreshed before expiry or after a 401/403. */
 export async function ensureAdminToken(force = false): Promise<string> {
-  const fresh = cached && Date.now() - cached.fetchedAt < TOKEN_TTL_MS;
+  const now = Date.now();
+  const fresh =
+    cached &&
+    now - cached.fetchedAt < TOKEN_TTL_MS &&
+    cached.expMs - now > 30_000;
   if (force || !cached || !fresh) {
-    cached = { token: await tbLogin(), fetchedAt: Date.now() };
+    const token = await tbLogin();
+    cached = { token, fetchedAt: Date.now(), expMs: tokenExpMs(token) };
   }
   return cached.token;
 }
@@ -46,7 +63,8 @@ function invalidate() {
 
 /**
  * fetch() wrapper that attaches the admin Bearer token.
- * Retries once with a fresh token on 401 (token expired/invalidated).
+ * Retries once with a fresh token on 401/403 (TrailBase returns 403 as well
+ * as 401 when an admin bearer token expires on record routes).
  */
 export async function tbFetch(
   path: string,
@@ -70,7 +88,7 @@ export async function tbFetch(
     });
 
   let res = await run(await ensureAdminToken());
-  if (res.status === 401) {
+  if (res.status === 401 || res.status === 403) {
     invalidate();
     res = await run(await ensureAdminToken(true));
   }

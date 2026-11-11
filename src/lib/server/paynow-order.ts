@@ -92,42 +92,82 @@ export function toSessionRow(r: Record<string, unknown> | null): PaynowSessionRo
   };
 }
 
-// ── buyer authentication (mirrors the trade engine's resolveIdentity) ──
+// ── buyer authentication (mirrors the trade engine's strict verifier) ──
 
-function decodeJwt(token: string): { username?: string; admin?: boolean } {
+function decodeStrictJwt(token: string): {
+  alg?: string;
+  sub?: string;
+  username?: string;
+  admin?: boolean;
+  exp?: number;
+  nbf?: number;
+} | null {
   try {
-    const part = token.split(".")[1] ?? "";
-    const b64 = part.replace(/-/g, "+").replace(/_/g, "/");
-    return JSON.parse(Buffer.from(b64, "base64").toString("utf8"));
+    if (!token || token.length > 4096 || token.trim() !== token) return null;
+    const parts = token.split(".");
+    if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) return null;
+    const header = JSON.parse(Buffer.from(parts[0], "base64url").toString("utf8")) as Record<
+      string,
+      unknown
+    >;
+    if (typeof header?.alg !== "string" || !header.alg || header.alg.toLowerCase() === "none") {
+      return null;
+    }
+    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")) as Record<
+      string,
+      unknown
+    >;
+    if (!payload || typeof payload !== "object") return null;
+    return {
+      alg: header.alg,
+      sub: typeof payload.sub === "string" ? payload.sub : undefined,
+      username: typeof payload.username === "string" ? payload.username : undefined,
+      admin: payload.admin === true,
+      exp: typeof payload.exp === "number" && Number.isFinite(payload.exp) ? payload.exp : undefined,
+      nbf: typeof payload.nbf === "number" && Number.isFinite(payload.nbf) ? payload.nbf : undefined,
+    };
   } catch {
-    return {};
+    return null;
   }
 }
 
 /**
  * Resolve the caller from an "Authorization: Bearer <trailbase_token>"
- * header: verifies the token with /api/auth/v1/status and decodes the
- * username from the (active) JWT payload. Returns the token too so
- * callers can read records WITH the user's own credentials. Null when
- * invalid.
+ * header: strictly verifies token structure, expiry, and TrailBase's
+ * /api/auth/v1/status authority without ever falling back to caller claims.
  */
 export async function resolveUserFromToken(
   authHeader: string | null,
 ): Promise<{ username: string; admin: boolean; token: string } | null> {
   if (!authHeader || !authHeader.toLowerCase().startsWith("bearer ")) return null;
   const token = authHeader.slice(7).trim();
-  if (!token) return null;
+  const presented = decodeStrictJwt(token);
+  const nowMs = Date.now();
+  if (!presented?.sub || !presented.username || !presented.exp || presented.exp * 1000 <= nowMs) {
+    return null;
+  }
+  if (presented.nbf != null && presented.nbf * 1000 > nowMs) return null;
   try {
     const res = await fetch(`${TRAILBASE}/api/auth/v1/status`, {
       headers: { Authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return null;
-    const data = (await res.json()) as { auth_token?: string };
-    const active = typeof data.auth_token === "string" ? data.auth_token : token;
-    const payload = decodeJwt(active);
-    if (!payload.username) return null;
-    return { username: payload.username, admin: !!payload.admin, token };
+    const data = (await res.json()) as { auth_token?: unknown };
+    if (typeof data.auth_token !== "string" || !data.auth_token) return null;
+    const verified = decodeStrictJwt(data.auth_token);
+    if (
+      !verified?.sub ||
+      !verified.username ||
+      !verified.exp ||
+      verified.exp * 1000 <= Date.now() ||
+      verified.sub !== presented.sub ||
+      verified.username !== presented.username
+    ) {
+      return null;
+    }
+    if (verified.nbf != null && verified.nbf * 1000 > Date.now()) return null;
+    return { username: verified.username, admin: !!verified.admin, token: data.auth_token };
   } catch {
     return null;
   }
