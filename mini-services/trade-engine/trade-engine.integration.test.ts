@@ -1074,4 +1074,85 @@ describe("trade-engine live TrailBase + proxy + Socket.IO integration tests", ()
     expect(aucRow).toEqual({ current_price: 36, bid_count: 2 });
     expect(activeRows).toEqual([{ bidder_username: "nyasha", amount: 36 }]);
   });
+
+  test("L. Concurrent offer:counter-respond (accept) vs buynow:purchase serializes with a single order", async () => {
+    const freshNyasha = await loginTrailBase(stack.tbUrl, "nyasha", password);
+    const freshRufaro = await loginTrailBase(stack.tbUrl, "rufaro", password);
+    const freshTakudzwa = await loginTrailBase(stack.tbUrl, "takudzwa", password);
+    nyashaToken = freshNyasha.auth_token;
+    rufaroToken = freshRufaro.auth_token;
+    takudzwaToken = freshTakudzwa.auth_token;
+
+    const cNyasha = await connectSocket(stack.teUrl, nyashaToken);
+    const cRufaro = await connectSocket(stack.teUrl, rufaroToken);
+    const cTakudzwa = await connectSocket(stack.teUrl, takudzwaToken);
+    openSockets.push(cNyasha.socket, cRufaro.socket, cTakudzwa.socket);
+
+    const nowIso = new Date().toISOString().replace(/\.\d+Z$/, "Z");
+    const endsIso = new Date(Date.now() + 3600_000).toISOString().replace(/\.\d+Z$/, "Z");
+    const takudzwaSub = decodeClaims(takudzwaToken).sub;
+    const createRes = await fetch(`${stack.tbUrl}/api/records/v1/auctions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({
+        user: takudzwaSub,
+        seller_username: "takudzwa",
+        title: "Counter-Offer Lock Serialization Lot",
+        slug: `counter-lock-${Date.now()}`,
+        description: "Live E2E counter-offer vs buy-now race test",
+        category: "Electronics",
+        condition: "mint",
+        city: "Harare",
+        start_price: 20,
+        current_price: 20,
+        buy_now_price: 90,
+        allow_offers: 1,
+        bid_count: 0,
+        status: "live",
+        starts_at: nowIso,
+        started_at: nowIso,
+        ends_at: endsIso,
+        created_at: nowIso,
+        updated_at: nowIso,
+      }),
+    });
+    const lotId = Number(((await createRes.json()) as { ids: number[] }).ids[0]);
+
+    const submitted = (await emitRpc(cNyasha.socket, "offer:submit", {
+      auctionId: lotId,
+      amount: 60,
+      message: "Can we do 60?",
+    })) as { ok?: boolean; offer?: { id?: number } };
+    expect(submitted.ok).toBe(true);
+    const offerId = Number(submitted.offer?.id);
+    expect(Number.isInteger(offerId) && offerId > 0).toBe(true);
+
+    const countered = await emitRpc(cTakudzwa.socket, "offer:respond", {
+      offerId,
+      action: "counter",
+      amount: 75,
+      message: "Meet at 75",
+    });
+    expect(countered).toMatchObject({ ok: true, countered: true });
+
+    const [counterAccept1, counterAccept2, buyNow] = await Promise.all([
+      emitRpc(cNyasha.socket, "offer:counter-respond", { offerId, accept: true }),
+      emitRpc(cNyasha.socket, "offer:counter-respond", { offerId, accept: true }),
+      emitRpc(cRufaro.socket, "buynow:purchase", { auctionId: lotId }),
+    ]);
+
+    const outcomes = [counterAccept1, counterAccept2, buyNow] as Array<{ ok?: boolean }>;
+    expect(outcomes.filter((r) => r.ok === true)).toHaveLength(1);
+    expect(outcomes.filter((r) => r.ok === false)).toHaveLength(2);
+
+    const db = new Database(path.join(stack.dataDir, "main.db"), { readonly: true });
+    const orderCountRow = db.query("SELECT COUNT(*) AS cnt FROM orders WHERE auction_id = ?").get(lotId) as {
+      cnt: number;
+    };
+    const aucRow = db.query("SELECT status FROM auctions WHERE id = ?").get(lotId) as { status: string };
+    db.close();
+
+    expect(orderCountRow.cnt).toBe(1);
+    expect(aucRow.status).toBe("sold");
+  });
 });

@@ -835,32 +835,46 @@ async function sweepLiveRooms() {
   for (const session of rooms) {
     const lotId = session.current_lot_id;
     if (!lotId) continue;
-    const auction = await getRecord("auctions", lotId);
-    if (!auction || auction.status !== "live") {
-      await advanceRoom(session);
-      continue;
-    }
-    const bids = await getRecords(
-      "bids",
-      `filter[auction_id][$eq]=${lotId}&order=-id&limit=50`,
-    );
-    const active = bids.find((b: any) => b.status === "active");
-    const reserveMet =
-      auction.reserve_price == null || (active ? active.amount : 0) >= auction.reserve_price;
-    if (active && reserveMet) {
-      await sellAuctionTo(
-        auction,
-        { id: active.user, username: active.bidder_username },
-        active.amount,
+    await bidService.withAuctionLock(Number(lotId), async () => {
+      const freshSession = await getRecord("live_sessions", session.id);
+      if (
+        !freshSession ||
+        freshSession.status !== "live" ||
+        Number(freshSession.current_lot_id) !== Number(lotId) ||
+        !freshSession.close_at ||
+        Date.parse(String(freshSession.close_at)) > Date.now()
+      ) {
+        return;
+      }
+      const auction = await getRecord("auctions", lotId);
+      if (!auction || auction.status !== "live") {
+        await advanceRoom(freshSession);
+        return;
+      }
+      const bids = await getRecords(
+        "bids",
+        `filter[auction_id][$eq]=${lotId}&order=-id&limit=50`,
       );
-      await audit(active.user, "room:hammer", "auctions", lotId, "web", {
-        sessionId: session.id,
-        amount: active.amount,
-      });
-    } else {
-      await endUnsold(auction);
-    }
-    await advanceRoom(session);
+      const active = bids.find((b: any) => b.status === "active");
+      const reserveMet =
+        auction.reserve_price == null || (active ? active.amount : 0) >= auction.reserve_price;
+      if (active && reserveMet) {
+        const orderId = await sellAuctionTo(
+          auction,
+          { id: active.user, username: active.bidder_username },
+          active.amount,
+        );
+        if (orderId == null) return;
+        await audit(active.user, "room:hammer", "auctions", lotId, "web", {
+          sessionId: freshSession.id,
+          amount: active.amount,
+        });
+      } else {
+        const unsoldOk = await endUnsold(auction);
+        if (!unsoldOk) return;
+      }
+      await advanceRoom(freshSession);
+    });
   }
 }
 
@@ -1633,30 +1647,38 @@ io.on("connection", (socket: Socket) => {
       if (!auction) return ack?.({ ok: false, error: "Item not found." });
 
       if (accept) {
-        if (auction.status !== "live")
-          return ack?.({ ok: false, error: "This item is no longer live." });
-        const price = Number(offer.counter_amount ?? offer.amount);
-        const orderId = await sellAuctionTo(
-          auction,
-          { id: offer.buyer_user, username: offer.buyer_username },
-          price,
-        );
-        if (orderId == null) return ack?.({ ok: false, error: "Could not complete the sale — retry." });
-        const acceptedOk = await updateRecord("offers", offerId, {
-          status: "accepted",
-          responded_at: nowIso(),
-          updated_at: nowIso(),
+        await bidService.withAuctionLock(Number(offer.auction_id), async () => {
+          const freshOffer = await getRecord("offers", offerId);
+          if (!freshOffer || freshOffer.status !== "countered")
+            return ack?.({ ok: false, error: "This offer has no counter pending." });
+          const freshAuction = await getRecord("auctions", freshOffer.auction_id);
+          if (!freshAuction) return ack?.({ ok: false, error: "Item not found." });
+          if (freshAuction.status !== "live")
+            return ack?.({ ok: false, error: "This item is no longer live." });
+          const price = Number(freshOffer.counter_amount ?? freshOffer.amount);
+          const orderId = await sellAuctionTo(
+            freshAuction,
+            { id: freshOffer.buyer_user, username: freshOffer.buyer_username },
+            price,
+          );
+          if (orderId == null) return ack?.({ ok: false, error: "Could not complete the sale — retry." });
+          const acceptedOk = await updateRecord("offers", offerId, {
+            status: "accepted",
+            responded_at: nowIso(),
+            updated_at: nowIso(),
+          });
+          if (!acceptedOk) {
+            return ack?.({ ok: false, error: "Sale completed, but failed to update offer status — please refresh." });
+          }
+          await audit(user.id, "offer:accept_counter", "offers", offerId, "web", {
+            auctionId: freshAuction.id,
+            amount: price,
+          });
+          const updatedOffer = await getRecord("offers", offerId);
+          if (updatedOffer) io.emit("offer:update", { auctionId: freshAuction.id, offer: updatedOffer });
+          return ack?.({ ok: true, accepted: true, orderId, offer: updatedOffer });
         });
-        if (!acceptedOk) {
-          return ack?.({ ok: false, error: "Sale completed, but failed to update offer status — please refresh." });
-        }
-        await audit(user.id, "offer:accept_counter", "offers", offerId, "web", {
-          auctionId: auction.id,
-          amount: price,
-        });
-        const updatedOffer = await getRecord("offers", offerId);
-        if (updatedOffer) io.emit("offer:update", { auctionId: auction.id, offer: updatedOffer });
-        return ack?.({ ok: true, accepted: true, orderId, offer: updatedOffer });
+        return;
       }
 
       const declinedOk = await updateRecord("offers", offerId, {
@@ -1927,7 +1949,14 @@ io.on("connection", (socket: Socket) => {
       if (session.status !== "live" || !session.current_lot_id)
         return ack?.({ ok: false, error: "No lot is open in this room." });
       await bidService.withAuctionLock(Number(session.current_lot_id), async () => {
-        const lot = await getRecord("auctions", session.current_lot_id);
+        const freshSession = await getRecord("live_sessions", sessionId);
+        if (
+          !freshSession ||
+          freshSession.status !== "live" ||
+          Number(freshSession.current_lot_id) !== Number(session.current_lot_id)
+        )
+          return ack?.({ ok: false, error: "No lot is open in this room." });
+        const lot = await getRecord("auctions", freshSession.current_lot_id);
         if (!lot) return ack?.({ ok: false, error: "Lot not found." });
         if (lot.status !== "live")
           return ack?.({ ok: false, error: "Lot is no longer live." });
@@ -1982,16 +2011,26 @@ io.on("connection", (socket: Socket) => {
         `filter[live_session_id][$eq]=${sessionId}&filter[status][$eq]=live&limit=100`,
       );
       for (const lot of lots) {
-        const lotOk = await updateRecord("auctions", lot.id, {
-          live_session_id: null,
-          ends_at: isoPlus(7 * 24 * 3600_000),
-          updated_at: nowIso(),
+        const failed = await bidService.withAuctionLock(Number(lot.id), async () => {
+          const freshLot = await getRecord("auctions", lot.id);
+          if (!freshLot || freshLot.status !== "live" || Number(freshLot.live_session_id) !== sessionId) {
+            return false;
+          }
+          const lotOk = await updateRecord("auctions", lot.id, {
+            live_session_id: null,
+            ends_at: isoPlus(7 * 24 * 3600_000),
+            updated_at: nowIso(),
+          });
+          if (!lotOk) {
+            return true;
+          }
+          const updated = await getRecord("auctions", lot.id);
+          if (updated) io.emit("auction:update", { auction: updated });
+          return false;
         });
-        if (!lotOk) {
+        if (failed) {
           return ack?.({ ok: false, error: "Could not release live room lots — please retry." });
         }
-        const updated = await getRecord("auctions", lot.id);
-        if (updated) io.emit("auction:update", { auction: updated });
       }
       const closedOk = await updateRecord("live_sessions", sessionId, {
         status: "closed",

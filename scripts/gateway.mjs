@@ -208,6 +208,9 @@ const server = http.createServer((req, res) => {
       if (process.env.GATEWAY_LOG === "1") {
         console.log(`[gateway] ${req.method} :${upstreamPort} ${targetPath} -> ${upstream.statusCode}`);
       }
+      upstream.on("error", () => {
+        if (!res.writableEnded) res.destroy();
+      });
       const isLogout =
         port === 3001 &&
         (req.method === "GET" || req.method === "POST") &&
@@ -216,20 +219,19 @@ const server = http.createServer((req, res) => {
         upstream.statusCode < 400;
       if (isLogout) {
         upstream.pause();
-        void bestEffortRevokeOnLogout(req.headers.authorization).then(() => {
-          if (res.writableEnded) {
-            upstream.destroy();
-            return;
-          }
-          res.writeHead(upstream.statusCode || 502, upstream.headers);
-          upstream.pipe(res);
-          upstream.resume();
-        });
+        void bestEffortRevokeOnLogout(req.headers.authorization)
+          .catch(() => {})
+          .then(() => {
+            if (res.writableEnded) {
+              upstream.destroy();
+              return;
+            }
+            res.writeHead(upstream.statusCode || 502, upstream.headers);
+            upstream.pipe(res);
+            upstream.resume();
+          });
         return;
       }
-      upstream.on("error", () => {
-        if (!res.writableEnded) res.destroy();
-      });
       res.writeHead(upstream.statusCode || 502, upstream.headers);
       upstream.pipe(res);
     },
