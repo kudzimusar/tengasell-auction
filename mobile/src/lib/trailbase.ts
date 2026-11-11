@@ -86,46 +86,58 @@ async function readJson(res: Response): Promise<unknown> {
   }
 }
 
+async function fetchGateway(
+  path: string,
+  init: RequestInit,
+  params: Record<string, string | number | undefined> = {},
+  authToken?: string,
+  accept = "application/json",
+): Promise<Response> {
+  const headers: Record<string, string> = { accept };
+  if (init.body) headers["content-type"] = "application/json";
+  if (authToken) headers.authorization = `Bearer ${authToken}`;
+
+  try {
+    return await fetch(gatewayUrl(path, params), { ...init, headers });
+  } catch {
+    throw new TrailBaseError("network", "Canonical TrailBase authority is unreachable.");
+  }
+}
+
+function throwHttpFailure(res: Response, payload: unknown, hasAuthToken: boolean): never {
+  if (res.status === 401) {
+    throw new TrailBaseError(
+      hasAuthToken ? "session-invalid" : "auth-rejected",
+      hasAuthToken
+        ? "The authenticated TrailBase session is no longer valid."
+        : "Incorrect email/username or password.",
+      res.status,
+    );
+  }
+  if (res.status === 403 && isRecord(payload) && typeof payload.mfa_token === "string") {
+    throw new TrailBaseError(
+      "mfa-required",
+      "This account requires MFA. MOB-01 does not implement MFA entry.",
+      res.status,
+    );
+  }
+  throw new TrailBaseError(
+    "http",
+    `Canonical TrailBase request failed with HTTP ${res.status}.`,
+    res.status,
+  );
+}
+
 async function requestJson<T>(
   path: string,
   init: RequestInit,
   params: Record<string, string | number | undefined> = {},
   authToken?: string,
 ): Promise<T> {
-  const headers: Record<string, string> = { accept: "application/json" };
-  if (init.body) headers["content-type"] = "application/json";
-  if (authToken) headers.authorization = `Bearer ${authToken}`;
-
-  let res: Response;
-  try {
-    res = await fetch(gatewayUrl(path, params), { ...init, headers });
-  } catch {
-    throw new TrailBaseError("network", "Canonical TrailBase authority is unreachable.");
-  }
-
+  const res = await fetchGateway(path, init, params, authToken);
   const payload = await readJson(res);
   if (!res.ok) {
-    if (res.status === 401) {
-      throw new TrailBaseError(
-        authToken ? "session-invalid" : "auth-rejected",
-        authToken
-          ? "The authenticated TrailBase session is no longer valid."
-          : "Incorrect email/username or password.",
-        res.status,
-      );
-    }
-    if (res.status === 403 && isRecord(payload) && typeof payload.mfa_token === "string") {
-      throw new TrailBaseError(
-        "mfa-required",
-        "This account requires MFA. MOB-01 does not implement MFA entry.",
-        res.status,
-      );
-    }
-    throw new TrailBaseError(
-      "http",
-      `Canonical TrailBase request failed with HTTP ${res.status}.`,
-      res.status,
-    );
+    throwHttpFailure(res, payload, Boolean(authToken));
   }
 
   return payload as T;
@@ -187,7 +199,48 @@ export async function refreshTrailBase(refreshToken: string): Promise<string> {
 }
 
 export async function logoutTrailBase(authToken: string): Promise<void> {
-  await requestJson<unknown>("/api/auth/v1/logout", { method: "GET" }, {}, authToken);
+  // TrailBase v0.35.1 GET /api/auth/v1/logout returns HTTP 200 text/plain ("logged out"),
+  // while compatible gateways may return 204 or JSON; reject HTML SPA fallbacks and HTTP failures.
+  const res = await fetchGateway(
+    "/api/auth/v1/logout",
+    { method: "GET" },
+    {},
+    authToken,
+    "application/json, text/plain;q=0.9, */*;q=0.8",
+  );
+  const contentType = res.headers.get("content-type")?.toLowerCase() ?? "";
+  const body = res.status === 204 ? "" : await res.text();
+  if (!res.ok) {
+    let parsed: unknown = null;
+    if (body && contentType.includes("application/json")) {
+      try {
+        parsed = JSON.parse(body) as unknown;
+      } catch {
+        parsed = null;
+      }
+    }
+    throwHttpFailure(res, parsed, true);
+  }
+  if (contentType.includes("application/json")) {
+    if (!body) return;
+    try {
+      JSON.parse(body);
+      return;
+    } catch {
+      throw new TrailBaseError(
+        "malformed-response",
+        `Canonical TrailBase returned malformed JSON (HTTP ${res.status}).`,
+        res.status,
+      );
+    }
+  }
+  if (contentType.includes("text/html") || /^\s*(?:<!doctype\s+html|<html\b)/i.test(body)) {
+    throw new TrailBaseError(
+      "malformed-response",
+      `Canonical TrailBase logout returned HTML instead of an API response (HTTP ${res.status}).`,
+      res.status,
+    );
+  }
 }
 
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
