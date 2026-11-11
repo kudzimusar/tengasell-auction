@@ -130,3 +130,10 @@ test("SOCK-14 pre-emit disconnect sets rejected=true, parser uses no string heur
   assert.doesNotMatch(ackSource, /please retry|unexpected error|error\.includes/i);
   assert.doesNotMatch(copySource, /try again|please retry/i);
 });
+
+test("SOCK-15 live updates and post-bid sync stay silent, sequenced, and safely clipped", () => {
+  assert.match(itemSource, /loadSeqRef\.current/);
+  assert.match(itemSource, /load\(\{\s*silent:\s*true\s*\}\)/);
+  assert.match(itemSource, /overflow:\s*"hidden"/);
+  assert.match(itemSource, /!Number\.isFinite\(endsMs\)/);
+});

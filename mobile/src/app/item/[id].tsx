@@ -49,28 +49,41 @@ export default function ItemScreen() {
   // The session object captured by this render cannot observe a later account
   // switch. Read identity through a ref that tracks the latest snapshot.
   const identityRef = useRef<string | null>(session.identity?.id ?? null);
+  const loadSeqRef = useRef(0);
+  const itemRef = useRef<AuctionView | null>(null);
   const bidsSnapshotRef = useRef<{ auctionId: number; loaded: boolean; bids: Bid[] }>({
     auctionId: 0,
     loaded: false,
     bids: [],
   });
 
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    const seq = ++loadSeqRef.current;
     const auctionId = Number(id);
+    const silent =
+      opts?.silent === true &&
+      itemRef.current !== null &&
+      itemRef.current.id === auctionId;
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const [record, recentBids] = await Promise.all([
         fetchAuction(auctionId),
         fetchAuctionBids(auctionId, 15).catch(() => null),
       ]);
+      if (seq !== loadSeqRef.current || !mountedRef.current) return;
       if (!record) {
-        setError("This listing could not be found.");
-        setItem(null);
-        bidsSnapshotRef.current = { auctionId, loaded: false, bids: [] };
+        if (!silent) {
+          setError("This listing could not be found.");
+          itemRef.current = null;
+          setItem(null);
+          bidsSnapshotRef.current = { auctionId, loaded: false, bids: [] };
+        }
       } else {
         const view = toAuctionView(record);
+        itemRef.current = view;
         setItem(view);
         if (recentBids !== null) {
           bidsSnapshotRef.current = { auctionId, loaded: true, bids: recentBids };
@@ -78,9 +91,14 @@ export default function ItemScreen() {
         setBidAmount((current) => current || String(minNextBid(view.current_price, view.bid_count)));
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not reach the marketplace.");
+      if (seq !== loadSeqRef.current || !mountedRef.current) return;
+      if (!silent) {
+        setError(e instanceof Error ? e.message : "Could not reach the marketplace.");
+      }
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current && mountedRef.current && !silent) {
+        setLoading(false);
+      }
     }
   }, [id]);
 
@@ -116,7 +134,7 @@ export default function ItemScreen() {
         s.on("connect", () => !cancelled && setEngineUp(true));
         s.on("disconnect", () => !cancelled && setEngineUp(false));
         s.on("auction:update", (payload: { auction?: { id: number } }) => {
-          if (!cancelled && payload?.auction?.id === Number(id)) void load();
+          if (!cancelled && payload?.auction?.id === Number(id)) void load({ silent: true });
         });
       })
       .catch(() => undefined);
@@ -161,12 +179,13 @@ export default function ItemScreen() {
   const { width } = useWindowDimensions();
   const heroWidth = Math.max(width, 320);
   const styles = useMemo(() => makeStyles(heroWidth), [heroWidth]);
-  const remainingMs = item ? Date.parse(item.ends_at) - now : 0;
-  // The record status can lag the clock. An auction past its end time is closed
-  // here too, otherwise the detail screen offers a bid on an ended lot while the
-  // card already says it is closed.
+  const endsMs = item ? Date.parse(item.ends_at) : NaN;
+  const remainingMs = Number.isFinite(endsMs) ? endsMs - now : 0;
+  // The record status can lag the clock. An auction past its end time or with a
+  // malformed end timestamp is closed here too, otherwise the detail screen
+  // offers a bid on an ended lot while the card already says it is closed.
   const sold = item
-    ? ["sold", "ended", "cancelled"].includes(item.status) || remainingMs <= 0
+    ? ["sold", "ended", "cancelled"].includes(item.status) || !Number.isFinite(endsMs) || remainingMs <= 0
     : false;
   const severity = item ? remainingSeverity(remainingMs) : "normal";
 
@@ -413,7 +432,9 @@ export default function ItemScreen() {
                       publish: (reconciled) => {
                         const presented = reconciled.presentation ?? presentBidOutcome(reconciled.outcome, formatUSD);
                         if (reconciled.auction) {
-                          setItem(toAuctionView(reconciled.auction));
+                          const nextView = toAuctionView(reconciled.auction);
+                          itemRef.current = nextView;
+                          setItem(nextView);
                         }
                         if (reconciled.bids) {
                           bidsSnapshotRef.current = {
@@ -424,8 +445,8 @@ export default function ItemScreen() {
                         }
                         setBidNote({ tone: presented.tone, text: presented.text });
                         setBidding(false);
-                        // CLOSE-01: keep UI synchronized with canonical state.
-                        if (reconciled.outcome.ok || presented.reconcile) void load();
+                        // CLOSE-01: keep UI synchronized silently without blanking bidNote.
+                        if (reconciled.outcome.ok || presented.reconcile) void load({ silent: true });
                       },
                       onDiscarded: () => {
                         // No result is claimed. The screen may still be mounted
@@ -514,7 +535,7 @@ function makeStyles(heroWidth: number) {
     retryText: { color: "#FFFFFF", fontWeight: "700", fontSize: 13 },
 
     scroll: { paddingBottom: 24 },
-    heroWrap: { backgroundColor: "#FFFFFF" },
+    heroWrap: { backgroundColor: "#FFFFFF", overflow: "hidden" },
     hero: { width: heroWidth, height: heroWidth },
     heroImg: { width: "100%", height: "100%" },
     soldVeil: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(10,13,16,0.35)" },
