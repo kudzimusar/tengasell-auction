@@ -196,6 +196,36 @@ export const englishStrings = {
   "item.nextBid": "Next bid {amount}",
   "item.closedCta": "Closed",
   "item.biddingNextCta": "Bidding in MOB-03",
+
+  "condition.new": "Brand new",
+  "condition.likeNew": "Like new",
+  "condition.mint": "Mint",
+  "condition.used": "Used — good",
+  "condition.good": "Good",
+  "condition.fair": "Used — fair",
+  "condition.refurbished": "Refurbished",
+  "condition.forParts": "For parts / not working",
+  "condition.unknown": "Condition: {value}",
+
+  "shipping.pickup": "Local pickup only",
+  "shipping.pickupPaid": "Pickup + delivery — {fee}",
+  "shipping.courierFree": "Free courier nationwide",
+  "shipping.courierPaid": "Courier — {fee}",
+  "shipping.nationalFree": "Free nationwide shipping",
+  "shipping.nationalPaid": "Nationwide — {fee}",
+  "shipping.both": "Pickup or delivery",
+  "shipping.custom": "Shipping: {value}",
+
+  "category.electronics": "Electronics",
+  "category.phones": "Phones & tablets",
+  "category.solar": "Solar & power",
+  "category.vehicles": "Vehicles",
+  "category.home": "Home & garden",
+  "category.fashion": "Fashion",
+  "category.tools": "Tools",
+  "category.collectibles": "Collectibles",
+  "category.other": "Other",
+  "category.custom": "Category: {value}",
 } as const;
 
 export type NxsStringKey = keyof typeof englishStrings;

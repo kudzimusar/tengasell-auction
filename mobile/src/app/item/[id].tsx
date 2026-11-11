@@ -15,7 +15,16 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BottomNav } from "../../components/BottomNav";
-import { formatDateTime, formatRemaining, formatUSD, minNextBid, remainingSeverity } from "../../lib/format";
+import {
+  formatDateTime,
+  formatRemaining,
+  formatUSD,
+  localizedCategoryLabel,
+  localizedConditionLabel,
+  localizedShippingLabel,
+  minNextBid,
+  remainingSeverity,
+} from "../../lib/format";
 import { createRequestGuard } from "../../lib/request-guard";
 import { fetchAuction } from "../../lib/trailbase";
 import { toAuctionView, type AuctionView } from "../../lib/types";
@@ -71,17 +80,18 @@ export default function ItemScreen() {
     return () => clearTimeout(task);
   }, [load]);
 
-  const usableWidth = Math.max(320, width - safeArea.left - safeArea.right);
+  const usableWidth = Math.max(0, width - safeArea.left - safeArea.right);
   const containerWidth = Math.min(usableWidth, 720);
   const heroWidth = containerWidth;
   const styles = useMemo(
     () => makeStyles(theme, screenPadding, writingDirection, containerWidth, heroWidth),
     [containerWidth, heroWidth, screenPadding, theme, writingDirection],
   );
-  const remainingMs = item ? Date.parse(item.ends_at) - now : 0;
-  // Status can lag the clock: an auction past ends_at is closed here too.
+  const endsMs = item ? Date.parse(item.ends_at) : Number.NaN;
+  const remainingMs = Number.isFinite(endsMs) ? endsMs - now : 0;
+  // Status can lag the clock, and malformed end timestamps fail closed as sold/closed.
   const sold = item
-    ? ["sold", "ended", "cancelled"].includes(item.status) || remainingMs <= 0
+    ? ["sold", "ended", "cancelled"].includes(item.status) || !Number.isFinite(endsMs) || remainingMs <= 0
     : false;
   const severity = item ? remainingSeverity(remainingMs) : "normal";
 
@@ -168,8 +178,8 @@ export default function ItemScreen() {
             <View style={styles.block}>
               <Text style={[styles.price, sold && styles.priceSold]}>{formatUSD(item.current_price)}</Text>
               <View style={styles.badges}>
-                <Text style={styles.badge}>{item.condition}</Text>
-                <Text style={styles.badge}>{item.category}</Text>
+                <Text style={styles.badge}>{localizedConditionLabel(t, item.condition)}</Text>
+                <Text style={styles.badge}>{localizedCategoryLabel(t, item.category)}</Text>
                 {item.featured ? <Text style={[styles.badge, styles.badgeGold]}>{t("item.featured")}</Text> : null}
               </View>
 
@@ -208,7 +218,7 @@ export default function ItemScreen() {
                   <Text style={styles.sellerMeta}>
                     {t("item.sellerMeta", {
                       city: item.city || t("item.defaultLocation"),
-                      shipping: item.shipping,
+                      shipping: localizedShippingLabel(t, item.shipping),
                     })}
                   </Text>
                 </View>
@@ -343,7 +353,7 @@ function makeStyles(
       alignSelf: "center",
       paddingBottom: 24,
     },
-    heroWrap: { backgroundColor: theme.surface.raised },
+    heroWrap: { backgroundColor: theme.surface.raised, overflow: "hidden" },
     hero: { width: heroWidth, height: Math.min(heroWidth, 440) },
     heroImg: { width: "100%", height: "100%" },
     heroPlaceholder: { backgroundColor: theme.surface.overlay },

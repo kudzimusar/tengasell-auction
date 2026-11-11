@@ -37,16 +37,32 @@ export default function SearchScreen() {
     return () => clearInterval(timer);
   }, []);
 
-  useEffect(() => {
-    fetchCategories().then(setCategories).catch(() => undefined);
-  }, []);
-
   const requestGuard = useRef(createRequestGuard()).current;
+  const [categoriesGuard] = useState(() => createRequestGuard());
+
+  useEffect(() => {
+    const req = categoriesGuard.next();
+    fetchCategories()
+      .then((rows) => {
+        if (categoriesGuard.isCurrent(req)) setCategories(rows);
+      })
+      .catch(() => undefined);
+    return () => {
+      categoriesGuard.invalidate();
+    };
+  }, [categoriesGuard]);
 
   const run = useCallback(
     async (q: string) => {
       const term = q.trim();
-      if (!term) return;
+      if (!term) {
+        requestGuard.invalidate();
+        setBusy(false);
+        setItems([]);
+        setError(null);
+        setSearched(false);
+        return;
+      }
       const request = requestGuard.next();
       setBusy(true);
       setError(null);

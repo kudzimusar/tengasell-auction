@@ -1,5 +1,7 @@
 // Tengasell — formatting, currency, countdown and bidding rules.
 
+import type { NxsTranslator } from "../nxs/localization/catalog";
+
 /** Yahoo Auctions-style tiered bid increments (USD). */
 export function bidIncrement(price: number): number {
   if (price < 50) return 1;
@@ -41,7 +43,7 @@ export function formatJPYLikeCompact(n: number): string {
 
 /** Remaining-time string, Yahoo style: "3d 2h", "1h 12m", "12m 30s", "5s". */
 export function formatRemaining(remainingMs: number): string {
-  if (remainingMs <= 0) return "0s";
+  if (!Number.isFinite(remainingMs) || remainingMs <= 0) return "0s";
   const s = Math.floor(remainingMs / 1000);
   const d = Math.floor(s / 86400);
   const h = Math.floor((s % 86400) / 3600);
@@ -102,6 +104,82 @@ export function conditionLabel(condition: string): string {
       return "For parts / not working";
     default:
       return condition;
+  }
+}
+
+export function localizedConditionLabel(t: NxsTranslator, condition: string): string {
+  switch (condition.trim().toLowerCase()) {
+    case "new":
+      return t("condition.new");
+    case "like-new":
+      return t("condition.likeNew");
+    case "mint":
+      return t("condition.mint");
+    case "used":
+      return t("condition.used");
+    case "good":
+      return t("condition.good");
+    case "fair":
+      return t("condition.fair");
+    case "refurbished":
+      return t("condition.refurbished");
+    case "for-parts":
+      return t("condition.forParts");
+    default:
+      return t("condition.unknown", { value: condition || "—" });
+  }
+}
+
+export function localizedShippingLabel(
+  t: NxsTranslator,
+  shipping: string,
+  fee?: number,
+): string {
+  const norm = shipping.trim().toLowerCase();
+  if (norm === "pickup") {
+    return typeof fee === "number" && fee > 0
+      ? t("shipping.pickupPaid", { fee: formatUSD(fee) })
+      : t("shipping.pickup");
+  }
+  if (norm === "courier") {
+    return typeof fee === "number" && fee === 0
+      ? t("shipping.courierFree")
+      : t("shipping.courierPaid", { fee: formatUSD(fee ?? 0) });
+  }
+  if (norm === "national") {
+    return typeof fee === "number" && fee === 0
+      ? t("shipping.nationalFree")
+      : t("shipping.nationalPaid", { fee: formatUSD(fee ?? 0) });
+  }
+  if (norm === "both") return t("shipping.both");
+  return t("shipping.custom", { value: shipping || "—" });
+}
+
+export function localizedCategoryLabel(t: NxsTranslator, category: string): string {
+  switch (category.trim().toLowerCase()) {
+    case "electronics":
+      return t("category.electronics");
+    case "phones":
+    case "phones & tablets":
+      return t("category.phones");
+    case "solar":
+    case "solar & power":
+      return t("category.solar");
+    case "vehicles":
+      return t("category.vehicles");
+    case "home":
+    case "home & garden":
+      return t("category.home");
+    case "fashion":
+      return t("category.fashion");
+    case "tools":
+      return t("category.tools");
+    case "collectibles":
+      return t("category.collectibles");
+    case "other":
+      return t("category.other");
+    default:
+      return t("category.custom", { value: category || "—" });
   }
 }
 
