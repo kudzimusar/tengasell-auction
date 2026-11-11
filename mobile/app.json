@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "TengaSell",
+    "slug": "tengasell",
+    "version": "0.1.0",
+    "scheme": "tengasell",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#19717B",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.tengasell.app"
+    },
+    "android": {
+      "package": "com.tengasell.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#19717B",
+        "foregroundImage": "./assets/adaptive-icon.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-localization",
+        {
+          "supportedLocales": {
+            "ios": ["en"],
+            "android": ["en"]
+          }
+        }
+      ]
+    ],
+    "extra": {
+      "tengasellNote": "EXPO_PUBLIC_TENGASELL_API is required for canonical gateway access; NXS 1.0 governs the native experience layer.",
+      "nxsPseudoLocale": "Set EXPO_PUBLIC_NXS_LOCALE=en-XA or ar-XB only for development/certification stress testing."
+    }
+  }
+}

@@ -1,0 +1,67 @@
+name: Tengasell Mobile MOB-01 R2 NXS gates
+
+on:
+  # Superseded by .github/workflows/tengasell-mobile-pr.yml (MOB-UNBLOCK-01-LR02).
+  # Retained for historical exact-head evidence; manual dispatch only.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mob01-r2-nxs-gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v4
+
+      - name: Use Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install locked mobile dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: NXS R2 foundation static review
+        working-directory: mobile
+        run: node scripts/verify-nxs-foundation.mjs
+
+      - name: Dependency security snapshot
+        working-directory: mobile
+        run: |
+          npm audit --json > /tmp/mob01-r2-npm-audit-final.json || true
+          node scripts/verify-dependency-audit.mjs /tmp/mob01-r2-npm-audit-final.json
+          npm ls expo @expo/cli zod --all
+
+      - name: Expo doctor
+        working-directory: mobile
+        run: npx expo-doctor
+
+      - name: Expo lint
+        working-directory: mobile
+        run: npx expo lint
+
+      - name: Typecheck
+        working-directory: mobile
+        run: npx tsc --noEmit
+
+      - name: Android export
+        working-directory: mobile
+        run: npx expo export --platform android
+
+      - name: iOS export
+        working-directory: mobile
+        run: npx expo export --platform ios
+
+      - name: Git diff check
+        run: git diff --check
+
+      - name: Working tree check
+        run: |
+          git status --short
+          test -z "$(git status --short)"

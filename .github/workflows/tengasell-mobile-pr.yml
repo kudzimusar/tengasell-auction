@@ -1,0 +1,161 @@
+name: Tengasell Mobile — PR gates
+
+# Canonical mobile PR gate. Blocking by design: no continue-on-error, no `|| true`
+# except the advisory-parsing step, which reads npm audit's exit status and then
+# enforces an independent policy decision.
+
+on:
+  pull_request:
+    branches:
+      - main
+      - "fix/tengasell-mobile-*"
+      - "feat/tengasell-mobile-*"
+  push:
+    branches:
+      - "fix/tengasell-mobile-*"
+      - "feat/tengasell-mobile-*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-gates-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mobile-gates:
+    name: mobile-gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prove exact head and record provenance
+        # On pull_request events github.sha is the generated merge commit, not
+        # the branch source head. Testing the merge result is correct; claiming
+        # it is the source head is not. All four identities are recorded, and
+        # the checked-out tree is proven to be exactly the tested merge commit.
+        run: |
+          set -euo pipefail
+          WORKFLOW_HEAD="$(git rev-parse HEAD)"
+          TESTED_MERGE="${{ github.sha }}"
+          PR_SOURCE="${{ github.event.pull_request.head.sha || github.sha }}"
+          PR_BASE="${{ github.event.pull_request.base.sha || '' }}"
+          PR_NUMBER="${{ github.event.pull_request.number || '' }}"
+          EVENT="${{ github.event_name }}"
+
+          echo "event:          $EVENT"
+          echo "pr:             ${PR_NUMBER:-n/a}"
+          echo "pr source head: $PR_SOURCE"
+          echo "pr base head:   ${PR_BASE:-n/a}"
+          echo "tested merge:   $TESTED_MERGE"
+          echo "workflow head:  $WORKFLOW_HEAD"
+
+          # The tree under test must be the tested merge commit itself.
+          test "$WORKFLOW_HEAD" = "$TESTED_MERGE"
+
+          {
+            echo "### Mobile gate provenance"
+            echo ""
+            echo "| field | value |"
+            echo "| --- | --- |"
+            echo "| event | $EVENT |"
+            echo "| pull request | ${PR_NUMBER:-n/a} |"
+            echo "| PR source head | \`$PR_SOURCE\` |"
+            echo "| PR base head | \`${PR_BASE:-n/a}\` |"
+            echo "| tested merge SHA | \`$TESTED_MERGE\` |"
+            echo "| workflow head SHA | \`$WORKFLOW_HEAD\` |"
+            echo "| run | \`${{ github.run_id }}\` |"
+            echo "| job attempt | \`${{ github.run_attempt }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Use Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: NXS foundation static checks
+        run: node scripts/verify-nxs-foundation.mjs
+
+      - name: Release-secret boundary (REL-002/REL-004)
+        run: node scripts/verify-no-release-secrets.mjs .
+
+      - name: Dependency security assessment
+        run: |
+          set -euo pipefail
+          # npm audit exits non-zero when findings exist; parse first, then
+          # enforce the policy decision independently.
+          npm audit --json > "$RUNNER_TEMP/audit.json" || true
+          node scripts/verify-dependency-audit.mjs "$RUNNER_TEMP/audit.json"
+
+      - name: Expo install compatibility
+        run: npx expo install --check
+
+      - name: Expo Doctor
+        run: npx expo-doctor
+
+      - name: Expo lint
+        run: npm run lint
+
+      - name: No unresolved merge conflict markers
+        run: |
+          set -euo pipefail
+          if grep -rnE '^(<<<<<<<|>>>>>>>) ' src tests 2>/dev/null; then
+            echo "unresolved conflict markers present" >&2
+            exit 1
+          fi
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: Session security regressions (R3 + RACE01 + ICR02)
+        run: |
+          node --experimental-strip-types --test \
+            tests/logout-continuity.test.mjs \
+            tests/race01-stale-write.test.mjs \
+            tests/storage-concurrency.test.mjs \
+            tests/session-orchestrator.test.mjs \
+            tests/protected-request.test.mjs \
+            tests/login-barrier.test.mjs
+
+      - name: Navigation contract (MOB-02)
+        # Runs only where the MOB-02 screens exist; the foundation PR predates them.
+        if: ${{ hashFiles('mobile/tests/navigation-contract.test.mjs') != '' }}
+        run: node --experimental-strip-types --test tests/navigation-contract.test.mjs
+
+      - name: Bidding and socket safety (MOB-03)
+        # Runs only where the MOB-03 socket modules exist.
+        if: ${{ hashFiles('mobile/tests/socket-lifecycle.test.mjs') != '' }}
+        run: node --experimental-strip-types --test tests/socket-lifecycle.test.mjs
+
+      - name: Bid acknowledgement truthfulness (CLOSE-01)
+        if: ${{ hashFiles('mobile/tests/bid-acknowledgement.test.mjs') != '' }}
+        run: node --experimental-strip-types --test tests/bid-acknowledgement.test.mjs
+
+      - name: Session-safe bid completion (CLOSE-02)
+        if: ${{ hashFiles('mobile/tests/bid-completion.test.mjs') != '' }}
+        run: node --experimental-strip-types --test tests/bid-completion.test.mjs
+
+      - name: Android export
+        run: npx expo export --platform android
+
+      - name: iOS export
+        run: npx expo export --platform ios
+
+      - name: Clean working tree
+        run: |
+          set -euo pipefail
+          git status --short
+          test -z "$(git status --short)"
