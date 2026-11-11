@@ -1,8 +1,13 @@
 name: Tengasell Mobile — PR gates
 
-# Canonical mobile PR gate. Blocking by design: no continue-on-error, no `|| true`
-# except the advisory-parsing step, which reads npm audit's exit status and then
-# enforces an independent policy decision.
+# CERT-04 unconditional PR gate contract:
+# - Never filter out `pull_request` at workflow trigger level (otherwise a
+#   required check hangs on web/docs PRs).
+# - Run heavy Expo/RN checks in `mobile-gates` whenever mobile/**, docs/mobile/**,
+#   or this workflow file changes (or on push / merge_group / workflow_dispatch).
+# - Always execute `mobile-or-skip-gate` (`if: always()`) so branch protection
+#   requiring `mobile-or-skip-gate` passes truthfully on non-mobile skips and
+#   fails closed if `mobile-gates` fails, cancels, or unexpectedly skips.
 
 on:
   pull_request:
@@ -10,10 +15,13 @@ on:
       - main
       - "fix/tengasell-mobile-*"
       - "feat/tengasell-mobile-*"
+      - "chore/tengasell-mobile-*"
   push:
     branches:
       - "fix/tengasell-mobile-*"
       - "feat/tengasell-mobile-*"
+      - "chore/tengasell-mobile-*"
+  merge_group:
   workflow_dispatch:
 
 permissions:
@@ -24,8 +32,55 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  detect-changes:
+    name: Detect mobile scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      mobile_changed: ${{ steps.scope.outputs.mobile_changed }}
+      scope_reason: ${{ steps.scope.outputs.scope_reason }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Evaluate changed paths against mobile scope
+        id: scope
+        run: |
+          set -euo pipefail
+          EVENT="${{ github.event_name }}"
+          if [ "$EVENT" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+            CHANGED="$(git diff --name-only "${BASE}...${HEAD}")"
+            echo "Changed files in ${BASE}...${HEAD}:"
+            echo "$CHANGED"
+
+            if echo "$CHANGED" | grep -qE '^(mobile/|docs/mobile/|\.github/workflows/tengasell-mobile-pr\.yml$)'; then
+              echo "mobile_changed=true" >> "$GITHUB_OUTPUT"
+              echo "scope_reason=mobile-or-workflow-changed" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            if [ ! -f mobile/package.json ]; then
+              echo "mobile_changed=false" >> "$GITHUB_OUTPUT"
+              echo "scope_reason=no-mobile-directory-in-base" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            echo "mobile_changed=false" >> "$GITHUB_OUTPUT"
+            echo "scope_reason=non-mobile-pr-skip" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "mobile_changed=true" >> "$GITHUB_OUTPUT"
+          echo "scope_reason=non-pr-event-${EVENT}" >> "$GITHUB_OUTPUT"
+
   mobile-gates:
     name: mobile-gates
+    needs: detect-changes
+    if: needs.detect-changes.outputs.mobile_changed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     defaults:
@@ -38,10 +93,6 @@ jobs:
           fetch-depth: 0
 
       - name: Prove exact head and record provenance
-        # On pull_request events github.sha is the generated merge commit, not
-        # the branch source head. Testing the merge result is correct; claiming
-        # it is the source head is not. All four identities are recorded, and
-        # the checked-out tree is proven to be exactly the tested merge commit.
         run: |
           set -euo pipefail
           WORKFLOW_HEAD="$(git rev-parse HEAD)"
@@ -51,14 +102,6 @@ jobs:
           PR_NUMBER="${{ github.event.pull_request.number || '' }}"
           EVENT="${{ github.event_name }}"
 
-          echo "event:          $EVENT"
-          echo "pr:             ${PR_NUMBER:-n/a}"
-          echo "pr source head: $PR_SOURCE"
-          echo "pr base head:   ${PR_BASE:-n/a}"
-          echo "tested merge:   $TESTED_MERGE"
-          echo "workflow head:  $WORKFLOW_HEAD"
-
-          # The tree under test must be the tested merge commit itself.
           test "$WORKFLOW_HEAD" = "$TESTED_MERGE"
 
           {
@@ -72,6 +115,7 @@ jobs:
             echo "| PR base head | \`${PR_BASE:-n/a}\` |"
             echo "| tested merge SHA | \`$TESTED_MERGE\` |"
             echo "| workflow head SHA | \`$WORKFLOW_HEAD\` |"
+            echo "| scope reason | \`${{ needs.detect-changes.outputs.scope_reason }}\` |"
             echo "| run | \`${{ github.run_id }}\` |"
             echo "| job attempt | \`${{ github.run_attempt }}\` |"
           } >> "$GITHUB_STEP_SUMMARY"
@@ -95,8 +139,6 @@ jobs:
       - name: Dependency security assessment
         run: |
           set -euo pipefail
-          # npm audit exits non-zero when findings exist; parse first, then
-          # enforce the policy decision independently.
           npm audit --json > "$RUNNER_TEMP/audit.json" || true
           node scripts/verify-dependency-audit.mjs "$RUNNER_TEMP/audit.json"
 
@@ -131,12 +173,10 @@ jobs:
             tests/login-barrier.test.mjs
 
       - name: Navigation contract (MOB-02)
-        # Runs only where the MOB-02 screens exist; the foundation PR predates them.
         if: ${{ hashFiles('mobile/tests/navigation-contract.test.mjs') != '' }}
         run: node --experimental-strip-types --test tests/navigation-contract.test.mjs
 
       - name: Bidding and socket safety (MOB-03)
-        # Runs only where the MOB-03 socket modules exist.
         if: ${{ hashFiles('mobile/tests/socket-lifecycle.test.mjs') != '' }}
         run: node --experimental-strip-types --test tests/socket-lifecycle.test.mjs
 
@@ -159,3 +199,44 @@ jobs:
           set -euo pipefail
           git status --short
           test -z "$(git status --short)"
+
+  mobile-or-skip-gate:
+    name: mobile-or-skip-gate
+    needs: [detect-changes, mobile-gates]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Enforce unconditional required-check contract
+        run: |
+          set -euo pipefail
+          DETECT_RES="${{ needs.detect-changes.result }}"
+          CHANGED="${{ needs.detect-changes.outputs.mobile_changed }}"
+          REASON="${{ needs.detect-changes.outputs.scope_reason }}"
+          GATES_RES="${{ needs.mobile-gates.result }}"
+
+          echo "detect-changes result: $DETECT_RES"
+          echo "mobile_changed:        $CHANGED ($REASON)"
+          echo "mobile-gates result:   $GATES_RES"
+
+          if [ "$DETECT_RES" != "success" ]; then
+            echo "::error::Scope detection failed or cancelled ($DETECT_RES); failing closed."
+            exit 1
+          fi
+
+          if [ "$CHANGED" = "true" ]; then
+            if [ "$GATES_RES" = "success" ]; then
+              echo "PASS: mobile/workflow changes verified by passing mobile-gates."
+              exit 0
+            fi
+            echo "::error::FAIL: mobile-affecting PR did not pass mobile-gates (result=$GATES_RES)."
+            exit 1
+          fi
+
+          if [ "$CHANGED" = "false" ] && [ "$GATES_RES" = "skipped" ]; then
+            echo "PASS (not-applicable): no mobile/workflow changes detected; mobile-gates skipped cleanly."
+            exit 0
+          fi
+
+          echo "::error::FAIL: inconsistent aggregator state (mobile_changed=$CHANGED, mobile-gates=$GATES_RES)."
+          exit 1
