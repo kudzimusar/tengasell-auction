@@ -1,7 +1,7 @@
 # TENGASELL-MOBILE-01 — `CERT-05` Physical UAT Handoff & `CLOSE-01` Verification Record
 
 **Unit:** `MOB-01-ICR03-R2-CLOSE-01`  
-**Repository:** `kudzimusarurwa/tengasell-auction`  
+**Repository:** `kudzimusar/tengasell-auction`  
 **Main Baseline (unmodified):** `98a607c326ca4bcf24062c045d4eaa35762a3aa5`
 
 ---
@@ -52,3 +52,12 @@ Once PR #6, Governance PR #10 (`mobile-or-skip-gate`), PR #7, and PR #9 (plus ba
 - **GitHub CI vs Local `npm audit`:** Keep both verified observations explicit and reconciled: Nov 10 CI (`42819932802`) observed `0` critical, `1` high (`zod`), `12` moderate; Nov 11 local verification (`395205a` / `65a57dc3`) observed `0` critical, `1` high (`zod` via dev-only `eslint-config-expo@58.0.4` → `eslint-plugin-react-hooks@7.1.1`), `10` moderate (policy decision: `KNOWN_TOOLING_CHAIN_REQUIRES_EXPO_PATCH`).
 - **Root web `ci.yml`:** `Build and smoke test` passes (`GET / -> 200`, `GET /api/public/status -> 200`, `GET /api/v1/listings -> 401`); `Lint and typecheck (baseline debt — non-blocking)` continues failing on pre-existing root Next.js web lint/TS errors (`continue-on-error: true`), completely outside mobile PR scope.
 - **Preserved stashes:** `stash@{0}` (`audit policy`) and `stash@{1}` (`LR02 work split`) remain untouched locally.
+
+---
+
+## 4. `CERT-04` Aggregator & `CERT-02` / `CERT-03` Live Evidence Summary
+
+- **Governance PR #10 (`chore/tengasell-mobile-cert04-check-aggregator` @ `e1627bc3995e6f0f150f6d19267265d9de0452fc`, Run `42941711099`):** Verified `Detect mobile scope` (`130264831204`, `success`) → `mobile-gates` (`130264891609`, `success`) → `mobile-or-skip-gate` (`130265431040`, `success`).
+- **`CERT-04` Non-Mobile Skip Probe (throwaway PR #11, closed & deleted, Run `42941890043`):** Docs-only change outside `mobile/**` / `docs/mobile/**` proved `Detect mobile scope` (`130265404824`, `success`) → `mobile-gates` (`130265460728`, `skipped`) → `mobile-or-skip-gate` (`130265459554`, `success`).
+- **`CERT-04` Fail-Closed Probe (throwaway PR #11 commit `f283e3b`, Run `42942009533`):** Intentional unit-test failure proved `Detect mobile scope` (`130265803899`, `success`) → `mobile-gates` (`130265861678`, `failure`) → `mobile-or-skip-gate` (`130266047274`, `failure`).
+- **`CERT-02` & `CERT-03` Disposable Stack Results:** Unmodified `mini-services/trade-engine/index.ts` failed commercial safety post-commit on both `audit_events` transport reset (auction `9001`, bid `442`) and `antiSnipe` `PATCH` reset (auction `9002`, bid `443`), and exhibited a **P0** authentication bypass (`GET /api/auth/v1/status` returns HTTP 200 `{ auth_token: null }`, triggering `data.auth_token ?? token` fallback onto unverified JWT decode) plus **P1** post-logout / expired-token acceptance via unbounded `identityCache` and pinned `requireAuth()` socket `me`. Full PoC and server remediation specification live in [TENGASELL_MOBILE_01_TRADE_ENGINE_REMEDIATION_PACKET.md](./TENGASELL_MOBILE_01_TRADE_ENGINE_REMEDIATION_PACKET.md).
