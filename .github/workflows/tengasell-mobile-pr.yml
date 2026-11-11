@@ -50,31 +50,32 @@ jobs:
         run: |
           set -euo pipefail
           EVENT="${{ github.event_name }}"
-          if [ ! -f mobile/package.json ]; then
-            echo "mobile_changed=false" >> "$GITHUB_OUTPUT"
-            echo "scope_reason=no-mobile-directory-in-base" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+          if [ "$EVENT" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+            CHANGED="$(git diff --name-only "${BASE}...${HEAD}")"
+            echo "Changed files in ${BASE}...${HEAD}:"
+            echo "$CHANGED"
 
-          if [ "$EVENT" != "pull_request" ]; then
-            echo "mobile_changed=true" >> "$GITHUB_OUTPUT"
-            echo "scope_reason=non-pr-event-${EVENT}" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+            if echo "$CHANGED" | grep -qE '^(mobile/|docs/mobile/|\.github/workflows/tengasell-mobile-pr\.yml$)'; then
+              echo "mobile_changed=true" >> "$GITHUB_OUTPUT"
+              echo "scope_reason=mobile-or-workflow-changed" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
 
-          BASE="${{ github.event.pull_request.base.sha }}"
-          HEAD="${{ github.event.pull_request.head.sha }}"
-          CHANGED="$(git diff --name-only "${BASE}...${HEAD}")"
-          echo "Changed files in ${BASE}...${HEAD}:"
-          echo "$CHANGED"
+            if [ ! -f mobile/package.json ]; then
+              echo "mobile_changed=false" >> "$GITHUB_OUTPUT"
+              echo "scope_reason=no-mobile-directory-in-base" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
 
-          if echo "$CHANGED" | grep -qE '^(mobile/|docs/mobile/|\.github/workflows/tengasell-mobile-pr\.yml$)'; then
-            echo "mobile_changed=true" >> "$GITHUB_OUTPUT"
-            echo "scope_reason=mobile-or-workflow-changed" >> "$GITHUB_OUTPUT"
-          else
             echo "mobile_changed=false" >> "$GITHUB_OUTPUT"
             echo "scope_reason=non-mobile-pr-skip" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+
+          echo "mobile_changed=true" >> "$GITHUB_OUTPUT"
+          echo "scope_reason=non-pr-event-${EVENT}" >> "$GITHUB_OUTPUT"
 
   mobile-gates:
     name: mobile-gates
