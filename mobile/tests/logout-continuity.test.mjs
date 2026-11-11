@@ -244,3 +244,7 @@ test("R3-13 English and both pseudolocales preserve dynamic domain values", () =
   }
   assert.match(translateNxs("session.signoutIncomplete","ar-XB"), /\u2067/);
 });
+
+test("CERT-04 temporary fail-closed probe (throwaway PR #11)", () => {
+  assert.equal(1, 2, "intentional fail-closed test");
+});
