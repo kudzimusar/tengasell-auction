@@ -7,15 +7,16 @@
 //
 // Env vars (same as the trade engine):
 //   ADMIN_USERNAME  (default "admin")
-//   ADMIN_PASSWORD  (default "Tengasell#2025")
+//   ADMIN_PASSWORD  (required — fail closed when unset)
 
 const TRAILBASE = process.env.TRAILBASE_URL ?? "http://localhost:3001";
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME ?? "admin";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "Tengasell#2025";
+const getAdminPassword = (): string => process.env.ADMIN_PASSWORD ?? "";
 
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // TrailBase auth_token_ttl_sec: 86400
 
 let cached: { token: string; fetchedAt: number; expMs: number } | null = null;
+let inFlightLogin: Promise<string> | null = null;
 
 function tokenExpMs(token: string): number {
   try {
@@ -31,10 +32,14 @@ function tokenExpMs(token: string): number {
 
 /** POST /api/auth/v1/login → auth_token (same as the trade engine's tbLogin). */
 export async function tbLogin(): Promise<string> {
+  const password = getAdminPassword();
+  if (!password) {
+    throw new Error("ADMIN_PASSWORD environment variable is required");
+  }
   const res = await fetch(`${TRAILBASE}/api/auth/v1/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username: ADMIN_USERNAME, password: ADMIN_PASSWORD }),
+    body: JSON.stringify({ username: ADMIN_USERNAME, password }),
     signal: AbortSignal.timeout(8000),
   });
   if (!res.ok) throw new Error(`admin login failed: ${res.status}`);
@@ -43,22 +48,34 @@ export async function tbLogin(): Promise<string> {
   return data.auth_token;
 }
 
-/** Cached admin token — refreshed before expiry or after a 401/403. */
+/** Singleflight cached admin token — refreshed before expiry or after a 401/403. */
 export async function ensureAdminToken(force = false): Promise<string> {
   const now = Date.now();
   const fresh =
     cached &&
     now - cached.fetchedAt < TOKEN_TTL_MS &&
     cached.expMs - now > 30_000;
-  if (force || !cached || !fresh) {
-    const token = await tbLogin();
-    cached = { token, fetchedAt: Date.now(), expMs: tokenExpMs(token) };
+  if (!force && fresh && cached) {
+    return cached.token;
   }
-  return cached.token;
+  if (!inFlightLogin) {
+    if (force) cached = null;
+    inFlightLogin = tbLogin()
+      .then((token) => {
+        cached = { token, fetchedAt: Date.now(), expMs: tokenExpMs(token) };
+        return token;
+      })
+      .finally(() => {
+        inFlightLogin = null;
+      });
+  }
+  return inFlightLogin;
 }
 
-function invalidate() {
-  cached = null;
+function invalidateIfCurrent(failedToken: string): void {
+  if (cached?.token === failedToken) {
+    cached = null;
+  }
 }
 
 /**
@@ -80,6 +97,7 @@ export async function tbFetch(
   const run = async (token: string) =>
     fetch(url, {
       ...rest,
+      signal: rest.signal ?? AbortSignal.timeout(8000),
       headers: {
         ...(rest.body ? { "Content-Type": "application/json" } : {}),
         ...(rest.headers ?? {}),
@@ -87,10 +105,16 @@ export async function tbFetch(
       },
     });
 
-  let res = await run(await ensureAdminToken());
+  const firstToken = await ensureAdminToken();
+  let res = await run(firstToken);
   if (res.status === 401 || res.status === 403) {
-    invalidate();
-    res = await run(await ensureAdminToken(true));
+    invalidateIfCurrent(firstToken);
+    let refreshed = await ensureAdminToken(cached?.token === firstToken || !cached);
+    if (refreshed === firstToken) {
+      invalidateIfCurrent(firstToken);
+      refreshed = await ensureAdminToken(true);
+    }
+    res = await run(refreshed);
   }
   return res;
 }

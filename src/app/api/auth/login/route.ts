@@ -16,6 +16,7 @@ import {
   clientIp,
   clientUa,
   putPendingTrustMfa,
+  revokeAuthSession,
   trustStatus,
   userB64For,
   writeAudit,
@@ -98,12 +99,17 @@ export async function POST(req: NextRequest) {
   const status = await trustStatus(username);
   if (status.suspended) {
     if (token) {
-      // invalidate the just-issued session — suspended users get nothing
-      void fetch(`${TRAILBASE}/api/auth/v1/logout`, {
-        method: "GET",
-        headers: { Authorization: `Bearer ${token}` },
-        signal: AbortSignal.timeout(4000),
-      }).catch(() => {});
+      // Invalidate and record revocation for the just-issued session — suspended users get nothing.
+      try {
+        await fetch(`${TRAILBASE}/api/auth/v1/logout`, {
+          method: "GET",
+          headers: { Authorization: `Bearer ${token}` },
+          signal: AbortSignal.timeout(4000),
+        });
+      } catch {
+        /* best effort */
+      }
+      await revokeAuthSession({ token, username });
     }
     await writeAudit({
       user: userB64For(username),

@@ -925,4 +925,153 @@ describe("trade-engine live TrailBase + proxy + Socket.IO integration tests", ()
       await shortStack.cleanup();
     }
   }, 30_000);
+
+  test("J. Token missing iat claim fails closed; <1s token-only revoke disconnects token1 while immediate re-login stays live", async () => {
+    const sub = decodeClaims(nyashaToken).sub;
+    const exp = Math.floor(Date.now() / 1000) + 3600;
+    const noIatTok = forgeUnsignedJwt({ sub, username: "nyasha", admin: false, exp }, "EdDSA", "sig");
+    const badConn = await connectSocket(stack.teUrl, noIatTok);
+    openSockets.push(badConn.socket);
+    const badAck = await emitRpc(badConn.socket, "bid:place", { auctionId: testAuctionId, maxAmount: 45 });
+    expect(badAck).toMatchObject({ ok: false, committed: false, stage: "pre_commit" });
+    expect(["AUTH_INVALID", "AUTH_REVOKED"]).toContain(badAck.code);
+
+    // Token-only /internal/auth/revoke disconnects token1 while same-second relogin token2 works cleanly
+    const l1 = await loginTrailBase(stack.tbUrl, "rufaro", password);
+    const s1 = await connectSocket(stack.teUrl, l1.auth_token);
+    openSockets.push(s1.socket);
+    expect(s1.hello).toEqual({ ok: true, identity: { username: "rufaro" } });
+
+    const s1Disconnected = new Promise<void>((resolve) => {
+      if (!s1.socket.connected) {
+        resolve();
+        return;
+      }
+      s1.socket.once("disconnect", () => resolve());
+    });
+
+    const revRes = await fetch(`${stack.teUrl}/internal/auth/revoke`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-tgs-internal": internalSecret },
+      body: JSON.stringify({ token: l1.auth_token }),
+    });
+    expect(revRes.status).toBe(200);
+    await s1Disconnected;
+
+    const l2 = await loginTrailBase(stack.tbUrl, "rufaro", password);
+    const s2 = await connectSocket(stack.teUrl, l2.auth_token);
+    openSockets.push(s2.socket);
+    expect(s2.hello).toEqual({ ok: true, identity: { username: "rufaro" } });
+    rufaroToken = l2.auth_token;
+
+    // Reconnecting with revoked token1 is rejected while token2 remains valid
+    const l1RetryConn = await connectSocket(stack.teUrl, l1.auth_token);
+    openSockets.push(l1RetryConn.socket);
+    expect(l1RetryConn.hello).toEqual({ ok: true, identity: null });
+    const l1Blocked = await emitRpc(l1RetryConn.socket, "bid:place", { auctionId: testAuctionId, maxAmount: 45 });
+    expect(l1Blocked).toMatchObject({ ok: false, committed: false, code: "AUTH_REVOKED" });
+  });
+
+  test("K. ALREADY_LEADING self-outbid blocked on live Socket.IO + proxy-outbid uncertain retry reconciles cleanly", async () => {
+    const freshNyasha = await loginTrailBase(stack.tbUrl, "nyasha", password);
+    const freshRufaro = await loginTrailBase(stack.tbUrl, "rufaro", password);
+    nyashaToken = freshNyasha.auth_token;
+    rufaroToken = freshRufaro.auth_token;
+
+    const cNyasha = await connectSocket(stack.teUrl, nyashaToken);
+    const cRufaro = await connectSocket(stack.teUrl, rufaroToken);
+    openSockets.push(cNyasha.socket, cRufaro.socket);
+
+    const nowIso = new Date().toISOString().replace(/\.\d+Z$/, "Z");
+    const endsIso = new Date(Date.now() + 3600_000).toISOString().replace(/\.\d+Z$/, "Z");
+    const takudzwaSub = decodeClaims(takudzwaToken).sub;
+    const createRes = await fetch(`${stack.tbUrl}/api/records/v1/auctions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({
+        user: takudzwaSub,
+        seller_username: "takudzwa",
+        title: "Proxy Uncertain Reconciliation Lot",
+        slug: `proxy-unc-${Date.now()}`,
+        description: "Live E2E proxy uncertain test",
+        category: "Electronics",
+        condition: "mint",
+        city: "Harare",
+        start_price: 20,
+        current_price: 20,
+        bid_count: 0,
+        status: "live",
+        starts_at: nowIso,
+        started_at: nowIso,
+        ends_at: endsIso,
+        created_at: nowIso,
+        updated_at: nowIso,
+      }),
+    });
+    const lotId = Number(((await createRes.json()) as { ids: number[] }).ids[0]);
+
+    const lead = await emitRpc(cNyasha.socket, "bid:place", {
+      auctionId: lotId,
+      maxAmount: 100,
+      clientRequestId: "live-lead-1",
+    });
+    expect(lead).toMatchObject({ ok: true, committed: true, amount: 20, winning: true });
+
+    // Standing leader cannot self-outbid
+    const selfTry = await emitRpc(cNyasha.socket, "bid:place", {
+      auctionId: lotId,
+      maxAmount: 120,
+      clientRequestId: "live-self-1",
+    });
+    expect(selfTry).toMatchObject({
+      ok: false,
+      committed: false,
+      stage: "pre_commit",
+      rejected: true,
+      code: "ALREADY_LEADING",
+    });
+
+    // Challenger bids 35 while proxy drops response after TrailBase commits row
+    stack.proxyState.createBidFault = "drop_after_forward";
+    const unc = await emitRpc(cRufaro.socket, "bid:place", {
+      auctionId: lotId,
+      maxAmount: 35,
+      clientRequestId: "live-outbid-unc-1",
+    });
+    expect(unc).toMatchObject({
+      ok: false,
+      uncertain: true,
+      stage: "commit_uncertain",
+      code: "COMMIT_UNCERTAIN",
+    });
+
+    // Retry with same clientRequestId reconciles standing proxy winner at 36 with outbid=true
+    const reconciled = await emitRpc(cRufaro.socket, "bid:place", {
+      auctionId: lotId,
+      maxAmount: 35,
+      clientRequestId: "live-outbid-unc-1",
+    });
+    expect(reconciled).toMatchObject({
+      ok: true,
+      committed: true,
+      stage: "committed",
+      amount: 36,
+      winning: false,
+      outbid: true,
+      idempotentReplay: true,
+    });
+
+    const db = new Database(path.join(stack.dataDir, "main.db"), { readonly: true });
+    const aucRow = db.query("SELECT current_price, bid_count FROM auctions WHERE id = ?").get(lotId) as {
+      current_price: number;
+      bid_count: number;
+    };
+    const activeRows = db
+      .query("SELECT bidder_username, amount FROM bids WHERE auction_id = ? AND status = 'active'")
+      .all(lotId) as Array<{ bidder_username: string; amount: number }>;
+    db.close();
+
+    expect(aucRow).toEqual({ current_price: 36, bid_count: 2 });
+    expect(activeRows).toEqual([{ bidder_username: "nyasha", amount: 36 }]);
+  });
 });

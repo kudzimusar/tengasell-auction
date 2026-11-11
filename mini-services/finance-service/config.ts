@@ -4,16 +4,30 @@
 // model config (§G). Runtime overrides live in the `config` table and are
 // managed via GET/POST /admin/config.
 
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const PROJECT_ROOT = process.env.TGS_PROJECT_ROOT
+  ? path.resolve(process.env.TGS_PROJECT_ROOT)
+  : path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const DATA_ROOT = process.env.TGS_DATA_DIR
+  ? path.resolve(process.env.TGS_DATA_DIR)
+  : PROJECT_ROOT;
+
 export const PORT = 3006;
 export const DB_PATH =
-  process.env.FINANCE_DB_PATH ?? "/home/z/my-project/db/finance.db";
+  process.env.FINANCE_DB_PATH ?? path.join(DATA_ROOT, "db", "finance.db");
 
 export const TRAILBASE = process.env.TRAILBASE_URL ?? "http://localhost:3001";
 export const ADMIN_USERNAME = process.env.ADMIN_USERNAME ?? "admin";
-export const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "Tengasell#2025";
+export const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "";
 
 /** Shared internal header (x-tgs-internal) for trust-service ↔ finance calls. */
-export const INTERNAL_TOKEN = process.env.TGS_INTERNAL_TOKEN ?? "tengasell-internal-v1";
+export const INTERNAL_TOKEN = (
+  process.env.TGS_INTERNAL_TOKEN ??
+  process.env.TGS_INTERNAL_SECRET ??
+  ""
+).trim();
 
 // ── Default money model (§G MONEY MODEL, canonical) ─────────────────────
 // Values are stored in the config table as JSON on first boot and are

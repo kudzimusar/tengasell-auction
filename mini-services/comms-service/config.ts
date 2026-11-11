@@ -1,9 +1,19 @@
 // TUCS configuration — hardcoded port, env-activated provider modes, brand palette
 // (hexes extracted verbatim from the Next app's src/app/globals.css :root tokens).
 
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const PROJECT_ROOT = process.env.TGS_PROJECT_ROOT
+  ? path.resolve(process.env.TGS_PROJECT_ROOT)
+  : path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const DATA_ROOT = process.env.TGS_DATA_DIR
+  ? path.resolve(process.env.TGS_DATA_DIR)
+  : PROJECT_ROOT;
+
 export const PORT = 3005;
 export const DB_PATH =
-  process.env.COMMS_DB_PATH ?? "/home/z/my-project/db/comms.db";
+  process.env.COMMS_DB_PATH ?? path.join(DATA_ROOT, "db", "comms.db");
 
 /** Public app origin used for deep links + unsubscribe URLs (BFF rewrites as needed). */
 export const APP_URL = process.env.APP_URL ?? "http://localhost:81";

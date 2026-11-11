@@ -21,6 +21,7 @@ import {
   isResponse,
   maintenanceBlocked,
   requireAdmin,
+  revokeAuthSession,
   svcFetch,
   PORTS,
   userB64For,
@@ -105,6 +106,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ use
   }
 
   const pending = res.data?.pending === true;
+  if (!pending && action === "suspend") {
+    await revokeAuthSession({
+      username: uname,
+      cutoffSec: Math.floor(Date.now() / 1000),
+    });
+  }
   await writeAudit({
     user: userB64For(gate.username),
     action: pending

@@ -1,0 +1,38 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "types": ["node", "bun-types"]
+  },
+  "include": [
+    "mini-services/trade-engine/*.ts",
+    "mini-services/trust-service/config.ts",
+    "mini-services/finance-service/config.ts",
+    "mini-services/govern-service/config.ts",
+    "mini-services/comms-service/config.ts",
+    "src/lib/auth.ts",
+    "src/lib/server/sqlite.ts",
+    "src/lib/server/trailbase-admin.ts",
+    "src/lib/server/paynow-order.ts",
+    "src/lib/server/platform.ts",
+    "src/app/api/auth/login/route.ts",
+    "src/app/api/auth/logout/route.ts",
+    "src/app/api/auth/password/change/route.ts",
+    "src/app/api/auth/recovery/confirm/route.ts",
+    "src/app/api/auth/status/route.ts",
+    "src/app/api/auth/security/state/route.ts",
+    "src/app/api/platform/admin/users/[username]/role/route.ts",
+    "src/app/api/platform/admin/users/[username]/enforcement/route.ts",
+    "src/lib/tengasell/bus.ts",
+    "src/lib/tengasell/socket.ts",
+    "src/lib/tengasell/auth.tsx",
+    "src/lib/tengasell/types.ts",
+    "src/lib/tengasell/api/**/*.ts",
+    "src/components/tengasell/pages/item/bid-sheet.tsx",
+    "src/components/tengasell/pages/live/live-room.tsx",
+    "tests/**/*.ts"
+  ],
+  "exclude": ["node_modules", ".next"]
+}

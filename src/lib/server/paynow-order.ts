@@ -11,10 +11,14 @@
 //     within 3 days (SLA)")
 //   · audit_events insert (action "order:pay", source "web")
 
+import { createHash } from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import { openSqliteDb, type SqliteDb } from "./sqlite";
 import { tbCreate, tbGet, tbList, tbPatch, nowIso } from "./trailbase-admin";
 import { isMockMode } from "./paynow";
 
-const TRAILBASE = process.env.TRAILBASE_URL ?? "http://localhost:3001";
+const getTrailBaseUrl = () => process.env.TRAILBASE_URL ?? "http://localhost:3001";
 
 // ── row shapes (mirror the SQLite schema) ─────────────────────────────
 
@@ -94,18 +98,45 @@ export function toSessionRow(r: Record<string, unknown> | null): PaynowSessionRo
 
 // ── buyer authentication (mirrors the trade engine's strict verifier) ──
 
+const B64URL_RE = /^[A-Za-z0-9_-]+$/;
+
+export interface VerifiedSession {
+  sub: string;
+  username: string;
+  admin: boolean;
+  mfa: boolean;
+  iat: number;
+  token: string;
+}
+
+function sha256Hex(value: string): string {
+  return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
 function decodeStrictJwt(token: string): {
   alg?: string;
   sub?: string;
   username?: string;
   admin?: boolean;
+  mfa?: boolean;
   exp?: number;
+  iat?: number;
   nbf?: number;
 } | null {
   try {
     if (!token || token.length > 4096 || token.trim() !== token) return null;
     const parts = token.split(".");
-    if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) return null;
+    if (
+      parts.length !== 3 ||
+      !parts[0] ||
+      !parts[1] ||
+      !parts[2] ||
+      !B64URL_RE.test(parts[0]) ||
+      !B64URL_RE.test(parts[1]) ||
+      !B64URL_RE.test(parts[2])
+    ) {
+      return null;
+    }
     const header = JSON.parse(Buffer.from(parts[0], "base64url").toString("utf8")) as Record<
       string,
       unknown
@@ -118,13 +149,220 @@ function decodeStrictJwt(token: string): {
       unknown
     >;
     if (!payload || typeof payload !== "object") return null;
+    if (payload.iat != null && (typeof payload.iat !== "number" || !Number.isFinite(payload.iat))) {
+      return null;
+    }
     return {
       alg: header.alg,
       sub: typeof payload.sub === "string" ? payload.sub : undefined,
       username: typeof payload.username === "string" ? payload.username : undefined,
       admin: payload.admin === true,
+      mfa: payload.mfa === true,
       exp: typeof payload.exp === "number" && Number.isFinite(payload.exp) ? payload.exp : undefined,
+      iat: typeof payload.iat === "number" && Number.isFinite(payload.iat) ? payload.iat : undefined,
       nbf: typeof payload.nbf === "number" && Number.isFinite(payload.nbf) ? payload.nbf : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function resolveTrailBaseDataDirForBff(): string | null {
+  const candidates = [
+    process.env.TRAILBASE_DATA_DIR,
+    process.env.TGS_DATA_DIR ? path.join(process.env.TGS_DATA_DIR, "traildepot", "data") : undefined,
+    process.env.TGS_PROJECT_ROOT
+      ? path.join(process.env.TGS_PROJECT_ROOT, "mini-services", "trailbase-db", "traildepot", "data")
+      : undefined,
+    path.join(process.cwd(), "mini-services", "trailbase-db", "traildepot", "data"),
+  ];
+  for (const dir of candidates) {
+    if (!dir) continue;
+    if (fs.existsSync(path.join(dir, "main.db")) || fs.existsSync(path.join(dir, "session.db"))) {
+      return dir;
+    }
+  }
+  return null;
+}
+
+function checkRevocationsDb(
+  revPath: string,
+  tokens: string[],
+  sub: string,
+  username: string,
+  claimsIat: number,
+  nowMs: number,
+): boolean {
+  if (!fs.existsSync(revPath)) return false;
+  let db: SqliteDb | null = null;
+  try {
+    db = openSqliteDb(revPath, { readOnly: true });
+    db.exec("PRAGMA busy_timeout=2000");
+    for (const tok of tokens) {
+      const digest = sha256Hex(tok);
+      const row = db
+        .prepare("SELECT 1 AS ok FROM revoked_tokens WHERE digest = ? AND exp_ms > ? LIMIT 1")
+        .get(digest, nowMs) as { ok?: number } | undefined;
+      if (row) return true;
+    }
+    for (const key of [`sub:${sub}`, `user:${username.toLowerCase()}`]) {
+      const row = db
+        .prepare("SELECT cutoff_sec FROM revoked_subjects WHERE subject_key = ? LIMIT 1")
+        .get(key) as { cutoff_sec?: number } | undefined;
+      if (row && typeof row.cutoff_sec === "number" && claimsIat <= row.cutoff_sec) {
+        return true;
+      }
+    }
+    return false;
+  } catch {
+    // Fail closed if revocation store exists but cannot be read.
+    return true;
+  } finally {
+    db?.close();
+  }
+}
+
+function checkCanonicalSqliteSession(
+  verified: { sub: string; username: string; admin: boolean; iat: number },
+  rawToken: string,
+  verifiedToken: string,
+  nowMs: number,
+): { ok: true; admin: boolean } | { ok: false } {
+  const dataDir = resolveTrailBaseDataDirForBff();
+  const requireDb =
+    Boolean(process.env.TRAILBASE_DATA_DIR) || process.env.TRAILBASE_REQUIRE_SESSION_DB === "1";
+
+  const revPath =
+    process.env.TGS_REVOCATIONS_DB ||
+    (dataDir ? path.join(dataDir, "tgs_revocations.db") : null);
+  if (revPath && checkRevocationsDb(revPath, [rawToken, verifiedToken], verified.sub, verified.username, verified.iat, nowMs)) {
+    return { ok: false };
+  }
+
+  if (!dataDir) {
+    if (requireDb) return { ok: false };
+    return { ok: true, admin: verified.admin };
+  }
+
+  const mainPath = path.join(dataDir, "main.db");
+  const sessionPath = path.join(dataDir, "session.db");
+  if (!fs.existsSync(mainPath) || !fs.existsSync(sessionPath)) {
+    return { ok: false };
+  }
+
+  let uidBytes: Buffer;
+  try {
+    uidBytes = Buffer.from(verified.sub, "base64");
+    if (uidBytes.length !== 16) return { ok: false };
+  } catch {
+    return { ok: false };
+  }
+  const uidParam = new Uint8Array(uidBytes);
+
+  let mainDb: SqliteDb | null = null;
+  let sessionDb: SqliteDb | null = null;
+  try {
+    mainDb = openSqliteDb(mainPath, { readOnly: true });
+    mainDb.exec("PRAGMA busy_timeout=2000");
+    const userRow = mainDb
+      .prepare("SELECT username, admin FROM _user WHERE id = ? LIMIT 1")
+      .get(uidParam) as { username?: string | null; admin?: number | boolean } | undefined;
+    if (!userRow || userRow.username !== verified.username) {
+      return { ok: false };
+    }
+
+    sessionDb = openSqliteDb(sessionPath, { readOnly: true });
+    sessionDb.exec("PRAGMA busy_timeout=2000");
+    const nowSec = Math.floor(nowMs / 1000);
+    const iatUpper = Math.floor(verified.iat);
+    const sess = sessionDb
+      .prepare("SELECT 1 AS ok FROM _session WHERE user = ? AND expires > ? AND created <= ? LIMIT 1")
+      .get(uidParam, nowSec, iatUpper) as { ok?: number } | undefined;
+    if (!sess) {
+      return { ok: false };
+    }
+
+    return { ok: true, admin: Boolean(userRow.admin) };
+  } catch {
+    return { ok: false };
+  } finally {
+    try {
+      mainDb?.close();
+    } catch {
+      /* ignore */
+    }
+    try {
+      sessionDb?.close();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/**
+ * Full verified buyer/admin session resolution against TrailBase `/status`,
+ * canonical SQLite `_user`/`_session`, and durable `tgs_revocations.db`.
+ */
+export async function resolveVerifiedSession(
+  authHeader: string | null,
+): Promise<VerifiedSession | null> {
+  if (!authHeader || !authHeader.toLowerCase().startsWith("bearer ")) return null;
+  const token = authHeader.slice(7).trim();
+  const presented = decodeStrictJwt(token);
+  const nowMs = Date.now();
+  if (
+    !presented?.sub ||
+    !presented.username ||
+    !presented.exp ||
+    presented.exp * 1000 <= nowMs ||
+    typeof presented.iat !== "number"
+  ) {
+    return null;
+  }
+  if (presented.nbf != null && presented.nbf * 1000 > nowMs) return null;
+  try {
+    const res = await fetch(`${getTrailBaseUrl()}/api/auth/v1/status`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { auth_token?: unknown };
+    if (typeof data.auth_token !== "string" || !data.auth_token) return null;
+    const verified = decodeStrictJwt(data.auth_token);
+    const checkNowMs = Date.now();
+    if (
+      !verified?.sub ||
+      !verified.username ||
+      !verified.exp ||
+      verified.exp * 1000 <= checkNowMs ||
+      typeof verified.iat !== "number" ||
+      verified.sub !== presented.sub ||
+      verified.username !== presented.username
+    ) {
+      return null;
+    }
+    if (verified.nbf != null && verified.nbf * 1000 > checkNowMs) return null;
+
+    const canonical = checkCanonicalSqliteSession(
+      {
+        sub: verified.sub,
+        username: verified.username,
+        admin: Boolean(verified.admin),
+        iat: verified.iat,
+      },
+      token,
+      data.auth_token,
+      checkNowMs,
+    );
+    if (!canonical.ok) return null;
+
+    return {
+      sub: verified.sub,
+      username: verified.username,
+      admin: canonical.admin,
+      mfa: verified.mfa === true,
+      iat: verified.iat,
+      token: data.auth_token,
     };
   } catch {
     return null;
@@ -133,44 +371,15 @@ function decodeStrictJwt(token: string): {
 
 /**
  * Resolve the caller from an "Authorization: Bearer <trailbase_token>"
- * header: strictly verifies token structure, expiry, and TrailBase's
- * /api/auth/v1/status authority without ever falling back to caller claims.
+ * header: strictly verifies token structure, expiry, TrailBase `/status`,
+ * canonical SQLite `_user`/`_session`, and durable revocations.
  */
 export async function resolveUserFromToken(
   authHeader: string | null,
 ): Promise<{ username: string; admin: boolean; token: string } | null> {
-  if (!authHeader || !authHeader.toLowerCase().startsWith("bearer ")) return null;
-  const token = authHeader.slice(7).trim();
-  const presented = decodeStrictJwt(token);
-  const nowMs = Date.now();
-  if (!presented?.sub || !presented.username || !presented.exp || presented.exp * 1000 <= nowMs) {
-    return null;
-  }
-  if (presented.nbf != null && presented.nbf * 1000 > nowMs) return null;
-  try {
-    const res = await fetch(`${TRAILBASE}/api/auth/v1/status`, {
-      headers: { Authorization: `Bearer ${token}` },
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { auth_token?: unknown };
-    if (typeof data.auth_token !== "string" || !data.auth_token) return null;
-    const verified = decodeStrictJwt(data.auth_token);
-    if (
-      !verified?.sub ||
-      !verified.username ||
-      !verified.exp ||
-      verified.exp * 1000 <= Date.now() ||
-      verified.sub !== presented.sub ||
-      verified.username !== presented.username
-    ) {
-      return null;
-    }
-    if (verified.nbf != null && verified.nbf * 1000 > Date.now()) return null;
-    return { username: verified.username, admin: !!verified.admin, token: data.auth_token };
-  } catch {
-    return null;
-  }
+  const session = await resolveVerifiedSession(authHeader);
+  if (!session) return null;
+  return { username: session.username, admin: session.admin, token: session.token };
 }
 
 /**
@@ -183,7 +392,7 @@ export async function fetchOrderWithUserToken(
   orderId: number,
 ): Promise<OrderRow | null> {
   try {
-    const res = await fetch(`${TRAILBASE}/api/records/v1/orders/${orderId}`, {
+    const res = await fetch(`${getTrailBaseUrl()}/api/records/v1/orders/${orderId}`, {
       headers: { Authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(8000),
     });

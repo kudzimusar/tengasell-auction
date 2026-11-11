@@ -310,7 +310,18 @@ export interface BidResult {
   error?: string;
   auction?: Auction;
   yourBid?: number;
+  amount?: number;
+  bidId?: number;
+  winning?: boolean;
   outbid?: boolean;
+  committed?: boolean;
+  stage?: "pre_commit" | "committed" | "commit_uncertain";
+  rejected?: boolean;
+  uncertain?: boolean;
+  reason?: "timeout" | "disconnected" | "malformed" | "unverified";
+  code?: string;
+  clientRequestId?: string;
+  idempotentReplay?: boolean;
 }
 
 export interface CurrentUser {

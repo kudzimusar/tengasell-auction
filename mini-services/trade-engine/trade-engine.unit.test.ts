@@ -8,6 +8,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import {
   IdentityResolver,
   openCanonicalTrailBaseStore,
+  openRevocationStore,
   parseStrictJwt,
   sha256Hex,
   timingSafeEqualStr,
@@ -191,7 +192,7 @@ describe("trade-engine auth unit tests", () => {
     expect(mmRes).toMatchObject({ ok: false, code: "AUTH_INVALID" });
   });
 
-  test("5. fail-closed when profile lookup errors or mismatches, and missing profile carries empty id (blocked by BidService)", async () => {
+  test("5. fail-closed when profile lookup errors, mismatches, or returns null (PROFILE_MISSING)", async () => {
     const nowMs = 1_700_000_000_000;
     const nowSec = Math.floor(nowMs / 1000);
     const sub = makeUuidSub();
@@ -219,8 +220,8 @@ describe("trade-engine auth unit tests", () => {
       lookupProfile: async () => null,
     });
     expect(await noProfile.resolveWithReason(token)).toMatchObject({
-      ok: true,
-      identity: { id: "", username: "ghost", admin: false },
+      ok: false,
+      code: "PROFILE_MISSING",
     });
   });
 
@@ -775,5 +776,226 @@ describe("trade-engine bidding & commercial integrity unit tests", () => {
       }),
     ]);
     expect(order).toEqual([1, 2]);
+  });
+
+  test("19. canonical store requires finite iat and fails closed when session.db is missing", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "te-failclosed-"));
+    tempDirs.push(dir);
+    const sub = makeUuidSub();
+    const mdb = new Database(path.join(dir, "main.db"));
+    mdb.exec("CREATE TABLE _user (id BLOB PRIMARY KEY, username TEXT NOT NULL, admin INTEGER NOT NULL)");
+    mdb.query("INSERT INTO _user (id, username, admin) VALUES (?, ?, ?)").run(uuidBytes(sub), "alice", 0);
+    mdb.close();
+
+    // Missing session.db -> canonical store rejects cleanly (fail-closed)
+    const storeNoSession = openCanonicalTrailBaseStore(dir);
+    const nowMs = 1_700_000_000_000;
+    const nowSec = Math.floor(nowMs / 1000);
+    const withIat: JwtClaims = { alg: "EdDSA", sub, username: "alice", admin: false, exp: nowSec + 600, iat: nowSec };
+    expect(storeNoSession.check(withIat, nowMs)).toMatchObject({ valid: false, code: "AUTH_REVOKED" });
+    storeNoSession.close();
+
+    // Valid session.db present, but token lacks iat -> rejected as AUTH_INVALID
+    const sdb = new Database(path.join(dir, "session.db"));
+    sdb.exec("CREATE TABLE _session (id BLOB PRIMARY KEY, user BLOB NOT NULL, refresh_token TEXT NOT NULL, created INTEGER NOT NULL, expires INTEGER NOT NULL)");
+    sdb.query("INSERT INTO _session (id, user, refresh_token, created, expires) VALUES (?, ?, ?, ?, ?)").run(
+      uuidBytes(makeUuidSub()),
+      uuidBytes(sub),
+      "r1",
+      nowSec - 5,
+      nowSec + 86400,
+    );
+    sdb.close();
+
+    const store = openCanonicalTrailBaseStore(dir);
+    const noIat: JwtClaims = { alg: "EdDSA", sub, username: "alice", admin: false, exp: nowSec + 600 };
+    expect(store.check(noIat, nowMs)).toMatchObject({ valid: false, code: "AUTH_REVOKED" });
+    expect(store.check(withIat, nowMs)).toMatchObject({ valid: true });
+    store.close();
+  });
+
+  test("20. <1s logout token revocation keeps immediate re-login working while revokeSubject invalidates both", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "te-subsec-"));
+    tempDirs.push(dir);
+    const sub = makeUuidSub();
+    const subBytes = uuidBytes(sub);
+    const nowMs = 1_700_000_000_500;
+    const nowSec = Math.floor(nowMs / 1000);
+
+    const mdb = new Database(path.join(dir, "main.db"));
+    mdb.exec("CREATE TABLE _user (id BLOB PRIMARY KEY, username TEXT NOT NULL, admin INTEGER NOT NULL)");
+    mdb.query("INSERT INTO _user (id, username, admin) VALUES (?, ?, ?)").run(subBytes, "tendai", 0);
+    const sdb = new Database(path.join(dir, "session.db"));
+    sdb.exec("CREATE TABLE _session (id BLOB PRIMARY KEY, user BLOB NOT NULL, refresh_token TEXT NOT NULL, created INTEGER NOT NULL, expires INTEGER NOT NULL)");
+    sdb.query("INSERT INTO _session (id, user, refresh_token, created, expires) VALUES (?, ?, ?, ?, ?)").run(
+      uuidBytes(makeUuidSub()),
+      subBytes,
+      "r1",
+      nowSec,
+      nowSec + 86400,
+    );
+
+    const store = openCanonicalTrailBaseStore(dir);
+    const token1 = buildJwt({ sub, username: "tendai", admin: false, exp: nowSec + 600, iat: nowSec, jti: "t1" });
+    const token2 = buildJwt({ sub, username: "tendai", admin: false, exp: nowSec + 600, iat: nowSec, jti: "t2" });
+
+    const revStore = openRevocationStore(path.join(dir, "tgs_revocations.db"));
+    const resolver = new IdentityResolver({
+      nowMs: () => nowMs,
+      fetchStatus: async (t) => ({ ok: true, status: 200, authToken: t }),
+      lookupProfile: async (s, u) => ({ user: s, username: u }),
+      checkCanonicalUserSession: store.check,
+      revocationStore: revStore,
+    });
+
+    // Logout deletes session and inserts new session within the SAME second (created === nowSec === iat)
+    // and revokes ONLY token1 by digest.
+    resolver.revokeToken(token1, (nowSec + 600) * 1000);
+    expect(await resolver.resolveWithReason(token1)).toMatchObject({ ok: false, code: "AUTH_REVOKED" });
+    expect(await resolver.resolveWithReason(token2, { forceFresh: true })).toMatchObject({ ok: true });
+
+    // Reopen revocation store & resolver to verify durable SQLite persistence across restarts
+    revStore.close?.();
+    const reopenedRev = openRevocationStore(path.join(dir, "tgs_revocations.db"));
+    const resolver2 = new IdentityResolver({
+      nowMs: () => nowMs,
+      fetchStatus: async (t) => ({ ok: true, status: 200, authToken: t }),
+      lookupProfile: async (s, u) => ({ user: s, username: u }),
+      checkCanonicalUserSession: store.check,
+      revocationStore: reopenedRev,
+    });
+    expect(await resolver2.resolveWithReason(token1)).toMatchObject({ ok: false, code: "AUTH_REVOKED" });
+    expect(await resolver2.resolveWithReason(token2)).toMatchObject({ ok: true });
+
+    // Password reset / suspension revokes subject cutoff -> token2 at iat <= nowSec is now blocked
+    resolver2.revokeSubject({ sub, username: "tendai" }, nowSec);
+    expect(await resolver2.resolveWithReason(token2)).toMatchObject({ ok: false, code: "AUTH_REVOKED" });
+
+    reopenedRev.close?.();
+    store.close();
+    mdb.close();
+    sdb.close();
+  });
+
+  test("21. IdentityResolver caps in-memory revoked entries cleanly under maxRevokedEntries", async () => {
+    const nowMs = 1_700_000_000_000;
+    const nowSec = Math.floor(nowMs / 1000);
+    const tokens = [1, 2, 3, 4].map((n) => {
+      const sub = makeUuidSub();
+      return {
+        sub,
+        username: `user${n}`,
+        token: buildJwt({ sub, username: `user${n}`, admin: false, exp: nowSec + 600, iat: nowSec }),
+      };
+    });
+
+    const resolver = new IdentityResolver({
+      nowMs: () => nowMs,
+      maxRevokedEntries: 2,
+      fetchStatus: async (t) => ({ ok: true, status: 200, authToken: t }),
+      lookupProfile: async (s, u) => ({ user: s, username: u }),
+    });
+
+    for (const item of tokens) {
+      resolver.revokeSubject({ sub: item.sub, username: item.username }, nowSec);
+    }
+    // Latest 2 stay strictly revoked in bounded memory even without SQLite store
+    expect(await resolver.resolveWithReason(tokens[2].token)).toMatchObject({ ok: false, code: "AUTH_REVOKED" });
+    expect(await resolver.resolveWithReason(tokens[3].token)).toMatchObject({ ok: false, code: "AUTH_REVOKED" });
+  });
+
+  test("22. BidService blocks ALREADY_LEADING self-outbid attempts without mutating ledger", async () => {
+    const harness = createMockBiddingHarness();
+    const first = await harness.service.handleBidPlace({ user: bidderA, auctionId: 42, maxAmount: 60 });
+    expect(first).toMatchObject({ ok: true, committed: true, amount: 20, winning: true });
+
+    const selfHigher = await harness.service.handleBidPlace({ user: bidderA, auctionId: 42, maxAmount: 90 });
+    expect(selfHigher).toMatchObject({
+      ok: false,
+      committed: false,
+      stage: "pre_commit",
+      rejected: true,
+      code: "ALREADY_LEADING",
+    });
+    expect(harness.state.bids).toHaveLength(1);
+    expect(harness.state.auction.current_price).toBe(20);
+  });
+
+  test("23. Proxy-outbid uncertain commit reconciles finalizeCommittedBid without clobbering standing winner or double-counting", async () => {
+    const harness = createMockBiddingHarness();
+    await harness.service.handleBidPlace({
+      user: bidderA,
+      auctionId: 42,
+      maxAmount: 100,
+      clientRequestId: "stand-a",
+    });
+
+    const origCreate = harness.store.createBid;
+    let dropOnce = true;
+    harness.store.createBid = async (row) => {
+      const created = await origCreate(row);
+      if (dropOnce) {
+        dropOnce = false;
+        // Simulate TrailBase committing challenger row just before socket drop (before patchBid/patchAuction run)
+        return { status: "uncertain", error: "connection reset after insert" };
+      }
+      return created;
+    };
+
+    const unc = await harness.service.handleBidPlace({
+      user: bidderB,
+      auctionId: 42,
+      maxAmount: 35,
+      clientRequestId: "unc-outbid-1",
+    });
+    expect(unc).toMatchObject({
+      ok: false,
+      uncertain: true,
+      stage: "commit_uncertain",
+      code: "COMMIT_UNCERTAIN",
+    });
+    // Standing leader still shows old bid_count=1 and old amount=20 before reconciliation retry
+    expect(harness.state.auction.current_price).toBe(20);
+    expect(harness.state.auction.bid_count).toBe(1);
+
+    // First retry reconciles outbid proxy state completely
+    const retry1 = await harness.service.handleBidPlace({
+      user: bidderB,
+      auctionId: 42,
+      maxAmount: 35,
+      clientRequestId: "unc-outbid-1",
+    });
+    expect(retry1).toMatchObject({
+      ok: true,
+      committed: true,
+      stage: "committed",
+      amount: 36,
+      winning: false,
+      outbid: true,
+      idempotentReplay: true,
+    });
+    expect(harness.state.auction.current_price).toBe(36);
+    expect(harness.state.auction.bid_count).toBe(2);
+    const activeRows = harness.state.bids.filter((b) => b.status === "active");
+    expect(activeRows).toHaveLength(1);
+    expect(activeRows[0].bidder_username).toBe("nyasha");
+    expect(activeRows[0].amount).toBe(36);
+
+    // Second retry replays deterministically without double-incrementing bid_count
+    const retry2 = await harness.service.handleBidPlace({
+      user: bidderB,
+      auctionId: 42,
+      maxAmount: 35,
+      clientRequestId: "unc-outbid-1",
+    });
+    expect(retry2).toMatchObject({
+      ok: true,
+      committed: true,
+      amount: 36,
+      winning: false,
+      outbid: true,
+      idempotentReplay: true,
+    });
+    expect(harness.state.auction.bid_count).toBe(2);
   });
 });

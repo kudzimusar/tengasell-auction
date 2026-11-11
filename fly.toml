@@ -17,14 +17,16 @@ primary_region = "jnb"          # Johannesburg — closest to Zimbabwe
 [env]
   PORT = "8080"
   TGS_DATA_DIR = "/data"
+  TGS_PROJECT_ROOT = "/app"
+  TRAILBASE_DATA_DIR = "/data/traildepot/data"
+  TRAILBASE_REQUIRE_SESSION_DB = "1"
   TRAILBASE_URL = "http://127.0.0.1:3001"
   DATABASE_URL = "file:/data/db/custom.db"
   APP_URL = "https://tengasell-zw.fly.dev"
   NODE_ENV = "production"
   GATEWAY_LOG = "1"
-  # Seeded staff account (change before sharing the URL)
+  # Set ADMIN_PASSWORD, TGS_INTERNAL_SECRET, PLATFORM_JWT_SECRET, NEXTAUTH_SECRET via `fly secrets set`
   ADMIN_USERNAME = "admin"
-  ADMIN_PASSWORD = "Tengasell#2025"
 
 [[mounts]]
   source = "tengasell_data"

@@ -168,6 +168,12 @@ function BidForm({
         });
         onRefresh();
         setTimeout(() => onDone(), 1400);
+      } else if (res.uncertain) {
+        setError(
+          res.error ??
+            "Your bid may have reached the auction floor before the connection dropped. Refreshing the auction now — please check your bid status before retrying.",
+        );
+        onRefresh();
       } else {
         setError(res.error ?? "Your bid could not be placed.");
         onRefresh(); // price may have moved — re-render the new minimum

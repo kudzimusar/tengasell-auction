@@ -7,11 +7,12 @@
 // All browser requests go through the gateway using ?XTransformPort=3001.
 
 import { slugify } from "@/lib/tengasell/format";
-import { rpc } from "../socket";
+import { rpc, rpcOutcome } from "../socket";
 import type {
   Auction,
   AuctionQuery,
   Bid,
+  BidResult,
   Category,
   CurrentUser,
   LiveSession,
@@ -228,31 +229,36 @@ export class RemoteApi {
   }
 
   async logout(): Promise<void> {
+    const headers = this.authHeaders();
     try {
-      await tbFetch("/api/auth/v1/logout", { method: "GET", headers: this.authHeaders() });
+      const bff = await fetch("/api/auth/logout", { method: "POST", headers });
+      if (!bff.ok) {
+        await tbFetch("/api/auth/v1/logout", { method: "GET", headers });
+      }
     } catch {
-      /* best effort */
+      try {
+        await tbFetch("/api/auth/v1/logout", { method: "GET", headers });
+      } catch {
+        /* best effort */
+      }
     }
     this.saveAuth(null);
   }
 
-  /** Refresh token via /status and make sure a profile row exists. */
+  /** Refresh token via /status and make sure a profile row exists (fail-closed). */
   private async ensureProfile(username: string, admin: boolean): Promise<CurrentUser> {
-    // refresh + validate session
-    try {
-      const status = await tbFetch("/api/auth/v1/status", { headers: this.authHeaders() });
-      if (status.ok) {
-        const data = await status.json();
-        if (data.auth_token) {
-          this.saveAuth({ token: data.auth_token, username });
-        }
-      } else if (status.status === 401 || status.status === 403) {
-        this.saveAuth(null);
-        throw new Error("Session expired. Please sign in again.");
-      }
-    } catch (e) {
-      if (e instanceof Error && /Session expired/.test(e.message)) throw e;
+    const status = await tbFetch("/api/auth/v1/status", { headers: this.authHeaders() });
+    if (!status.ok) {
+      this.saveAuth(null);
+      throw new Error("Session expired. Please sign in again.");
     }
+    const data = (await status.json()) as { auth_token?: unknown };
+    if (typeof data.auth_token !== "string" || !data.auth_token) {
+      this.saveAuth(null);
+      throw new Error("Session expired. Please sign in again.");
+    }
+    this.saveAuth({ token: data.auth_token, username });
+
     // fetch profile
     const prof = await this.fetchProfileByUsername(username);
     if (prof) {
@@ -284,8 +290,8 @@ export class RemoteApi {
         return this.cachedUser;
       }
     }
-    this.cachedUser = { id: "", username, token: this.token() ?? "", admin, profile: null };
-    return this.cachedUser;
+    this.saveAuth(null);
+    throw new Error("Unable to load account profile. Please retry or sign in again.");
   }
 
   private async fetchProfileByUsername(username: string): Promise<Profile | null> {
@@ -448,11 +454,16 @@ export class RemoteApi {
   }
 
   // ── trading actions via the socket.io trade engine (validated) ───
-  async placeBid(auctionId: number, maxAmount: number) {
-    return rpc<{ ok: boolean; error?: string; auction?: Auction; amount?: number; winning?: boolean; outbid?: boolean }>(
-      "bid:place",
-      { auctionId, maxAmount },
-    );
+  async placeBid(auctionId: number, maxAmount: number): Promise<BidResult & { amount?: number }> {
+    const clientRequestId =
+      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `web-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    return rpcOutcome<BidResult & { amount?: number }>("bid:place", {
+      auctionId,
+      maxAmount,
+      clientRequestId,
+    });
   }
 
   async buyNow(auctionId: number, address?: string | null): Promise<{ orderId: number }> {

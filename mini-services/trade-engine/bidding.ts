@@ -9,6 +9,7 @@ export type BidAckCode =
   | "AUCTION_NOT_LIVE"
   | "AUCTION_ENDED"
   | "SELF_BID"
+  | "ALREADY_LEADING"
   | "INVALID_AMOUNT"
   | "BID_LEDGER_UNAVAILABLE"
   | "BELOW_START_PRICE"
@@ -128,6 +129,18 @@ export interface BiddingStore {
   emitAuctionUpdate: (auction: any) => void;
 }
 
+interface PendingReconcileContext {
+  baselineTopBidId: number;
+  auction: any;
+  prevActiveToSupersede: any | null;
+  committedPrice: number;
+  winning: boolean;
+  outbid: boolean;
+  maxAmount: number;
+  nextBidCount: number;
+  notifyBidder: Identity;
+}
+
 interface IdempotencyEntry {
   state: "in_flight" | "settled";
   maxAmount: number;
@@ -135,6 +148,7 @@ interface IdempotencyEntry {
   expiresAtMs: number;
   promise?: Promise<BidOutcome>;
   outcome?: BidOutcome;
+  pendingReconcile?: PendingReconcileContext;
 }
 
 /**
@@ -259,8 +273,7 @@ export class BidService {
               const reconciled = await this.tryReconcileUncertain(
                 input.user,
                 auctionId,
-                existing.maxAmount,
-                existing.startedAtIso,
+                existing,
                 clientRequestId!,
               );
               if (reconciled) {
@@ -280,11 +293,15 @@ export class BidService {
       }
 
       const startedAtIso = nowIso(this.nowMsFn());
+      let pendingReconcile: PendingReconcileContext | undefined;
       const execPromise = this.executeSingleBid(
         input.user,
         auctionId,
         maxAmount,
         clientRequestId,
+        (ctx) => {
+          pendingReconcile = ctx;
+        },
       );
 
       if (idemKey && Number.isFinite(maxAmount) && maxAmount > 0 && input.user.id) {
@@ -297,7 +314,13 @@ export class BidService {
         });
       }
 
-      const outcome = await execPromise;
+      let outcome: BidOutcome;
+      try {
+        outcome = await execPromise;
+      } catch (err) {
+        if (idemKey) this.idempotency.delete(idemKey);
+        throw err;
+      }
 
       if (idemKey && Number.isFinite(maxAmount) && maxAmount > 0 && input.user.id) {
         if (outcome.committed || outcome.uncertain) {
@@ -307,6 +330,7 @@ export class BidService {
             startedAtIso,
             expiresAtMs: this.nowMsFn() + this.idempotencyTtlMs,
             outcome,
+            ...(outcome.uncertain && pendingReconcile ? { pendingReconcile } : {}),
           });
         } else {
           // Do not cache transient pre-commit validation rejections across future bids,
@@ -322,31 +346,95 @@ export class BidService {
   private async tryReconcileUncertain(
     user: Identity,
     auctionId: number,
-    maxAmount: number,
-    startedAtIso: string,
+    entry: IdempotencyEntry,
     clientRequestId: string,
   ): Promise<BidOutcome | null> {
     const ledger = await this.store.listBids(auctionId).catch(() => null);
     if (!ledger || !ledger.ok) return null;
-    const match = ledger.rows.find(
-      (b: any) =>
-        b.user === user.id &&
-        Number(b.max_amount) === maxAmount &&
-        typeof b.created_at === "string" &&
-        b.created_at >= startedAtIso,
-    );
+
+    const pending = entry.pendingReconcile;
+    const minBidId = pending ? pending.baselineTopBidId : 0;
+
+    let match: any | undefined;
+    if (pending) {
+      if (pending.winning) {
+        match = ledger.rows.find(
+          (b: any) =>
+            Number(b.id) > minBidId &&
+            String(b.user) === user.id &&
+            Number(b.max_amount) === pending.maxAmount,
+        );
+      } else if (pending.prevActiveToSupersede) {
+        const expectedPrevUser = String(pending.prevActiveToSupersede.user);
+        const expectedPrevMax = Number(pending.prevActiveToSupersede.max_amount);
+        match = ledger.rows.find(
+          (b: any) =>
+            Number(b.id) > minBidId &&
+            String(b.user) === expectedPrevUser &&
+            Number(b.amount) === pending.committedPrice &&
+            Number(b.max_amount) === expectedPrevMax,
+        );
+      }
+    } else {
+      match = ledger.rows.find(
+        (b: any) =>
+          String(b.user) === user.id &&
+          Number(b.max_amount) === entry.maxAmount &&
+          typeof b.created_at === "string" &&
+          b.created_at >= entry.startedAtIso,
+      );
+    }
+
     if (!match) return null;
-    const auctionRes = await this.store.getAuction(auctionId).catch(() => null);
-    return {
-      ok: true,
-      committed: true,
-      stage: "committed",
-      bidId: Number(match.id),
-      amount: Number(match.amount),
-      winning: match.status === "active",
-      ...(match.status !== "active" ? { outbid: true } : {}),
-      ...(auctionRes && auctionRes.ok ? { auction: auctionRes.row } : {}),
+
+    const matchId = Number(match.id);
+    if (!pending) {
+      const auctionRes = await this.store.getAuction(auctionId).catch(() => null);
+      return {
+        ok: true,
+        committed: true,
+        stage: "committed",
+        bidId: matchId,
+        amount: Number(match.amount),
+        winning: String(match.user) === user.id && match.status === "active",
+        ...(match.status !== "active" ? { outbid: true } : {}),
+        ...(auctionRes && auctionRes.ok ? { auction: auctionRes.row } : {}),
+        clientRequestId,
+        idempotentReplay: true,
+      };
+    }
+
+    const freshAuctionRes = await this.store.getAuction(auctionId).catch(() => null);
+    const freshAuction = freshAuctionRes && freshAuctionRes.ok ? freshAuctionRes.row : pending.auction;
+    const newerBidExists = ledger.rows.some((b: any) => Number(b.id) > matchId);
+    const prevRowInLedger = pending.prevActiveToSupersede
+      ? ledger.rows.find((b: any) => Number(b.id) === Number(pending.prevActiveToSupersede.id))
+      : null;
+    const shouldSupersedePrev =
+      Boolean(pending.prevActiveToSupersede) &&
+      (!prevRowInLedger || prevRowInLedger.status === "active");
+    const shouldSyncAuction =
+      !newerBidExists &&
+      (Number(freshAuction.current_price) !== pending.committedPrice ||
+        Number(freshAuction.bid_count ?? 0) < pending.nextBidCount);
+
+    const finalized = await this.finalizeCommittedBid({
+      me: pending.notifyBidder,
+      auctionId,
+      auction: freshAuction,
+      bidId: matchId,
+      maxAmount: pending.maxAmount,
+      committedPrice: pending.committedPrice,
+      winning: pending.winning ? match.status === "active" && String(match.user) === user.id : false,
+      outbid: pending.winning ? match.status !== "active" || String(match.user) !== user.id : true,
+      prevActiveToSupersede: shouldSupersedePrev ? pending.prevActiveToSupersede : null,
+      nextBidCount: pending.nextBidCount,
       clientRequestId,
+      skipAuctionPatch: !shouldSyncAuction,
+    });
+
+    return {
+      ...finalized,
       idempotentReplay: true,
     };
   }
@@ -356,6 +444,7 @@ export class BidService {
     auctionId: number,
     maxAmount: number,
     clientRequestId?: string,
+    onBeforeCommit?: (ctx: PendingReconcileContext) => void,
   ): Promise<BidOutcome> {
     if (!me.id) {
       return preCommitError("PROFILE_MISSING", "Account profile missing — reload and retry.");
@@ -411,6 +500,16 @@ export class BidService {
     }
 
     const active = ledger.rows.find((b: any) => b.status === "active");
+    if (active && String(active.user) === me.id) {
+      return preCommitError(
+        "ALREADY_LEADING",
+        "You are already the highest bidder on this auction.",
+      );
+    }
+    const baselineTopBidId = ledger.rows.reduce(
+      (max: number, row: any) => Math.max(max, Number(row?.id) || 0),
+      0,
+    );
     const inc = bidIncrement(active ? Number(active.amount) : Number(auction.start_price));
 
     let committedPrice: number;
@@ -477,6 +576,19 @@ export class BidService {
       }
     }
 
+    const nextBidCount = !prevActiveToSupersede ? 1 : Number(auction.bid_count ?? 0) + 1;
+    onBeforeCommit?.({
+      baselineTopBidId,
+      auction,
+      prevActiveToSupersede,
+      committedPrice,
+      winning,
+      outbid,
+      maxAmount,
+      nextBidCount,
+      notifyBidder: me,
+    });
+
     // Create the new active bid row BEFORE superseding the previous bid so a clean
     // pre-insert HTTP rejection never leaves an auction without an active lead bid.
     let createResult;
@@ -499,11 +611,52 @@ export class BidService {
       );
     }
 
+    return this.finalizeCommittedBid({
+      me,
+      auctionId,
+      auction,
+      bidId: createResult.id,
+      maxAmount,
+      committedPrice,
+      winning,
+      outbid,
+      prevActiveToSupersede,
+      nextBidCount,
+      clientRequestId,
+    });
+  }
+
+  private async finalizeCommittedBid(input: {
+    me: Identity;
+    auctionId: number;
+    auction: any;
+    bidId: number;
+    maxAmount: number;
+    committedPrice: number;
+    winning: boolean;
+    outbid: boolean;
+    prevActiveToSupersede: any | null;
+    nextBidCount: number;
+    clientRequestId?: string;
+    skipAuctionPatch?: boolean;
+  }): Promise<BidOutcome> {
     // ── COMMIT POINT CROSSED ───────────────────────────────────────────
     // The bid row exists in TrailBase. Nothing after this point may report ok: false.
-    const bidId = createResult.id;
+    const {
+      me,
+      auctionId,
+      auction,
+      bidId,
+      maxAmount,
+      committedPrice,
+      winning,
+      outbid,
+      prevActiveToSupersede,
+      nextBidCount,
+      clientRequestId,
+      skipAuctionPatch,
+    } = input;
     const warnings: string[] = [];
-    const nextBidCount = !prevActiveToSupersede ? 1 : Number(auction.bid_count ?? 0) + 1;
 
     if (prevActiveToSupersede) {
       let superseded = false;
@@ -527,74 +680,77 @@ export class BidService {
       }
     }
 
-    let summaryUpdated = false;
-    const auctionPatch = {
-      current_price: committedPrice,
-      bid_count: nextBidCount,
-      updated_at: nowIso(this.nowMsFn()),
-    };
-    try {
-      summaryUpdated = await this.store.patchAuction(auctionId, auctionPatch);
-      if (!summaryUpdated) {
+    let finalAuction: any = auction;
+    if (!skipAuctionPatch) {
+      let summaryUpdated = false;
+      const auctionPatch = {
+        current_price: committedPrice,
+        bid_count: nextBidCount,
+        updated_at: nowIso(this.nowMsFn()),
+      };
+      try {
         summaryUpdated = await this.store.patchAuction(auctionId, auctionPatch);
-      }
-    } catch {
-      summaryUpdated = false;
-    }
-    if (!summaryUpdated) {
-      warnings.push("auction_summary_sync_failed");
-      console.error(
-        `[bid:place:post_commit] failed to sync auction ${auctionId} summary after committing bid ${bidId}`,
-      );
-    }
-
-    let finalAuction: any = {
-      ...auction,
-      current_price: committedPrice,
-      bid_count: nextBidCount,
-      updated_at: auctionPatch.updated_at,
-    };
-
-    if (auction.live_session_id != null) {
-      try {
-        const roomRes = await this.store.extendLiveRoom(Number(auction.live_session_id));
-        if (roomRes.warning) warnings.push(roomRes.warning);
-        if (roomRes.session) this.store.emitRoomUpdate(roomRes.session);
-      } catch (err) {
-        warnings.push("room_extend_failed");
-        console.error("[bid:place:post_commit] live room extension failed:", err);
-      }
-      try {
-        const refreshed = await this.store.getAuction(auctionId);
-        if (refreshed.ok) finalAuction = refreshed.row;
-        else warnings.push("auction_read_failed");
+        if (!summaryUpdated) {
+          summaryUpdated = await this.store.patchAuction(auctionId, auctionPatch);
+        }
       } catch {
-        warnings.push("auction_read_failed");
+        summaryUpdated = false;
       }
-    } else {
-      try {
-        const snipeRes = await this.store.antiSnipe(auctionId);
-        if (snipeRes.warning) warnings.push(snipeRes.warning);
-        if (snipeRes.auction) finalAuction = snipeRes.auction;
-      } catch (err) {
-        warnings.push("anti_snipe_failed");
-        console.error("[bid:place:post_commit] anti-snipe failed:", err);
+      if (!summaryUpdated) {
+        warnings.push("auction_summary_sync_failed");
+        console.error(
+          `[bid:place:post_commit] failed to sync auction ${auctionId} summary after committing bid ${bidId}`,
+        );
       }
-    }
 
-    try {
-      this.store.emitAuctionUpdate(finalAuction);
-    } catch (err) {
-      console.error("[bid:place:post_commit] emit auction:update failed:", err);
+      finalAuction = {
+        ...auction,
+        current_price: committedPrice,
+        bid_count: nextBidCount,
+        updated_at: auctionPatch.updated_at,
+      };
+
+      if (auction.live_session_id != null) {
+        try {
+          const roomRes = await this.store.extendLiveRoom(Number(auction.live_session_id));
+          if (roomRes.warning) warnings.push(roomRes.warning);
+          if (roomRes.session) this.store.emitRoomUpdate(roomRes.session);
+        } catch (err) {
+          warnings.push("room_extend_failed");
+          console.error("[bid:place:post_commit] live room extension failed:", err);
+        }
+        try {
+          const refreshed = await this.store.getAuction(auctionId);
+          if (refreshed.ok) finalAuction = refreshed.row;
+          else warnings.push("auction_read_failed");
+        } catch {
+          warnings.push("auction_read_failed");
+        }
+      } else {
+        try {
+          const snipeRes = await this.store.antiSnipe(auctionId);
+          if (snipeRes.warning) warnings.push(snipeRes.warning);
+          if (snipeRes.auction) finalAuction = snipeRes.auction;
+        } catch (err) {
+          warnings.push("anti_snipe_failed");
+          console.error("[bid:place:post_commit] anti-snipe failed:", err);
+        }
+      }
+
+      try {
+        this.store.emitAuctionUpdate(finalAuction);
+      } catch (err) {
+        console.error("[bid:place:post_commit] emit auction:update failed:", err);
+      }
     }
 
     // Notifications + TUCS fan-out are strictly non-fatal post-commit work.
-    if (!prevActiveToSupersede) {
+    if (!prevActiveToSupersede && !skipAuctionPatch) {
       const ok = await this.store
         .notifyWatchersBestEffort(finalAuction, me, committedPrice)
         .catch(() => false);
       if (!ok) warnings.push("notify_failed");
-    } else if (winning) {
+    } else if (prevActiveToSupersede && winning) {
       const ok1 = await this.store
         .notifyBestEffort(
           String(prevActiveToSupersede.user),
@@ -618,11 +774,13 @@ export class BidService {
           /* fire-and-forget */
         }
       }
-      const ok2 = await this.store
-        .notifyWatchersBestEffort(finalAuction, me, committedPrice)
-        .catch(() => false);
-      if (!ok2 && !warnings.includes("notify_failed")) warnings.push("notify_failed");
-    } else {
+      if (!skipAuctionPatch) {
+        const ok2 = await this.store
+          .notifyWatchersBestEffort(finalAuction, me, committedPrice)
+          .catch(() => false);
+        if (!ok2 && !warnings.includes("notify_failed")) warnings.push("notify_failed");
+      }
+    } else if (prevActiveToSupersede) {
       const ok1 = await this.store
         .notifyBestEffort(
           me.id,
