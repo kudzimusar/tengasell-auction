@@ -83,3 +83,12 @@ Identity: `com.tengasell.app` · versionName `0.1.0` · versionCode `1` · minSd
 - `MFA` (IAM-004) path is mapped but unexercised; an MFA account would return 403 and the app
   surfaces the "MFA required" message.
 - No crash reporting (REL-012) and no push (MSG-003) yet.
+
+
+---
+
+## 6. `ICR03-LR01` Reconciliation Note
+
+- **Superseded stack base:** Base candidate moved from historical `1fd73a8` ← `3b373ea` to reconciled PR #7 code freeze `4660ffa` ← PR #6 `395205a` (plus doc sync commits).
+- **PR #8 supersession:** PR #8 was automatically marked `MERGED` by GitHub (`2026-11-10T12:53:08Z`, `d24a0bfd`) when `d24a0bfd` leaked into `feat/tengasell-mobile-mob02-item-detail`; Draft PR #9 supersedes PR #8 for final MOB-03 certification (`d42d8d4` code freeze + doc sync).
+- **Artefact custody:** As directed by Owner, the Android APK/AAB binary was **not rebuilt** for post-`5011c35` commits; `REL-004` artefact signatures above remain bound strictly to earlier build `5011c35`.
