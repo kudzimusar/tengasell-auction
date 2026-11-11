@@ -1,15 +1,63 @@
 :81 {
-	@transform_port_query {
-		query XTransformPort=*
+	@blocked_internal {
+		path /internal /internal/*
+	}
+	handle @blocked_internal {
+		header Content-Type application/json
+		respond `{"ok":false,"error":"Internal endpoints are not publicly exposed"}` 403
 	}
 
-	handle @transform_port_query {
-		reverse_proxy localhost:{query.XTransformPort} {
+	@transform_admin {
+		query XTransformPort=*
+		path /admin /admin/*
+	}
+	handle @transform_admin {
+		header Content-Type application/json
+		respond `{"ok":false,"error":"Admin endpoints are not exposed via transform port"}` 403
+	}
+
+	@tp_3001 {
+		query XTransformPort=3001
+	}
+	handle @tp_3001 {
+		reverse_proxy localhost:3001 {
 			header_up Host {host}
 			header_up X-Forwarded-For {remote_host}
 			header_up X-Forwarded-Proto {scheme}
 			header_up X-Real-IP {remote_host}
 		}
+	}
+
+	@tp_3002 {
+		query XTransformPort=3002
+	}
+	handle @tp_3002 {
+		reverse_proxy localhost:3002 {
+			header_up Host {host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	@tp_3004 {
+		query XTransformPort=3004
+	}
+	handle @tp_3004 {
+		reverse_proxy localhost:3004 {
+			header_up Host {host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	@disallowed_transform_port {
+		query XTransformPort=*
+	}
+	handle @disallowed_transform_port {
+		header Content-Type application/json
+		respond `{"ok":false,"error":"Forbidden transform port"}` 403
 	}
 
 	handle {

@@ -133,6 +133,7 @@ interface PendingReconcileContext {
   baselineTopBidId: number;
   auction: any;
   prevActiveToSupersede: any | null;
+  extraActivesToSupersede?: any[];
   committedPrice: number;
   winning: boolean;
   outbid: boolean;
@@ -197,6 +198,10 @@ export class BidService {
     this.idempotencyTtlMs = opts?.idempotencyTtlMs ?? 30 * 60_000;
     this.maxIdempotencyEntries = opts?.maxIdempotencyEntries ?? 4096;
     this.nowMsFn = opts?.nowMs ?? (() => Date.now());
+  }
+
+  public withAuctionLock<T>(auctionId: number, fn: () => Promise<T>): Promise<T> {
+    return this.locks.run(auctionId, fn);
   }
 
   private pruneIdempotency(): void {
@@ -413,6 +418,13 @@ export class BidService {
     const shouldSupersedePrev =
       Boolean(pending.prevActiveToSupersede) &&
       (!prevRowInLedger || prevRowInLedger.status === "active");
+    const primaryPrevId = shouldSupersedePrev ? Number(pending.prevActiveToSupersede.id) : null;
+    const extraActivesToSupersede = (pending.extraActivesToSupersede ?? []).filter((b: any) => {
+      const id = Number(b?.id);
+      if (id === matchId || id === primaryPrevId) return false;
+      const latestRow = ledger.rows.find((row: any) => Number(row.id) === id);
+      return !latestRow || latestRow.status === "active";
+    });
     const shouldSyncAuction =
       !newerBidExists &&
       (Number(freshAuction.current_price) !== pending.committedPrice ||
@@ -428,6 +440,7 @@ export class BidService {
       winning: pending.winning ? match.status === "active" && String(match.user) === user.id : false,
       outbid: pending.winning ? match.status !== "active" || String(match.user) !== user.id : true,
       prevActiveToSupersede: shouldSupersedePrev ? pending.prevActiveToSupersede : null,
+      extraActivesToSupersede,
       nextBidCount: pending.nextBidCount,
       clientRequestId,
       skipAuctionPatch: !shouldSyncAuction,
@@ -499,7 +512,9 @@ export class BidService {
       );
     }
 
-    const active = ledger.rows.find((b: any) => b.status === "active");
+    const activeRows = ledger.rows.filter((b: any) => b.status === "active");
+    const active = activeRows[0];
+    const extraStaleActiveRows = activeRows.slice(1);
     if (active && String(active.user) === me.id) {
       return preCommitError(
         "ALREADY_LEADING",
@@ -576,11 +591,18 @@ export class BidService {
       }
     }
 
-    const nextBidCount = !prevActiveToSupersede ? 1 : Number(auction.bid_count ?? 0) + 1;
+    const baseBidCount = Number(auction.bid_count ?? 0);
+    const nonRetractedLedgerCount = ledger.rows.filter((b: any) => b.status !== "retracted").length;
+    const nextBidCount = !prevActiveToSupersede
+      ? 1
+      : ledger.rows.length < 50
+        ? Math.max(baseBidCount + 1, nonRetractedLedgerCount + 1)
+        : baseBidCount + 1 + extraStaleActiveRows.length;
     onBeforeCommit?.({
       baselineTopBidId,
       auction,
       prevActiveToSupersede,
+      extraActivesToSupersede: extraStaleActiveRows,
       committedPrice,
       winning,
       outbid,
@@ -589,7 +611,7 @@ export class BidService {
       notifyBidder: me,
     });
 
-    // Create the new active bid row BEFORE superseding the previous bid so a clean
+    // Create the new active bid row BEFORE superseding previous bids so a clean
     // pre-insert HTTP rejection never leaves an auction without an active lead bid.
     let createResult;
     try {
@@ -621,6 +643,7 @@ export class BidService {
       winning,
       outbid,
       prevActiveToSupersede,
+      extraActivesToSupersede: extraStaleActiveRows,
       nextBidCount,
       clientRequestId,
     });
@@ -636,6 +659,7 @@ export class BidService {
     winning: boolean;
     outbid: boolean;
     prevActiveToSupersede: any | null;
+    extraActivesToSupersede?: any[];
     nextBidCount: number;
     clientRequestId?: string;
     skipAuctionPatch?: boolean;
@@ -652,20 +676,32 @@ export class BidService {
       winning,
       outbid,
       prevActiveToSupersede,
+      extraActivesToSupersede,
       nextBidCount,
       clientRequestId,
       skipAuctionPatch,
     } = input;
     const warnings: string[] = [];
 
-    if (prevActiveToSupersede) {
+    const seenPrevIds = new Set<number>();
+    const prevRowsToSupersede = [
+      ...(prevActiveToSupersede ? [prevActiveToSupersede] : []),
+      ...(extraActivesToSupersede ?? []),
+    ].filter((row: any) => {
+      const id = Number(row?.id);
+      if (!Number.isFinite(id) || id === bidId || seenPrevIds.has(id)) return false;
+      seenPrevIds.add(id);
+      return true;
+    });
+
+    for (const prevRow of prevRowsToSupersede) {
       let superseded = false;
       try {
-        superseded = await this.store.patchBid(Number(prevActiveToSupersede.id), {
+        superseded = await this.store.patchBid(Number(prevRow.id), {
           status: "superseded",
         });
         if (!superseded) {
-          superseded = await this.store.patchBid(Number(prevActiveToSupersede.id), {
+          superseded = await this.store.patchBid(Number(prevRow.id), {
             status: "superseded",
           });
         }
@@ -673,9 +709,9 @@ export class BidService {
         superseded = false;
       }
       if (!superseded) {
-        warnings.push("supersede_failed");
+        if (!warnings.includes("supersede_failed")) warnings.push("supersede_failed");
         console.error(
-          `[bid:place:post_commit] failed to supersede bid ${prevActiveToSupersede.id} after committing bid ${bidId}`,
+          `[bid:place:post_commit] failed to supersede bid ${prevRow.id} after committing bid ${bidId}`,
         );
       }
     }

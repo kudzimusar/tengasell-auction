@@ -1,9 +1,12 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import fs from "node:fs";
 import http from "node:http";
 import net from "node:net";
+import os from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -113,6 +116,125 @@ describe("gateway.mjs transform allowlist & internal-path hardening", () => {
       gw.kill("SIGTERM");
       await new Promise((resolve) => gw.once("exit", resolve));
       await new Promise((resolve) => stubApp.close(resolve));
+    }
+  });
+
+  it("awaits both GET and POST /api/auth/v1/logout revocation before answering client", async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "tgs-gw-logout-"));
+    const revDbPath = path.join(tmpDir, "tgs_revocations.db");
+    const secret = "gw-test-secret-xyz";
+    const revokedTokens = [];
+
+    const stubTrail = http.createServer((req, res) => {
+      if (req.url === "/api/auth/v1/logout" && req.method === "GET") {
+        res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end("logged out");
+        return;
+      }
+      if (req.url === "/api/auth/v1/logout" && req.method === "POST") {
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+
+    const stubTrade = http.createServer((req, res) => {
+      if (req.url === "/internal/auth/revoke" && req.method === "POST") {
+        const chunks = [];
+        req.on("data", (c) => chunks.push(c));
+        req.on("end", () => {
+          const headerSecret = req.headers["x-tgs-internal"];
+          const parsed = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+          setTimeout(() => {
+            revokedTokens.push({ headerSecret, token: parsed.token });
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ ok: true, disconnected: 1 }));
+          }, 25);
+        });
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+
+    await new Promise((resolve) => stubTrail.listen(0, "127.0.0.1", resolve));
+    await new Promise((resolve) => stubTrade.listen(0, "127.0.0.1", resolve));
+    const tbPort = stubTrail.address().port;
+    const tePort = stubTrade.address().port;
+    const gwPort = await findFreePort();
+
+    const gw = spawn(
+      "node",
+      [
+        "scripts/gateway.mjs",
+        "--port",
+        String(gwPort),
+        "--app",
+        String(tbPort),
+        "--trailbase",
+        String(tbPort),
+        "--trade",
+        String(tePort),
+      ],
+      {
+        cwd: REPO_ROOT,
+        env: {
+          ...process.env,
+          TGS_INTERNAL_SECRET: secret,
+          TGS_REVOCATIONS_DB: revDbPath,
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+
+    try {
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("Gateway startup timeout")), 4000);
+        const onOut = (chunk) => {
+          if (chunk.toString("utf8").includes("tengasell gateway on")) {
+            clearTimeout(timer);
+            resolve();
+          }
+        };
+        gw.stdout.on("data", onOut);
+        gw.stderr.on("data", onOut);
+      });
+
+      const tokenGet = "header.e30.sig-get";
+      const getRes = await fetch(`http://127.0.0.1:${gwPort}/api/auth/v1/logout?XTransformPort=3001`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${tokenGet}` },
+      });
+      assert.equal(getRes.status, 200);
+      assert.equal(await getRes.text(), "logged out");
+      // Awaiting revocation guarantees trade-engine /internal/auth/revoke finished BEFORE GET response arrived
+      assert.equal(revokedTokens.length, 1);
+      assert.deepEqual(revokedTokens[0], { headerSecret: secret, token: tokenGet });
+
+      const tokenPost = "header.e30.sig-post";
+      const postRes = await fetch(`http://127.0.0.1:${gwPort}/api/auth/v1/logout?XTransformPort=3001`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${tokenPost}` },
+      });
+      assert.equal(postRes.status, 204);
+      assert.equal(revokedTokens.length, 2);
+      assert.deepEqual(revokedTokens[1], { headerSecret: secret, token: tokenPost });
+
+      const rdb = new DatabaseSync(revDbPath, { readOnly: true });
+      try {
+        const rows = rdb.prepare("SELECT COUNT(*) AS cnt FROM revoked_tokens").get();
+        assert.equal(rows.cnt, 2);
+      } finally {
+        rdb.close();
+      }
+    } finally {
+      gw.kill("SIGTERM");
+      await new Promise((resolve) => gw.once("exit", resolve));
+      await new Promise((resolve) => stubTrail.close(resolve));
+      await new Promise((resolve) => stubTrade.close(resolve));
+      fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   });
 });

@@ -230,7 +230,9 @@ function checkCanonicalSqliteSession(
 ): { ok: true; admin: boolean } | { ok: false } {
   const dataDir = resolveTrailBaseDataDirForBff();
   const requireDb =
-    Boolean(process.env.TRAILBASE_DATA_DIR) || process.env.TRAILBASE_REQUIRE_SESSION_DB === "1";
+    process.env.NODE_ENV === "production" ||
+    Boolean(process.env.TRAILBASE_DATA_DIR) ||
+    process.env.TRAILBASE_REQUIRE_SESSION_DB === "1";
 
   const revPath =
     process.env.TGS_REVOCATIONS_DB ||

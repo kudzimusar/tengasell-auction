@@ -998,4 +998,99 @@ describe("trade-engine bidding & commercial integrity unit tests", () => {
     });
     expect(harness.state.auction.bid_count).toBe(2);
   });
+
+  test("24. No-replay uncertain commit heals stranded active rows and skewed bid_count on next bidder", async () => {
+    const bidderA: Identity = { id: "user-a", username: "nyasha", admin: false };
+    const bidderB: Identity = { id: "user-b", username: "rufaro", admin: false };
+    const bidderC: Identity = { id: "user-c", username: "takudzwa", admin: false };
+    const harness = createMockBiddingHarness();
+    const bidA = await harness.service.handleBidPlace({
+      user: bidderA,
+      auctionId: 42,
+      maxAmount: 25,
+      clientRequestId: "init-a",
+    });
+    expect(bidA).toMatchObject({ ok: true, committed: true, winning: true });
+
+    // Simulate mobile no-replay flow: Bidder B's createBid inserts row in DB before transport drop
+    const origCreateBid = harness.store.createBid;
+    harness.store.createBid = async (row) => {
+      const created = await origCreateBid(row);
+      if (row.user === "user-b") {
+        return { status: "uncertain", error: "connection reset after insert" };
+      }
+      return created;
+    };
+
+    const unc = await harness.service.handleBidPlace({
+      user: bidderB,
+      auctionId: 42,
+      maxAmount: 35,
+      clientRequestId: "no-replay-mobile-b",
+    });
+    expect(unc).toMatchObject({ ok: false, uncertain: true, stage: "commit_uncertain" });
+    // Before Bidder C arrives, both rows remain active and auction.bid_count stayed at 1
+    expect(harness.state.bids.filter((b) => b.status === "active")).toHaveLength(2);
+    expect(harness.state.auction.bid_count).toBe(1);
+
+    // Bidder C bids later without B ever replaying -> C supersedes BOTH stranded active rows & recovers bid_count=3
+    const bidC = await harness.service.handleBidPlace({
+      user: bidderC,
+      auctionId: 42,
+      maxAmount: 60,
+      clientRequestId: "bid-c-after-uncertain",
+    });
+    expect(bidC).toMatchObject({
+      ok: true,
+      committed: true,
+      winning: true,
+      amount: 36,
+    });
+    const finalActive = harness.state.bids.filter((b) => b.status === "active");
+    expect(finalActive).toHaveLength(1);
+    expect(finalActive[0].user).toBe(bidderC.id);
+    expect(harness.state.auction.bid_count).toBe(3);
+  });
+
+  test("25. BidService.withAuctionLock serializes non-bid mutations with handleBidPlace", async () => {
+    const bidderB: Identity = { id: "user-b", username: "rufaro", admin: false };
+    const events: string[] = [];
+    const harness = createMockBiddingHarness();
+    const origGetAuction = harness.store.getAuction;
+    harness.store.getAuction = async (id) => {
+      events.push("bid:getAuction");
+      return origGetAuction(id);
+    };
+
+    let releaseLock!: () => void;
+    const lockHeld = new Promise<void>((r) => {
+      releaseLock = r;
+    });
+    let lockEntered!: () => void;
+    const entered = new Promise<void>((r) => {
+      lockEntered = r;
+    });
+
+    const lockTask = harness.service.withAuctionLock(42, async () => {
+      events.push("lock:start");
+      lockEntered();
+      await lockHeld;
+      events.push("lock:end");
+    });
+    await entered;
+
+    const bidTask = harness.service.handleBidPlace({
+      user: bidderB,
+      auctionId: 42,
+      maxAmount: 40,
+      clientRequestId: "serialized-with-lock",
+    });
+    await new Promise((r) => setTimeout(r, 25));
+    // handleBidPlace has NOT entered getAuction while external auction lock is held
+    expect(events).toEqual(["lock:start"]);
+    releaseLock();
+    const [, bidRes] = await Promise.all([lockTask, bidTask]);
+    expect(bidRes.committed).toBe(true);
+    expect(events.slice(0, 3)).toEqual(["lock:start", "lock:end", "bid:getAuction"]);
+  });
 });
