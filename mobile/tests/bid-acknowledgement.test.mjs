@@ -400,8 +400,13 @@ test("ACK-21 en-XA and ar-XB pseudolocalization covers all bid, reconcile, curre
     { ok: true },
     { ok: false, uncertain: true, reason: "timeout" },
     { ok: false, rejected: true, stage: "pre_commit", errorCode: "AUTH_REVOKED" },
+    { ok: false, rejected: true, stage: "pre_commit", errorCode: "AUTH_INVALID" },
     { ok: false, rejected: true, stage: "pre_commit", errorCode: "PROFILE_MISSING" },
+    { ok: false, rejected: true, stage: "pre_commit", errorCode: "AUCTION_LOOKUP_FAILED" },
+    { ok: false, rejected: true, stage: "pre_commit", errorCode: "BID_LEDGER_UNAVAILABLE" },
     { ok: false, rejected: true, stage: "pre_commit", errorCode: "SELF_BID" },
+    { ok: false, rejected: true, stage: "pre_commit", errorCode: "ALREADY_LEADING" },
+    { ok: false, rejected: true, stage: "pre_commit", errorCode: "BELOW_MIN_BID" },
     { ok: false, rejected: true, stage: "pre_commit", errorCode: "NOT_CONNECTED" },
   ]) {
     const en = presentBidOutcome(outcome, (v) => formatUSD(v));
