@@ -1,7 +1,7 @@
-// MOB-02 — auction detail.
-// Reads one record from the canonical authority (Trailbase via gateway).
-// Bidding is intentionally not wired here: it belongs to MOB-03 and must go
-// through the Socket.IO trade engine, never a direct record write.
+// MOB-03 — auction detail with live bidding over the Socket.IO trade engine.
+// Reads canonical listing state from TrailBase via gateway, and dispatches
+// proxy bids solely through the Socket.IO trade engine (:3002), never a direct
+// record write to `bids` or `auctions`.
 
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -14,6 +14,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -71,6 +72,13 @@ export default function ItemScreen() {
   // Live engine connection (MOB-03): token from the session, socket to :3002.
   useEffect(() => {
     let cancelled = false;
+    // Clear any prior account's bid banner/pending flag whenever auth or item shifts.
+    const clearStale = setTimeout(() => {
+      if (!cancelled) {
+        setBidNote(null);
+        setBidding(false);
+      }
+    }, 0);
     if (session.phase !== "authenticated") {
       disconnectBidding();
       // Deferred: resetting the flag synchronously inside the effect would
@@ -80,6 +88,7 @@ export default function ItemScreen() {
       }, 0);
       return () => {
         cancelled = true;
+        clearTimeout(clearStale);
         clearTimeout(reset);
       };
     }
@@ -98,6 +107,7 @@ export default function ItemScreen() {
       .catch(() => undefined);
     return () => {
       cancelled = true;
+      clearTimeout(clearStale);
       disconnectBidding();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -122,14 +132,20 @@ export default function ItemScreen() {
 
   useEffect(() => {
     // Deferred one tick so the first paint is not blocked by a synchronous
-    // state update inside the effect.
+    // state update inside the effect. Reset per-listing fields only when the
+    // route `id` changes; live `auction:update` calls `load()` directly.
     const task = setTimeout(() => {
+      setHero(0);
+      setBidAmount("");
+      setBidNote(null);
       void load();
     }, 0);
     return () => clearTimeout(task);
   }, [load]);
 
-  const styles = useMemo(() => makeStyles(), []);
+  const { width } = useWindowDimensions();
+  const heroWidth = Math.max(width, 320);
+  const styles = useMemo(() => makeStyles(heroWidth), [heroWidth]);
   const remainingMs = item ? Date.parse(item.ends_at) - now : 0;
   // The record status can lag the clock. An auction past its end time is closed
   // here too, otherwise the detail screen offers a bid on an ended lot while the
@@ -410,7 +426,7 @@ const rowStyle = StyleSheet.create({
   v: { fontSize: 13, color: "#101619", fontWeight: "600" },
 });
 
-function makeStyles() {
+function makeStyles(heroWidth: number) {
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: "#F6F9FA" },
     topBar: {
@@ -429,12 +445,22 @@ function makeStyles() {
     center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24, gap: 8 },
     errorTitle: { fontSize: 18, fontWeight: "800", color: "#101619" },
     errorBody: { fontSize: 13, color: "#5C6B72", textAlign: "center" },
-    retry: { marginTop: 10, backgroundColor: "#19717B", paddingHorizontal: 18, paddingVertical: 10, borderRadius: 10 },
+    retry: {
+      marginTop: 10,
+      backgroundColor: "#19717B",
+      paddingHorizontal: 18,
+      paddingVertical: 10,
+      minHeight: 48,
+      minWidth: 48,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 10,
+    },
     retryText: { color: "#FFFFFF", fontWeight: "700", fontSize: 13 },
 
     scroll: { paddingBottom: 24 },
     heroWrap: { backgroundColor: "#FFFFFF" },
-    hero: { width: 390, height: 390 },
+    hero: { width: heroWidth, height: heroWidth },
     heroImg: { width: "100%", height: "100%" },
     soldVeil: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(10,13,16,0.35)" },
     soldBandWrap: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center" },
