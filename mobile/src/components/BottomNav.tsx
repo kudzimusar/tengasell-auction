@@ -2,60 +2,71 @@
 // Home · Categories · Search · Orders · You.
 // Icons are drawn with primitives so no icon package is required.
 
-import { useRouter, usePathname } from "expo-router";
+import { usePathname, useRouter } from "expo-router";
 import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import type { NxsStringKey } from "../nxs/localization/catalog";
+import { useNxsText } from "../nxs/localization/useNxsText";
+import { useNxs } from "../nxs/context/NxsProvider";
+import { nxsTokens, type NxsTheme } from "../nxs/tokens";
 
 type TabKey = "home" | "categories" | "search" | "orders" | "you";
 
-const TABS: { key: TabKey; label: string; route: string }[] = [
-  { key: "home", label: "Home", route: "/" },
-  { key: "categories", label: "Categories", route: "/categories" },
-  { key: "search", label: "Search", route: "/search" },
-  { key: "orders", label: "Orders", route: "/orders" },
-  { key: "you", label: "You", route: "/you" },
+const TABS: { key: TabKey; labelKey: NxsStringKey; route: string }[] = [
+  { key: "home", labelKey: "nav.home", route: "/" },
+  { key: "categories", labelKey: "nav.categories", route: "/categories" },
+  { key: "search", labelKey: "nav.search", route: "/search" },
+  { key: "orders", labelKey: "nav.orders", route: "/orders" },
+  { key: "you", labelKey: "nav.you", route: "/you" },
 ];
 
 export function BottomNav({ active }: { active?: TabKey } = {}) {
   const router = useRouter();
   const pathname = usePathname();
-  const insets = useSafeAreaInsets();
-  const styles = useMemo(() => makeStyles(insets.bottom), [insets.bottom]);
+  const { theme, safeArea, writingDirection } = useNxs();
+  const t = useNxsText();
+  const styles = useMemo(
+    () => makeStyles(theme, safeArea.bottom, writingDirection),
+    [theme, safeArea.bottom, writingDirection],
+  );
 
   const current: TabKey | null =
     active ??
     (pathname.startsWith("/item/")
       ? null
-      : 
-    (pathname === "/categories"
-      ? "categories"
-      : pathname === "/search"
-        ? "search"
-        : pathname === "/orders"
-          ? "orders"
-          : pathname === "/you"
-            ? "you"
-            : "home"));
+      : pathname === "/categories"
+        ? "categories"
+        : pathname === "/search"
+          ? "search"
+          : pathname === "/orders"
+            ? "orders"
+            : pathname === "/you"
+              ? "you"
+              : "home");
 
   return (
     <View style={styles.bar}>
       {TABS.map((tab) => {
         const on = tab.key === current;
-        const color = on ? "#19717B" : "#6B7A82";
+        const color = on ? theme.action.primary : theme.text.secondary;
+        const label = t(tab.labelKey);
         return (
-          <Pressable hitSlop={4}
+          <Pressable
+            hitSlop={4}
             key={tab.key}
-            style={styles.item}
+            style={({ pressed }) => [styles.item, pressed && styles.pressed]}
             onPress={() => router.push(tab.route as never)}
             accessibilityRole="tab"
             accessibilityState={{ selected: on }}
-            accessibilityLabel={tab.label}
+            accessibilityLabel={label}
           >
             <View style={styles.iconWrap}>
               <Glyph name={tab.key} color={color} />
             </View>
-            <Text style={[styles.label, { color }, on && styles.labelActive]}>{tab.label}</Text>
+            <Text style={[styles.label, { color }, on && styles.labelActive]} numberOfLines={1}>
+              {label}
+            </Text>
           </Pressable>
         );
       })}
@@ -126,19 +137,29 @@ function Glyph({ name, color }: { name: TabKey; color: string }) {
   }
 }
 
-function makeStyles(bottomInset: number) {
+function makeStyles(theme: NxsTheme, bottomInset: number, writingDirection: "ltr" | "rtl") {
+  const rowDirection = writingDirection === "rtl" ? "row-reverse" : "row";
   return StyleSheet.create({
     bar: {
-      flexDirection: "row",
+      flexDirection: rowDirection,
       borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: "#DCE4E8",
-      backgroundColor: "#FFFFFF",
+      borderTopColor: theme.border.subtle,
+      backgroundColor: theme.surface.section,
       paddingTop: 6,
       paddingBottom: Math.max(bottomInset, 6),
     },
-    item: { flex: 1, minHeight: 48, alignItems: "center", justifyContent: "center", gap: 3, paddingVertical: 4 },
+    item: {
+      flex: 1,
+      minHeight: nxsTokens.touch.minimum,
+      minWidth: nxsTokens.touch.minimum,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 3,
+      paddingVertical: 4,
+    },
+    pressed: { opacity: 0.78 },
     iconWrap: { height: 22, alignItems: "center", justifyContent: "center" },
-    label: { fontSize: 10.5, fontWeight: "600" },
+    label: { fontSize: 11, lineHeight: 14, fontWeight: "600" },
     labelActive: { fontWeight: "800" },
   });
 }

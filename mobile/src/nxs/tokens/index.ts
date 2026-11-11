@@ -42,6 +42,9 @@ export interface NxsTheme {
     section: string;
     raised: string;
     overlay: string;
+    scrim: string;
+    primaryTint: string;
+    accentTint: string;
   };
   text: {
     primary: string;
@@ -81,6 +84,9 @@ export const nxsLightTheme: NxsTheme = {
     section: "#FFFFFF",
     raised: "#FFFFFF",
     overlay: "#F2F6F7",
+    scrim: "rgba(10,13,16,0.35)",
+    primaryTint: "rgba(25,113,123,0.10)",
+    accentTint: "rgba(223,174,46,0.18)",
   },
   text: {
     primary: "#0A0D10",
@@ -120,6 +126,9 @@ export const nxsDarkTheme: NxsTheme = {
     section: "#151E22",
     raised: "#1B262B",
     overlay: "#223036",
+    scrim: "rgba(0,0,0,0.52)",
+    primaryTint: "rgba(110,195,203,0.16)",
+    accentTint: "rgba(240,198,93,0.18)",
   },
   text: {
     primary: "#F4F8F9",

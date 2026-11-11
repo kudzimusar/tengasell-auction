@@ -1,6 +1,6 @@
-// Temu-style listing card, reskinned to TengaSell tokens.
-// Sold/ended items carry a red diagonal band across the image — the strong
-// "this is gone" signal requested for the mobile surface.
+// Temu-style listing card, built on NXS semantic tokens and localized copy.
+// Sold/ended items carry a diagonal band across the image so closed listings
+// cannot be misread as biddable.
 
 import { useMemo } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
@@ -8,6 +8,8 @@ import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { formatRemaining, formatUSD } from "../lib/format";
 import type { AuctionView } from "../lib/types";
 import { useNxs } from "../nxs/context/NxsProvider";
+import { useNxsText } from "../nxs/localization/useNxsText";
+import { nxsTokens, type NxsTheme } from "../nxs/tokens";
 
 interface Props {
   item: AuctionView;
@@ -17,33 +19,49 @@ interface Props {
 }
 
 export function AuctionCard({ item, width, now, onPress }: Props) {
-  const { theme } = useNxs();
-  const styles = useMemo(() => makeStyles(width), [width]);
+  const { theme, writingDirection } = useNxs();
+  const t = useNxsText();
+  const styles = useMemo(
+    () => makeStyles(theme, width, writingDirection),
+    [theme, width, writingDirection],
+  );
 
   const remainingMs = Date.parse(item.ends_at) - now;
-  // Status can lag the clock: a live record past its end time is closed, not
-  // "Ends 0s". The card must never present an expired auction as biddable.
+  // Status can lag the clock: a live record past its end time is closed, not "0s".
   const sold =
     item.status === "sold" ||
     item.status === "ended" ||
     item.status === "cancelled" ||
     remainingMs <= 0;
   const urgent = !sold && remainingMs > 0 && remainingMs < 3600_000;
+  const priceLabel = formatUSD(item.current_price);
+  const remainingLabel = formatRemaining(remainingMs);
+  const statusText = sold
+    ? t("auction.closedLabel")
+    : t("auction.endsRemaining", { remaining: remainingLabel });
 
   return (
-    <Pressable hitSlop={4}
+    <Pressable
+      hitSlop={4}
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${item.title}, ${formatUSD(item.current_price)}${
-        sold ? ", sold" : `, ${item.bid_count} bids, ${formatRemaining(remainingMs)} left`
-      }`}
-      style={({ pressed }) => [styles.card, pressed && { opacity: 0.85 }]}
+      accessibilityLabel={
+        sold
+          ? t("auction.cardSummarySold", { title: item.title, price: priceLabel })
+          : t("auction.cardSummaryLive", {
+              title: item.title,
+              price: priceLabel,
+              count: item.bid_count,
+              remaining: remainingLabel,
+            })
+      }
+      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
     >
       <View style={styles.imageWrap}>
         {item.imageList[0] ? (
           <Image source={{ uri: item.imageList[0] }} style={styles.image} resizeMode="cover" />
         ) : (
-          <View style={[styles.image, { backgroundColor: theme.surface.raised }]} />
+          <View style={[styles.image, styles.imagePlaceholder]} />
         )}
 
         {sold && (
@@ -51,7 +69,7 @@ export function AuctionCard({ item, width, now, onPress }: Props) {
             <View style={styles.soldVeil} pointerEvents="none" />
             <View style={styles.soldBandWrap} pointerEvents="none">
               <View style={styles.soldBand}>
-                <Text style={styles.soldBandText}>SOLD</Text>
+                <Text style={styles.soldBandText}>{t("auction.soldBadge")}</Text>
               </View>
             </View>
           </>
@@ -59,7 +77,7 @@ export function AuctionCard({ item, width, now, onPress }: Props) {
 
         {!sold && urgent && (
           <View style={styles.urgentChip}>
-            <Text style={styles.urgentText}>{formatRemaining(remainingMs)}</Text>
+            <Text style={styles.urgentText}>{remainingLabel}</Text>
           </View>
         )}
       </View>
@@ -70,43 +88,57 @@ export function AuctionCard({ item, width, now, onPress }: Props) {
         </Text>
 
         <View style={styles.priceRow}>
-          <Text style={[styles.price, sold && styles.priceSold]}>
-            {formatUSD(item.current_price)}
+          <Text style={[styles.price, sold && styles.priceSold]}>{priceLabel}</Text>
+          <Text style={styles.count}>
+            {sold
+              ? t("auction.soldStatus")
+              : t("auction.bidCount", { count: item.bid_count })}
           </Text>
-          <Text style={styles.count}>{sold ? "sold" : `${item.bid_count} bids`}</Text>
         </View>
 
         <Text style={styles.meta} numberOfLines={1}>
-          {sold ? "Auction closed" : `Ends ${formatRemaining(remainingMs)}`} · @{item.seller_username}
+          {t("auction.cardMeta", {
+            statusText,
+            seller: item.seller_username,
+          })}
         </Text>
       </View>
     </Pressable>
   );
 }
 
-function makeStyles(width: number) {
-  const cardWidth = width;
+function makeStyles(theme: NxsTheme, width: number, writingDirection: "ltr" | "rtl") {
+  const cardWidth = Math.max(nxsTokens.touch.minimum, width);
+  const textAlign = writingDirection === "rtl" ? "right" : "left";
+  const rowDirection = writingDirection === "rtl" ? "row-reverse" : "row";
+
   return StyleSheet.create({
     card: {
       width: cardWidth,
-      borderRadius: 14,
-      backgroundColor: "#FFFFFF",
+      minHeight: nxsTokens.touch.minimum,
+      borderRadius: nxsTokens.radius.card,
+      backgroundColor: theme.surface.raised,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: "#E2E8EC",
+      borderColor: theme.border.subtle,
       overflow: "hidden",
       marginBottom: 12,
     },
-    imageWrap: { width: cardWidth, height: cardWidth, backgroundColor: "#F1F4F6" },
+    pressed: { opacity: 0.85 },
+    imageWrap: {
+      width: cardWidth,
+      height: cardWidth,
+      backgroundColor: theme.surface.overlay,
+    },
     image: { width: "100%", height: "100%" },
+    imagePlaceholder: { backgroundColor: theme.surface.overlay },
 
-    // Red diagonal "SOLD" band
     soldVeil: {
       position: "absolute",
       top: 0,
       left: 0,
       right: 0,
       bottom: 0,
-      backgroundColor: "rgba(10,13,16,0.34)",
+      backgroundColor: theme.surface.scrim,
     },
     soldBandWrap: {
       position: "absolute",
@@ -120,15 +152,15 @@ function makeStyles(width: number) {
     soldBand: {
       width: cardWidth * 1.35,
       paddingVertical: 6,
-      backgroundColor: "#D62828",
+      backgroundColor: theme.state.error,
       borderTopWidth: 2,
       borderBottomWidth: 2,
-      borderColor: "#FFFFFF",
+      borderColor: theme.text.inverse,
       transform: [{ rotate: "-32deg" }],
       alignItems: "center",
     },
     soldBandText: {
-      color: "#FFFFFF",
+      color: theme.text.inverse,
       fontWeight: "900",
       fontSize: 14,
       letterSpacing: 3,
@@ -138,19 +170,30 @@ function makeStyles(width: number) {
       position: "absolute",
       left: 8,
       bottom: 8,
-      backgroundColor: "rgba(214,40,40,0.92)",
-      borderRadius: 999,
+      backgroundColor: theme.state.error,
+      borderRadius: nxsTokens.radius.pill,
       paddingHorizontal: 8,
       paddingVertical: 3,
     },
-    urgentText: { color: "#FFFFFF", fontSize: 10, fontWeight: "700" },
+    urgentText: { color: theme.text.inverse, fontSize: 11, fontWeight: "700" },
 
-    body: { paddingHorizontal: 9, paddingTop: 8, paddingBottom: 10, gap: 3 },
-    title: { fontSize: 12.5, lineHeight: 17, color: "#101619" },
-    priceRow: { flexDirection: "row", alignItems: "baseline", gap: 6, marginTop: 2 },
-    price: { fontSize: 17, fontWeight: "800", color: "#8A5F0B", letterSpacing: -0.4 },
-    priceSold: { color: "#7A848A", textDecorationLine: "line-through" },
-    count: { fontSize: 11, color: "#5C6B72" },
-    meta: { fontSize: 10.5, color: "#7A8890" },
+    body: { paddingHorizontal: 10, paddingTop: 8, paddingBottom: 10, gap: 4 },
+    title: { fontSize: 13, lineHeight: 18, color: theme.text.primary, textAlign },
+    priceRow: {
+      flexDirection: rowDirection,
+      alignItems: "baseline",
+      gap: 6,
+      marginTop: 2,
+    },
+    price: {
+      fontSize: 17,
+      fontWeight: "800",
+      color: theme.state.warning,
+      letterSpacing: -0.4,
+      textAlign,
+    },
+    priceSold: { color: theme.state.disabled, textDecorationLine: "line-through" },
+    count: { fontSize: 12, color: theme.text.secondary, textAlign },
+    meta: { fontSize: 11, color: theme.text.secondary, textAlign },
   });
 }

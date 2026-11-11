@@ -1,7 +1,7 @@
 # TENGASELL-MOBILE-01 — Trade Engine Remediation Packet (`CERT-02` & `CERT-03`)
 
 **Authority scope:** Read-only certification finding against `mini-services/trade-engine/index.ts` and `mini-services/trailbase-db/traildepot/config.textproto`.
-**Strict boundary:** `mini-services/trade-engine/index.ts` was **NOT modified** in mobile PRs (#6, #7, #9). This bounded backend packet specifies required server-side remediations to close `CERT-02` and `CERT-03` completely.
+**Strict boundary:** `mini-services/trade-engine/index.ts` was **NOT modified** in mobile PRs (#6, #7, #9). The authorized backend security & transaction-integrity remediation has been opened separately in Draft PR #12 (`fix/tengasell-trade-sec01-auth-bid-integrity` @ `44af38f29eeb979fa0e2d7ded6357b822ce01884`).
 
 ---
 
