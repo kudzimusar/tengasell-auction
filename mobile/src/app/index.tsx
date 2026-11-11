@@ -1,27 +1,28 @@
-import { Link } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useRouter } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useSession } from "../auth/session-context";
-import { formatRemaining, formatUSD, remainingSeverity } from "../lib/format";
+import { AuctionCard } from "../components/AuctionCard";
+import { BottomNav } from "../components/BottomNav";
+import { computeGridMetrics } from "../lib/grid-layout";
+import { createRequestGuard } from "../lib/request-guard";
 import { fetchAuctions, fetchCategories, probeCanonical } from "../lib/trailbase";
 import { toAuctionView, type AuctionView, type Category } from "../lib/types";
 import { NxsButton } from "../nxs/components/NxsButton";
 import { useNxs } from "../nxs/context/NxsProvider";
+import { type NxsTranslator } from "../nxs/localization/catalog";
 import { localizeKnownRuntimeMessage } from "../nxs/localization/runtimeMessages";
-import {
-  type NxsTranslator,
-} from "../nxs/localization/catalog";
 import { useNxsText } from "../nxs/localization/useNxsText";
 import type { NxsTheme } from "../nxs/tokens";
 
@@ -39,19 +40,34 @@ function errorMessage(error: unknown, t: NxsTranslator): string {
 
 export default function HomeScreen() {
   const session = useSession();
-  const { theme, screenPadding, windowClass, writingDirection } = useNxs();
+  const router = useRouter();
+  const { width } = useWindowDimensions();
+  const { theme, screenPadding, safeArea, writingDirection } = useNxs();
   const t = useNxsText();
-  const styles = useMemo(
-    () => createStyles(theme, screenPadding, windowClass, writingDirection),
-    [screenPadding, theme, windowClass, writingDirection],
+  const grid = useMemo(
+    () =>
+      computeGridMetrics({
+        viewportWidth: width,
+        columns: 2,
+        padding: screenPadding,
+        safeLeft: safeArea.left,
+        safeRight: safeArea.right,
+      }),
+    [safeArea.left, safeArea.right, screenPadding, width],
   );
+  const styles = useMemo(
+    () => createStyles(theme, screenPadding, writingDirection, grid.containerWidth, grid.gap),
+    [grid.containerWidth, grid.gap, screenPadding, theme, writingDirection],
+  );
+  const listRequestGuard = useRef(createRequestGuard()).current;
   const [authorityState, setAuthorityState] = useState<AuthorityState>("checking");
   const [categories, setCategories] = useState<Category[]>([]);
   const [auctions, setAuctions] = useState<AuctionView[]>([]);
+  const [sold, setSold] = useState<AuctionView[]>([]);
   const [category, setCategory] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [listLoading, setListLoading] = useState(false);
-  const [now, setNow] = useState<number | null>(null);
+  const [now, setNow] = useState<number>(() => Date.now());
 
   useEffect(() => {
     const initialTick = setTimeout(() => setNow(Date.now()), 0);
@@ -63,23 +79,28 @@ export default function HomeScreen() {
   }, []);
 
   const boot = useCallback(async () => {
+    const request = listRequestGuard.next();
     try {
       await probeCanonical();
-      const [nextCategories, nextAuctions] = await Promise.all([
+      const [nextCategories, nextAuctions, nextSold] = await Promise.all([
         fetchCategories(),
         fetchAuctions({ limit: 20 }),
+        fetchAuctions({ status: "sold", limit: 6 }).catch(() => []),
       ]);
+      if (!listRequestGuard.isCurrent(request)) return;
       setCategories(nextCategories);
       setAuctions(nextAuctions.map(toAuctionView));
+      setSold(nextSold.map(toAuctionView));
       setAuthorityState("live");
       setError(null);
     } catch (bootError) {
+      if (!listRequestGuard.isCurrent(request)) return;
       setCategories([]);
       setAuctions([]);
       setAuthorityState("unavailable");
       setError(errorMessage(bootError, t));
     }
-  }, [t]);
+  }, [listRequestGuard, t]);
 
   useEffect(() => {
     const task = setTimeout(() => {
@@ -96,20 +117,24 @@ export default function HomeScreen() {
 
   const loadCategory = useCallback(
     async (slug?: string) => {
+      const request = listRequestGuard.next();
       setCategory(slug);
       setListLoading(true);
       setError(null);
       try {
         const nextAuctions = await fetchAuctions({ category: slug, limit: 40 });
+        if (!listRequestGuard.isCurrent(request)) return;
         setAuctions(nextAuctions.map(toAuctionView));
         setAuthorityState("live");
       } catch (loadError) {
+        if (!listRequestGuard.isCurrent(request)) return;
+        setAuctions([]);
         setError(errorMessage(loadError, t));
       } finally {
-        setListLoading(false);
+        if (listRequestGuard.isCurrent(request)) setListLoading(false);
       }
     },
-    [t],
+    [listRequestGuard, t],
   );
 
   const emptyAction = category ? (
@@ -138,7 +163,7 @@ export default function HomeScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>
+    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <View style={styles.header}>
         <Text style={styles.wordmark} accessibilityRole="header">
           {BRAND_PREFIX}
@@ -326,6 +351,8 @@ export default function HomeScreen() {
           <FlatList
             data={auctions}
             keyExtractor={(item) => String(item.id)}
+            numColumns={2}
+            columnWrapperStyle={styles.columnRow}
             contentContainerStyle={styles.list}
             ListEmptyComponent={
               <View style={styles.emptyState}>
@@ -338,63 +365,39 @@ export default function HomeScreen() {
                 {emptyAction}
               </View>
             }
-            renderItem={({ item }) => {
-              const remainingMs = now === null ? null : Date.parse(item.ends_at) - now;
-              const remaining =
-                remainingMs === null
-                  ? t("home.updatingTime")
-                  : formatRemaining(remainingMs);
-              const severity =
-                remainingMs === null ? "normal" : remainingSeverity(remainingMs);
-              const price = formatUSD(item.current_price);
-
-              return (
-                <View
-                  style={styles.card}
-                  accessible
-                  accessibilityLabel={t("home.auctionA11y", {
-                    title: item.title,
-                    price,
-                    bidCount: item.bid_count,
-                    remaining,
-                  })}
-                >
-                  {item.imageList[0] ? (
-                    <Image
-                      source={{ uri: item.imageList[0] }}
-                      style={styles.cardImg}
-                      resizeMode="cover"
-                      accessible={false}
-                    />
-                  ) : (
-                    <View style={[styles.cardImg, styles.cardImgFallback]} />
-                  )}
-                  <View style={styles.cardBody}>
-                    <Text style={styles.cardTitle}>{item.title}</Text>
-                    <Text style={styles.cardMeta}>
-                      {t("home.auctionMeta", {
-                        price,
-                        bidCount: item.bid_count,
-                        seller: item.seller_username,
-                      })}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.cardTimer,
-                        severity === "urgent" && styles.urgentTimer,
-                      ]}
-                    >
-                      {item.endingSoon
-                        ? t("home.endingSoon", { remaining })
-                        : t("home.timeRemaining", { remaining })}
-                    </Text>
+            renderItem={({ item }) => (
+              <AuctionCard
+                item={item}
+                width={grid.cardWidth}
+                now={now}
+                onPress={() => router.push(`/item/${item.id}` as never)}
+              />
+            )}
+            ListFooterComponent={
+              sold.length > 0 ? (
+                <View style={styles.soldSection}>
+                  <Text style={styles.soldTitle} accessibilityRole="header">
+                    {t("home.recentlySold")}
+                  </Text>
+                  <View style={styles.soldWrap}>
+                    {sold.map((row) => (
+                      <AuctionCard
+                        key={`sold-${row.id}`}
+                        item={row}
+                        width={grid.cardWidth}
+                        now={now}
+                        onPress={() => router.push(`/item/${row.id}` as never)}
+                      />
+                    ))}
                   </View>
                 </View>
-              );
-            }}
+              ) : undefined
+            }
           />
+
         </>
       )}
+      <BottomNav active="home" />
     </SafeAreaView>
   );
 }
@@ -402,10 +405,10 @@ export default function HomeScreen() {
 function createStyles(
   theme: NxsTheme,
   screenPadding: number,
-  windowClass: "compact" | "regular" | "wide",
   writingDirection: "ltr" | "rtl",
+  containerWidth: number,
+  gridGap: number,
 ) {
-  const imageSize = windowClass === "compact" ? 104 : 120;
   const textAlign = writingDirection === "rtl" ? "right" : "left";
   const rowDirection = writingDirection === "rtl" ? "row-reverse" : "row";
 
@@ -558,13 +561,17 @@ function createStyles(
       gap: 8,
       paddingHorizontal: screenPadding,
     },
+    columnRow: {
+      flexDirection: rowDirection,
+      gap: gridGap,
+    },
     list: {
       width: "100%",
-      maxWidth: 920,
+      maxWidth: containerWidth,
       alignSelf: "center",
       flexGrow: 1,
-      padding: screenPadding,
-      gap: 12,
+      paddingHorizontal: screenPadding,
+      paddingVertical: 12,
     },
     emptyState: {
       flexGrow: 1,
@@ -573,35 +580,21 @@ function createStyles(
       gap: 12,
       paddingVertical: 32,
     },
-    card: {
-      flexDirection: rowDirection,
-      backgroundColor: theme.surface.raised,
-      borderRadius: 14,
-      overflow: "hidden",
+    soldSection: {
+      paddingTop: 6,
     },
-    cardImg: { width: imageSize, height: imageSize },
-    cardImgFallback: { backgroundColor: theme.brand.deep },
-    cardBody: { flex: 1, padding: 12, justifyContent: "center", gap: 4 },
-    cardTitle: {
+    soldTitle: {
+      fontSize: 15,
+      lineHeight: 20,
+      fontWeight: "800",
       color: theme.text.primary,
-      fontSize: 16,
-      lineHeight: 24,
-      fontWeight: "700",
+      paddingBottom: 8,
       textAlign,
     },
-    cardMeta: {
-      color: theme.text.secondary,
-      fontSize: 13,
-      lineHeight: 18,
-      textAlign,
+    soldWrap: {
+      flexDirection: rowDirection,
+      flexWrap: "wrap",
+      gap: gridGap,
     },
-    cardTimer: {
-      color: theme.state.warning,
-      fontSize: 13,
-      lineHeight: 18,
-      fontWeight: "700",
-      textAlign,
-    },
-    urgentTimer: { color: theme.state.error, fontWeight: "800" },
   });
 }
