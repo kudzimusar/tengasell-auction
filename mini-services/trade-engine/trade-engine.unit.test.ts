@@ -14,6 +14,7 @@ import {
   timingSafeEqualStr,
   validateClaimTimestamps,
   type CanonicalCheckResult,
+  type Identity,
   type JwtClaims,
 } from "./auth";
 import {
