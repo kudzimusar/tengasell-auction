@@ -49,6 +49,7 @@ export function connectBidding(
   const attempt = ownership.next();
   let latestToken = token;
   const attemptSocket = io(`${base}/?XTransformPort=3002`, {
+    forceNew: true,
     transports: ["websocket", "polling"],
     auth: (cb) => {
       if (!options?.getToken) {
@@ -107,7 +108,10 @@ export function getBiddingSocket(): Socket | null {
   return socket;
 }
 
-export function disconnectBidding(): void {
+export function disconnectBidding(expectedAttempt?: number): void {
+  if (expectedAttempt !== undefined && !ownership.isCurrent(expectedAttempt)) {
+    return;
+  }
   ownership.invalidate();
   if (socket) {
     socket.removeAllListeners();

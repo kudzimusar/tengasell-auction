@@ -13,6 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BottomNav } from "../components/BottomNav";
 import { ListingGrid } from "../components/ListingGrid";
+import { localizedCategoryLabel } from "../lib/format";
 import { createRequestGuard } from "../lib/request-guard";
 import { fetchAuctions, fetchCategories } from "../lib/trailbase";
 import { toAuctionView, type AuctionView, type Category } from "../lib/types";
@@ -120,7 +121,9 @@ export default function SearchScreen() {
             {t("search.browseCategoryTitle")}
           </Text>
           <View style={styles.chips}>
-            {categories.slice(0, 8).map((c) => (
+            {categories.slice(0, 8).map((c) => {
+              const label = localizedCategoryLabel(t, c.slug, c.name);
+              return (
               <Pressable
                 hitSlop={4}
                 key={c.id}
@@ -130,11 +133,12 @@ export default function SearchScreen() {
                   void run(c.name);
                 }}
                 accessibilityRole="button"
-                accessibilityLabel={t("search.chipA11y", { category: c.name })}
+                accessibilityLabel={t("search.chipA11y", { category: label })}
               >
-                <Text style={styles.chipText}>{c.name}</Text>
+                <Text style={styles.chipText}>{label}</Text>
               </Pressable>
-            ))}
+              );
+            })}
           </View>
         </View>
       )}

@@ -15,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useSession } from "../auth/session-context";
 import { AuctionCard } from "../components/AuctionCard";
 import { BottomNav } from "../components/BottomNav";
+import { localizedCategoryLabel } from "../lib/format";
 import { computeGridMetrics } from "../lib/grid-layout";
 import { createRequestGuard } from "../lib/request-guard";
 import { fetchAuctions, fetchCategories, probeCanonical } from "../lib/trailbase";
@@ -312,14 +313,16 @@ export default function HomeScreen() {
                   {t("home.featured")}
                 </Text>
               </Pressable>
-              {categories.map((item) => (
+              {categories.map((item) => {
+                const label = localizedCategoryLabel(t, item.slug, item.name);
+                return (
                 <Pressable
                   key={item.id}
                   onPress={() => void loadCategory(item.slug)}
                   accessibilityRole="button"
                   accessibilityState={{ selected: category === item.slug }}
                   accessibilityLabel={t("home.showCategoryAuctions", {
-                    category: item.name,
+                    category: label,
                   })}
                   hitSlop={4}
                   style={({ pressed }) => [
@@ -334,10 +337,11 @@ export default function HomeScreen() {
                       category === item.slug && styles.chipTextActive,
                     ]}
                   >
-                    {item.name}
+                    {label}
                   </Text>
                 </Pressable>
-              ))}
+                );
+              })}
             </ScrollView>
           </View>
 

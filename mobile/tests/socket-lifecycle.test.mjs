@@ -157,4 +157,16 @@ test("SOCK-16 source: double-tap biddingRef, bidAttemptRef sequence, clientReque
   assert.match(socketSource, /clientRequestId/, "placeBid must transmit clientRequestId");
   assert.match(socketSource, /errorCode:\s*"NOT_CONNECTED"/, "pre-emit guard uses localized code");
   assert.doesNotMatch(socketSource, /Not connected to the live auction engine/);
+
+  // UAT-SOCK-01: rapid item transitions must not tear down a newer screen's socket
+  // or reuse a disconnecting Socket.IO Manager. Fast connects must cancel/prevent
+  // markConnecting from clobbering "connected", and stacked item routes must bind
+  // socket ownership to focus without un-scoped blur teardown.
+  assert.match(socketSource, /forceNew:\s*true/);
+  assert.match(socketSource, /disconnectBidding\(expectedAttempt\?:/);
+  assert.match(itemSource, /if\s*\(s\.connected\s*&&\s*!cancelled\)/);
+  assert.match(itemSource, /disconnectBidding\(attemptEpoch\)/);
+  assert.match(itemSource, /useIsFocused/);
+  assert.match(itemSource, /if\s*\(!cancelled\s*&&\s*!settled\)\s*setEngineStatus\("connecting"\)/);
+  assert.match(itemSource, /if\s*\(!isFocused\)\s*\{[\s\S]*?return\s*\(\)\s*=>/);
 });

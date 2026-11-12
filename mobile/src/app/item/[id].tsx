@@ -3,11 +3,14 @@
 // proxy bids solely through the Socket.IO trade engine (:3002), never a direct
 // record write to `bids` or `auctions`.
 
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -16,7 +19,7 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useSession } from "../../auth/session-context";
 import { runGuardedBid } from "../../bids/bid-completion";
@@ -24,6 +27,7 @@ import { reconcileBidOutcome } from "../../bids/bid-reconcile";
 import { BottomNav } from "../../components/BottomNav";
 import { presentBidOutcome } from "../../lib/bid-copy";
 import {
+  deriveListingState,
   formatDateTime,
   formatRemaining,
   formatUSD,
@@ -50,6 +54,8 @@ import { nxsTokens, type NxsTheme } from "../../nxs/tokens";
 
 export default function ItemScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const isFocused = useIsFocused();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { width } = useWindowDimensions();
   const { theme, screenPadding, safeArea, writingDirection } = useNxs();
@@ -64,6 +70,8 @@ export default function ItemScreen() {
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState<number>(() => Date.now());
   const [hero, setHero] = useState(0);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [bidInputFocused, setBidInputFocused] = useState(false);
   const session = useSession();
   const [bidAmount, setBidAmount] = useState("");
   const [bidding, setBidding] = useState(false);
@@ -148,6 +156,8 @@ export default function ItemScreen() {
 
   useEffect(() => {
     let cancelled = false;
+    let settled = false;
+    let attemptEpoch: number | null = null;
     biddingRef.current = false;
     bidAttemptRef.current += 1;
     // Clear any prior account's bid banner/pending flag whenever auth or item shifts.
@@ -171,9 +181,27 @@ export default function ItemScreen() {
       };
     }
 
+    if (!isFocused) {
+      // Do not call un-scoped disconnectBidding() on blur: the incoming screen
+      // may already own the singleton socket. Previous effect cleanup already
+      // disconnected this screen's own attemptEpoch.
+      const resetUnfocused = setTimeout(() => {
+        if (!cancelled) setEngineStatus("connecting");
+      }, 0);
+      return () => {
+        cancelled = true;
+        clearTimeout(clearStale);
+        clearTimeout(resetUnfocused);
+      };
+    }
+
     const markConnecting = setTimeout(() => {
-      if (!cancelled) setEngineStatus("connecting");
+      if (!cancelled && !settled) setEngineStatus("connecting");
     }, 0);
+    const settle = () => {
+      settled = true;
+      clearTimeout(markConnecting);
+    };
 
     void session
       .withAuthenticatedToken(async (token) => {
@@ -187,6 +215,7 @@ export default function ItemScreen() {
           },
           onAuthRevoked: (revoked) => {
             if (cancelled || !mountedRef.current) return;
+            settle();
             biddingRef.current = false;
             bidAttemptRef.current += 1;
             const message = t(
@@ -199,12 +228,23 @@ export default function ItemScreen() {
           },
           onConnectError: () => {
             if (cancelled || !mountedRef.current) return;
+            settle();
             setEngineStatus((prev) => (prev === "revoked" ? "revoked" : "error"));
           },
         });
-        s.on("connect", () => !cancelled && setEngineStatus("connected"));
+        attemptEpoch = biddingOwnershipToken();
+        if (s.connected && !cancelled) {
+          settle();
+          setEngineStatus("connected");
+        }
+        s.on("connect", () => {
+          if (cancelled) return;
+          settle();
+          setEngineStatus("connected");
+        });
         s.on("disconnect", () => {
           if (!cancelled) {
+            settle();
             setEngineStatus((prev) => (prev === "revoked" ? "revoked" : "connecting"));
           }
         });
@@ -214,6 +254,7 @@ export default function ItemScreen() {
       })
       .catch(() => {
         if (cancelled || !mountedRef.current) return;
+        settle();
         setEngineStatus("error");
         setBidNote({ tone: "error", text: t("item.engineError") });
       });
@@ -221,10 +262,23 @@ export default function ItemScreen() {
       cancelled = true;
       clearTimeout(clearStale);
       clearTimeout(markConnecting);
-      disconnectBidding();
+      if (attemptEpoch !== null) {
+        disconnectBidding(attemptEpoch);
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.phase, session.identity?.id, id, engineAttempt]);
+  }, [session.phase, session.identity?.id, id, engineAttempt, isFocused]);
+
+  useEffect(() => {
+    const showEvt = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvt = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSub = Keyboard.addListener(showEvt, () => setKeyboardOpen(true));
+    const hideSub = Keyboard.addListener(hideEvt, () => setKeyboardOpen(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 30_000);
@@ -264,51 +318,79 @@ export default function ItemScreen() {
   );
   const endsMs = item ? Date.parse(item.ends_at) : Number.NaN;
   const remainingMs = Number.isFinite(endsMs) ? endsMs - now : 0;
-  // Status can lag the clock, and malformed end timestamps fail closed as sold/closed.
-  const sold = item
-    ? ["sold", "ended", "cancelled"].includes(item.status) || !Number.isFinite(endsMs) || remainingMs <= 0
+  const listingState = item ? deriveListingState(item, now) : null;
+  // Status can lag the clock, non-live statuses fail closed, and malformed end timestamps close bidding.
+  const closed = item
+    ? !listingState?.biddable || !Number.isFinite(endsMs) || remainingMs <= 0
     : false;
+  const isSoldStatus = listingState?.availability === "sold";
+  const isNotLiveStatus = listingState?.availability === "not_live";
+  const heroBadgeText = isSoldStatus
+    ? t("auction.soldBadge")
+    : isNotLiveStatus
+      ? t("auction.notLiveBadge")
+      : t("auction.closedBadge");
+  const statusBannerText = isSoldStatus
+    ? t("item.closedBanner")
+    : isNotLiveStatus
+      ? t("item.notLiveBanner")
+      : t("item.endedBanner");
+  const closedSummaryText = item
+    ? isSoldStatus
+      ? t("item.closedSummary", { amount: formatMoney(item.current_price) })
+      : isNotLiveStatus
+        ? t("item.notLiveSummary", { amount: formatMoney(item.current_price) })
+        : t("item.endedSummary", { amount: formatMoney(item.current_price) })
+    : "";
   const severity = item ? remainingSeverity(remainingMs) : "normal";
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-      <View style={styles.topBar}>
-        <Pressable
-          hitSlop={4}
-          onPress={() => router.back()}
-          accessibilityRole="button"
-          accessibilityLabel={t("item.backA11y")}
-          style={({ pressed }) => [styles.backBtn, pressed && styles.pressed]}
-        >
-          <Text style={styles.backGlyph}>‹</Text>
-        </Pressable>
-        <Text style={styles.topTitle} numberOfLines={1} accessibilityRole="header">
-          {item ? item.title : t("item.fallbackTitle")}
-        </Text>
-        <View style={styles.backBtn} />
-      </View>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior="padding"
+      >
+        <View style={styles.topBar}>
+          <Pressable
+            hitSlop={4}
+            onPress={() => router.back()}
+            accessibilityRole="button"
+            accessibilityLabel={t("item.backA11y")}
+            style={({ pressed }) => [styles.backBtn, pressed && styles.pressed]}
+          >
+            <Text style={styles.backGlyph}>{writingDirection === "rtl" ? "›" : "‹"}</Text>
+          </Pressable>
+          <Text style={styles.topTitle} numberOfLines={1} accessibilityRole="header">
+            {item ? item.title : t("item.fallbackTitle")}
+          </Text>
+          <View style={styles.backBtn} />
+        </View>
 
-      {loading ? (
-        <View style={styles.center} accessible accessibilityLiveRegion="polite">
-          <ActivityIndicator
-            color={theme.state.loading}
-            size="large"
-            accessibilityLabel={t("item.loadingA11y")}
-          />
-        </View>
-      ) : error || !item ? (
-        <View style={styles.center}>
-          <Text style={styles.errorTitle} accessibilityRole="header">
-            {t("item.unavailableTitle")}
-          </Text>
-          <Text style={styles.errorBody} accessibilityRole="alert">
-            {error ?? t("item.unavailableFallback")}
-          </Text>
-          <NxsButton label={t("common.tryAgain")} onPress={() => void load()} />
-        </View>
-      ) : (
-        <>
-          <ScrollView contentContainerStyle={styles.scroll}>
+        {loading ? (
+          <View style={styles.center} accessible accessibilityLiveRegion="polite">
+            <ActivityIndicator
+              color={theme.state.loading}
+              size="large"
+              accessibilityLabel={t("item.loadingA11y")}
+            />
+          </View>
+        ) : error || !item ? (
+          <View style={styles.center}>
+            <Text style={styles.errorTitle} accessibilityRole="header">
+              {t("item.unavailableTitle")}
+            </Text>
+            <Text style={styles.errorBody} accessibilityRole="alert">
+              {error ?? t("item.unavailableFallback")}
+            </Text>
+            <NxsButton label={t("common.tryAgain")} onPress={() => void load()} />
+          </View>
+        ) : (
+          <>
+            <ScrollView
+              contentContainerStyle={styles.scroll}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+            >
             <View style={styles.heroWrap}>
               <ScrollView
                 horizontal
@@ -330,12 +412,12 @@ export default function ItemScreen() {
                 ))}
               </ScrollView>
 
-              {sold && (
+              {closed && (
                 <>
                   <View style={styles.soldVeil} pointerEvents="none" />
                   <View style={styles.soldBandWrap} pointerEvents="none">
                     <View style={styles.soldBand}>
-                      <Text style={styles.soldBandText}>{t("auction.soldBadge")}</Text>
+                      <Text style={styles.soldBandText}>{heroBadgeText}</Text>
                     </View>
                   </View>
                 </>
@@ -351,7 +433,7 @@ export default function ItemScreen() {
             </View>
 
             <View style={styles.block}>
-              <Text style={[styles.price, sold && styles.priceSold]}>{formatMoney(item.current_price)}</Text>
+              <Text style={[styles.price, closed && styles.priceSold]}>{formatMoney(item.current_price)}</Text>
               <View style={styles.badges}>
                 <Text style={styles.badge}>{localizedConditionLabel(t, item.condition)}</Text>
                 <Text style={styles.badge}>{localizedCategoryLabel(t, item.category)}</Text>
@@ -368,8 +450,8 @@ export default function ItemScreen() {
                 <Stat label={t("item.viewsLabel")} value={String(item.views)} styles={styles} />
               </View>
 
-              {sold ? (
-                <Text style={styles.closed}>{t("item.closedBanner")}</Text>
+              {closed ? (
+                <Text style={styles.closed}>{statusBannerText}</Text>
               ) : (
                 <Text style={[styles.timer, severity === "urgent" && styles.timerUrgent]}>
                   {t("item.endsInBanner", {
@@ -393,7 +475,7 @@ export default function ItemScreen() {
                   <Text style={styles.sellerMeta}>
                     {t("item.sellerMeta", {
                       city: item.city || t("item.defaultLocation"),
-                      shipping: localizedShippingLabel(t, item.shipping),
+                      shipping: localizedShippingLabel(t, item.shipping, item.shipping_fee),
                     })}
                   </Text>
                 </View>
@@ -419,11 +501,9 @@ export default function ItemScreen() {
           </ScrollView>
 
           <View style={styles.ctaBar}>
-            {sold ? (
+            {closed ? (
               <View style={{ flex: 1, alignItems: "center" }}>
-                <Text style={styles.closed}>
-                  {t("item.closedSummary", { amount: formatMoney(item.current_price) })}
-                </Text>
+                <Text style={styles.closed}>{closedSummaryText}</Text>
               </View>
             ) : session.phase !== "authenticated" ? (
               <>
@@ -465,6 +545,13 @@ export default function ItemScreen() {
                       value={bidAmount}
                       onChangeText={setBidAmount}
                       keyboardType="decimal-pad"
+                      returnKeyType="done"
+                      onFocus={() => setBidInputFocused(true)}
+                      onBlur={() => setBidInputFocused(false)}
+                      onSubmitEditing={() => {
+                        setBidInputFocused(false);
+                        Keyboard.dismiss();
+                      }}
                       style={styles.amountInput}
                       accessibilityLabel={t("item.yourMaxBidA11y")}
                       placeholder={String(minNextBid(item.current_price, item.bid_count))}
@@ -513,14 +600,14 @@ export default function ItemScreen() {
                 ) : (
                   <Pressable
                     hitSlop={4}
-                    disabled={bidding || !engineUp || sold}
+                    disabled={bidding || !engineUp || closed}
                     style={({ pressed }) => [
                       styles.cta,
-                      (bidding || !engineUp || sold) && styles.ctaDisabled,
+                      (bidding || !engineUp || closed) && styles.ctaDisabled,
                       pressed && styles.pressed,
                     ]}
                     onPress={async () => {
-                      if (biddingRef.current || !engineUp || sold) return;
+                      if (biddingRef.current || !engineUp || closed) return;
                       const amount = Number(bidAmount);
                       if (!Number.isFinite(amount) || amount <= 0) {
                         setBidNote({ tone: "error", text: t("item.enterBidAmount") });
@@ -633,9 +720,9 @@ export default function ItemScreen() {
                       }
                     }}
                     accessibilityRole="button"
-                    accessibilityState={{ disabled: bidding || !engineUp || sold }}
+                    accessibilityState={{ disabled: bidding || !engineUp || closed }}
                     accessibilityLabel={
-                      sold
+                      closed
                         ? t("item.ctaClosed")
                         : bidding
                           ? t("item.ctaPlacing")
@@ -643,7 +730,7 @@ export default function ItemScreen() {
                     }
                   >
                     <Text style={styles.ctaText}>
-                      {sold
+                      {closed
                         ? t("item.ctaClosed")
                         : bidding
                           ? t("item.ctaPlacing")
@@ -656,7 +743,38 @@ export default function ItemScreen() {
           </View>
         </>
       )}
-      <BottomNav />
+      {Platform.OS === "ios" &&
+        !closed &&
+        session.phase === "authenticated" &&
+        (keyboardOpen || bidInputFocused) && (
+          <View
+            style={[
+              styles.accessoryBar,
+              !keyboardOpen && insets.bottom > 0 ? { paddingBottom: insets.bottom } : null,
+            ]}
+          >
+            <Pressable
+              hitSlop={4}
+              onPress={() => {
+                setBidInputFocused(false);
+                Keyboard.dismiss();
+              }}
+              style={({ pressed }) => [styles.accessoryBtn, pressed && styles.pressed]}
+              accessibilityRole="button"
+              accessibilityLabel={t("item.doneA11y")}
+            >
+              <Text style={styles.accessoryText}>{t("item.done")}</Text>
+            </Pressable>
+          </View>
+        )}
+      </KeyboardAvoidingView>
+      {!(
+        keyboardOpen ||
+        (Platform.OS === "ios" &&
+          bidInputFocused &&
+          !closed &&
+          session.phase === "authenticated")
+      ) && <BottomNav />}
     </SafeAreaView>
   );
 }
@@ -707,6 +825,7 @@ function makeStyles(
 
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: theme.surface.canvas },
+    flex: { flex: 1 },
     topBar: {
       flexDirection: rowDirection,
       alignItems: "center",
@@ -880,5 +999,23 @@ function makeStyles(
     bidNoteWarn: { color: theme.state.warning },
     bidNoteUnknown: { color: theme.text.secondary },
     ctaText: { color: theme.text.inverse, fontWeight: "800", fontSize: 14 },
+    accessoryBar: {
+      flexDirection: rowDirection,
+      justifyContent: "flex-end",
+      alignItems: "center",
+      paddingHorizontal: screenPadding,
+      paddingVertical: 4,
+      backgroundColor: theme.surface.section,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: theme.border.subtle,
+    },
+    accessoryBtn: {
+      minHeight: nxsTokens.touch.minimum,
+      minWidth: nxsTokens.touch.minimum,
+      paddingHorizontal: 14,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    accessoryText: { color: theme.action.primary, fontWeight: "700", fontSize: 15 },
   });
 }

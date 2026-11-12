@@ -8,6 +8,7 @@ import test from "node:test";
 
 import { computeGridMetrics } from "../src/lib/grid-layout.ts";
 import {
+  deriveListingState,
   formatRemaining,
   localizedCategoryLabel,
   localizedConditionLabel,
@@ -237,17 +238,63 @@ test("MOB2-R1..R4 remediation checks (hero clip, malformed dates, narrow viewpor
   assert.doesNotMatch(itemDetail, /Math\.max\(320,/);
   assert.match(itemDetail, /localizedConditionLabel\(t,\s*item\.condition\)/);
   assert.match(itemDetail, /localizedCategoryLabel\(t,\s*item\.category\)/);
-  assert.match(itemDetail, /localizedShippingLabel\(t,\s*item\.shipping\)/);
+  assert.match(itemDetail, /localizedShippingLabel\(t,\s*item\.shipping,\s*item\.shipping_fee\)/);
   assert.match(itemDetail, /biddingRef\.current/);
   assert.match(itemDetail, /bidAttemptRef\.current/);
   assert.match(itemDetail, /clientRequestId/);
 
-  const card = read("src/components/AuctionCard.tsx");
-  assert.match(card, /Number\.isFinite\(endsMs\)/);
-  assert.match(card, /writingDirection === "rtl"\s*\?\s*\{\s*right:\s*8\s*\}\s*:\s*\{\s*left:\s*8\s*\}/);
+  // UAT regression guards: draft/ended/future-start listing gates, underscore normalization,
+  // complete category slugs, stack titles, and search tap persistence.
+  assert.equal(localizedConditionLabel(tXa, "like_new"), translateNxs("condition.likeNew", "en-XA"));
+  assert.equal(localizedConditionLabel((k) => englishStrings[k], "like_new"), "Like new");
+  assert.equal(localizedCategoryLabel((k) => englishStrings[k], "computers"), "Computers");
+  assert.equal(localizedCategoryLabel((k) => englishStrings[k], "solar-power"), "Solar & Power");
+  assert.equal(localizedCategoryLabel((k) => englishStrings[k], "sports"), "Sports & Hobbies");
+  assert.equal(localizedCategoryLabel((k) => englishStrings[k], "farm-industrial"), "Farm & Industrial");
+  assert.equal(localizedCategoryLabel((k) => englishStrings[k], "books-media"), "Books & Media");
+
+  const nowMs = Date.parse("2026-11-11T12:00:00.000Z");
+  assert.deepEqual(
+    deriveListingState(
+      { status: "draft", ends_at: "2026-11-12T12:00:00.000Z", started_at: "2026-11-11T10:00:00.000Z" },
+      nowMs,
+    ).biddable,
+    false,
+  );
+  assert.equal(
+    deriveListingState(
+      { status: "live", ends_at: "2026-11-12T12:00:00.000Z", started_at: "2026-11-11T13:00:00.000Z" },
+      nowMs,
+    ).availability,
+    "not_live",
+  );
+  assert.equal(
+    deriveListingState(
+      { status: "ended", ends_at: "2026-11-12T12:00:00.000Z", started_at: "2026-11-11T10:00:00.000Z" },
+      nowMs,
+    ).availability,
+    "ended",
+  );
+  assert.equal(
+    deriveListingState(
+      { status: "live", ends_at: "2026-11-12T12:00:00.000Z", started_at: "2026-11-11T10:00:00.000Z" },
+      nowMs,
+    ).biddable,
+    true,
+  );
+
+  const layout = read("src/app/_layout.tsx");
+  assert.match(layout, /name="index"[^>]*title:\s*t\("nav\.home"\)/);
+  assert.match(layout, /name="item\/\[id\]"[^>]*title:\s*t\("item\.fallbackTitle"\)/);
 
   const grid = read("src/components/ListingGrid.tsx");
   assert.match(grid, /flexDirection:\s*rowDirection/);
+  assert.match(grid, /keyboardShouldPersistTaps="handled"/);
+
+  const card = read("src/components/AuctionCard.tsx");
+  assert.match(card, /Number\.isFinite\(endsMs\)/);
+  assert.match(card, /writingDirection === "rtl"\s*\?\s*\{\s*right:\s*8\s*\}\s*:\s*\{\s*left:\s*8\s*\}/);
+  assert.match(card, /auction\.bidCountSingle/);
 
   const search = read("src/app/search.tsx");
   assert.match(search, /categoriesGuard\.isCurrent\(/);

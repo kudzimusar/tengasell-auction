@@ -64,7 +64,12 @@ export function BottomNav({ active }: { active?: TabKey } = {}) {
             <View style={styles.iconWrap}>
               <Glyph name={tab.key} color={color} />
             </View>
-            <Text style={[styles.label, { color }, on && styles.labelActive]} numberOfLines={1}>
+            <Text
+              style={[styles.label, { color }, on && styles.labelActive]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.7}
+            >
               {label}
             </Text>
           </Pressable>
@@ -155,6 +160,7 @@ function makeStyles(theme: NxsTheme, bottomInset: number, writingDirection: "ltr
       alignItems: "center",
       justifyContent: "center",
       gap: 3,
+      paddingHorizontal: 2,
       paddingVertical: 4,
     },
     pressed: { opacity: 0.78 },
