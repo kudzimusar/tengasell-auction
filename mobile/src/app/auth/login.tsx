@@ -203,6 +203,7 @@ export default function LoginScreen() {
                 autoComplete="username"
                 textContentType="username"
                 accessibilityLabel={t("login.emailOrUsername")}
+                testID="login-username-input"
                 returnKeyType="next"
                 onSubmitEditing={() => passwordRef.current?.focus()}
                 blurOnSubmit={false}
@@ -222,6 +223,7 @@ export default function LoginScreen() {
                 autoComplete="current-password"
                 textContentType="password"
                 accessibilityLabel={t("login.password")}
+                testID="login-password-input"
                 onSubmitEditing={() => {
                   if (!submitting) void submit();
                 }}
