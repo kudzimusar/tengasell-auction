@@ -1,21 +1,34 @@
-// MOB-02 — auction detail built on NXS tokens, localization, and responsive geometry.
+// MOB-03 + NXS — auction detail with live bidding over the Socket.IO trade engine.
+// Reads canonical listing state from TrailBase via gateway, and dispatches
+// proxy bids solely through the Socket.IO trade engine (:3002), never a direct
+// record write to `bids` or `auctions`.
 
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
   useWindowDimensions,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { useSession } from "../../auth/session-context";
+import { runGuardedBid } from "../../bids/bid-completion";
+import { reconcileBidOutcome } from "../../bids/bid-reconcile";
+import { AuctionCard } from "../../components/AuctionCard";
 import { BottomNav } from "../../components/BottomNav";
+import { presentBidOutcome } from "../../lib/bid-copy";
 import {
+  deriveListingState,
   formatDateTime,
   formatRemaining,
   formatUSD,
@@ -25,9 +38,22 @@ import {
   minNextBid,
   remainingSeverity,
 } from "../../lib/format";
-import { createRequestGuard } from "../../lib/request-guard";
-import { fetchAuction } from "../../lib/trailbase";
-import { toAuctionView, type AuctionView } from "../../lib/types";
+import {
+  moreFromSeller,
+  similarAuctions,
+  type Recommendation,
+} from "../../lib/recommend";
+import {
+  biddingOwnershipToken,
+  connectBidding,
+  createClientRequestId,
+  disconnectBidding,
+  placeBid,
+} from "../../lib/socket";
+import { fetchAuction, fetchAuctions } from "../../lib/trailbase";
+import { fetchAuctionBids, readCanonicalBidSnapshot } from "../../lib/trailbase-bids";
+import { toAuctionView, type AuctionView, type Bid } from "../../lib/types";
+import { recordViewedItem } from "../../lib/user-store";
 import { NxsButton } from "../../nxs/components/NxsButton";
 import { useNxs } from "../../nxs/context/NxsProvider";
 import { useNxsText } from "../../nxs/localization/useNxsText";
@@ -35,46 +61,284 @@ import { nxsTokens, type NxsTheme } from "../../nxs/tokens";
 
 export default function ItemScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const isFocused = useIsFocused();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { width } = useWindowDimensions();
   const { theme, screenPadding, safeArea, writingDirection } = useNxs();
   const t = useNxsText();
+  const formatMoney = useCallback(
+    (amount: number, opts?: { compact?: boolean }) => formatUSD(amount, { ...opts, t }),
+    [t],
+  );
 
   const [item, setItem] = useState<AuctionView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState<number>(() => Date.now());
   const [hero, setHero] = useState(0);
-  const loadGuard = useRef(createRequestGuard()).current;
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [bidInputFocused, setBidInputFocused] = useState(false);
+  const session = useSession();
+  const [bidAmount, setBidAmount] = useState("");
+  const [bidding, setBidding] = useState(false);
+  const [isWatching, setIsWatching] = useState(false);
+  const [localWatchCount, setLocalWatchCount] = useState<number | null>(null);
+  const [similarItems, setSimilarItems] = useState<Recommendation[]>([]);
+  const [sellerItems, setSellerItems] = useState<AuctionView[]>([]);
+  const [bidNote, setBidNote] = useState<{
+    tone: "success" | "warning" | "error" | "unknown";
+    text: string;
+  } | null>(null);
+  const [engineStatus, setEngineStatus] = useState<
+    "connecting" | "connected" | "error" | "revoked"
+  >("connecting");
+  const engineUp = engineStatus === "connected";
+  const [engineAttempt, setEngineAttempt] = useState(0);
+  const mountedRef = useRef(true);
+  const biddingRef = useRef(false);
+  const bidAttemptRef = useRef(0);
+  const sessionPhaseRef = useRef(session.phase);
+  const withAuthenticatedTokenRef = useRef(session.withAuthenticatedToken);
+  // The session object captured by this render cannot observe a later account
+  // switch. Read identity through a ref that tracks the latest snapshot.
+  const identityRef = useRef<string | null>(session.identity?.id ?? null);
+  const loadSeqRef = useRef(0);
+  const itemRef = useRef<AuctionView | null>(null);
+  const bidsSnapshotRef = useRef<{ auctionId: number; loaded: boolean; bids: Bid[] }>({
+    auctionId: 0,
+    loaded: false,
+    bids: [],
+  });
+
+  const load = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      const seq = ++loadSeqRef.current;
+      const auctionId = Number(id);
+      const silent =
+        opts?.silent === true &&
+        itemRef.current !== null &&
+        itemRef.current.id === auctionId;
+      if (!silent) {
+        setLoading(true);
+        setError(null);
+      }
+      try {
+        const [record, recentBids] = await Promise.all([
+          fetchAuction(auctionId),
+          fetchAuctionBids(auctionId, 15).catch(() => null),
+        ]);
+        if (seq !== loadSeqRef.current || !mountedRef.current) return;
+        if (!record) {
+          if (!silent) {
+            setError(t("item.notFound"));
+            itemRef.current = null;
+            setItem(null);
+            bidsSnapshotRef.current = { auctionId, loaded: false, bids: [] };
+          }
+        } else {
+          const view = toAuctionView(record);
+          itemRef.current = view;
+          setItem(view);
+          if (recentBids !== null) {
+            bidsSnapshotRef.current = { auctionId, loaded: true, bids: recentBids };
+          }
+          setBidAmount((current) => current || String(minNextBid(view.current_price, view.bid_count)));
+
+          // Fetch contextual recommendations and record on-device viewed listing
+          fetchAuctions({ limit: 40 })
+            .then((pool) => {
+              if (seq !== loadSeqRef.current || !mountedRef.current) return;
+              const views = pool.map(toAuctionView);
+              const sim = similarAuctions(view, views, {
+                now: Date.now(),
+                limit: 4,
+                liveOnly: false,
+              });
+              const sel = moreFromSeller(view, views, {
+                now: Date.now(),
+                limit: 4,
+                liveOnly: false,
+              });
+              setSimilarItems(sim);
+              setSellerItems(sel);
+            })
+            .catch((_recErr) => {
+              // Non-fatal recommendation failure
+            });
+
+          void recordViewedItem(view, identityRef.current);
+        }
+      } catch (e) {
+        if (seq !== loadSeqRef.current || !mountedRef.current) return;
+        if (!silent) {
+          setError(e instanceof Error ? e.message : t("item.reachFailed"));
+        }
+      } finally {
+        if (seq === loadSeqRef.current && mountedRef.current && !silent) {
+          setLoading(false);
+        }
+      }
+    },
+    [id, t],
+  );
+
+  // Live engine connection (MOB-03): token from the session, socket to :3002.
+  useEffect(() => {
+    sessionPhaseRef.current = session.phase;
+    withAuthenticatedTokenRef.current = session.withAuthenticatedToken;
+  }, [session.phase, session.withAuthenticatedToken]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let settled = false;
+    let attemptEpoch: number | null = null;
+    biddingRef.current = false;
+    bidAttemptRef.current += 1;
+    // Clear any prior account's bid banner/pending flag whenever auth or item shifts.
+    const clearStale = setTimeout(() => {
+      if (!cancelled) {
+        setBidNote(null);
+        setBidding(false);
+      }
+    }, 0);
+    if (session.phase !== "authenticated") {
+      disconnectBidding();
+      // Deferred: resetting the flag synchronously inside the effect would
+      // cascade a render. The CTA must not stay enabled once the session is gone.
+      const reset = setTimeout(() => {
+        if (!cancelled) setEngineStatus("connecting");
+      }, 0);
+      return () => {
+        cancelled = true;
+        clearTimeout(clearStale);
+        clearTimeout(reset);
+      };
+    }
+
+    if (!isFocused) {
+      // Do not call un-scoped disconnectBidding() on blur: the incoming screen
+      // may already own the singleton socket. Previous effect cleanup already
+      // disconnected this screen's own attemptEpoch.
+      const resetUnfocused = setTimeout(() => {
+        if (!cancelled) setEngineStatus("connecting");
+      }, 0);
+      return () => {
+        cancelled = true;
+        clearTimeout(clearStale);
+        clearTimeout(resetUnfocused);
+      };
+    }
+
+    const markConnecting = setTimeout(() => {
+      if (!cancelled && !settled) setEngineStatus("connecting");
+    }, 0);
+    const settle = () => {
+      settled = true;
+      clearTimeout(markConnecting);
+    };
+
+    void session
+      .withAuthenticatedToken(async (token) => {
+        // The token refresh can resolve after this effect was torn down; a
+        // connect at that point would dispose whatever socket now owns bidding.
+        if (cancelled) return;
+        const s = connectBidding(token, {
+          getToken: async () => {
+            if (cancelled || sessionPhaseRef.current !== "authenticated") return null;
+            return withAuthenticatedTokenRef.current(async (fresh) => fresh);
+          },
+          onAuthRevoked: (revoked) => {
+            if (cancelled || !mountedRef.current) return;
+            settle();
+            biddingRef.current = false;
+            bidAttemptRef.current += 1;
+            const message = t(
+              revoked.code === "AUTH_EXPIRED" ? "bid.code.AUTH_EXPIRED" : "bid.code.AUTH_REVOKED",
+            );
+            setBidding(false);
+            setEngineStatus("revoked");
+            setBidNote({ tone: "error", text: message });
+            void session.invalidateSession(message);
+          },
+          onConnectError: () => {
+            if (cancelled || !mountedRef.current) return;
+            settle();
+            setEngineStatus((prev) => (prev === "revoked" ? "revoked" : "error"));
+          },
+        });
+        attemptEpoch = biddingOwnershipToken();
+        if (s.connected && !cancelled) {
+          settle();
+          setEngineStatus("connected");
+        }
+        s.on("connect", () => {
+          if (cancelled) return;
+          settle();
+          setEngineStatus("connected");
+        });
+        s.on("disconnect", () => {
+          if (!cancelled) {
+            settle();
+            setEngineStatus((prev) => (prev === "revoked" ? "revoked" : "connecting"));
+          }
+        });
+        s.on("auction:update", (payload: { auction?: { id: number } }) => {
+          if (!cancelled && payload?.auction?.id === Number(id)) void load({ silent: true });
+        });
+      })
+      .catch(() => {
+        if (cancelled || !mountedRef.current) return;
+        settle();
+        setEngineStatus("error");
+        setBidNote({ tone: "error", text: t("item.engineError") });
+      });
+    return () => {
+      cancelled = true;
+      clearTimeout(clearStale);
+      clearTimeout(markConnecting);
+      if (attemptEpoch !== null) {
+        disconnectBidding(attemptEpoch);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.phase, session.identity?.id, id, engineAttempt, isFocused]);
+
+  useEffect(() => {
+    const showEvt = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvt = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSub = Keyboard.addListener(showEvt, () => setKeyboardOpen(true));
+    const hideSub = Keyboard.addListener(hideEvt, () => setKeyboardOpen(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(timer);
   }, []);
 
-  const load = useCallback(async () => {
-    const req = loadGuard.next();
-    setLoading(true);
-    setError(null);
-    try {
-      const record = await fetchAuction(Number(id));
-      if (!loadGuard.isCurrent(req)) return;
-      if (!record) {
-        setError(t("item.notFound"));
-        setItem(null);
-      } else {
-        setItem(toAuctionView(record));
-      }
-    } catch (e) {
-      if (!loadGuard.isCurrent(req)) return;
-      setError(e instanceof Error ? e.message : t("item.reachFailed"));
-    } finally {
-      if (loadGuard.isCurrent(req)) setLoading(false);
-    }
-  }, [id, loadGuard, t]);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
+    identityRef.current = session.identity?.id ?? null;
+  }, [session.identity?.id]);
+
+  useEffect(() => {
+    // Deferred one tick so the first paint is not blocked by a synchronous
+    // state update inside the effect. Reset per-listing fields only when the
+    // route `id` changes; live `auction:update` calls `load()` directly.
     const task = setTimeout(() => {
+      setHero(0);
+      setBidAmount("");
+      setBidNote(null);
       void load();
     }, 0);
     return () => clearTimeout(task);
@@ -89,51 +353,79 @@ export default function ItemScreen() {
   );
   const endsMs = item ? Date.parse(item.ends_at) : Number.NaN;
   const remainingMs = Number.isFinite(endsMs) ? endsMs - now : 0;
-  // Status can lag the clock, and malformed end timestamps fail closed as sold/closed.
-  const sold = item
-    ? ["sold", "ended", "cancelled"].includes(item.status) || !Number.isFinite(endsMs) || remainingMs <= 0
+  const listingState = item ? deriveListingState(item, now) : null;
+  // Status can lag the clock, non-live statuses fail closed, and malformed end timestamps close bidding.
+  const closed = item
+    ? !listingState?.biddable || !Number.isFinite(endsMs) || remainingMs <= 0
     : false;
+  const isSoldStatus = listingState?.availability === "sold";
+  const isNotLiveStatus = listingState?.availability === "not_live";
+  const heroBadgeText = isSoldStatus
+    ? t("auction.soldBadge")
+    : isNotLiveStatus
+      ? t("auction.notLiveBadge")
+      : t("auction.closedBadge");
+  const statusBannerText = isSoldStatus
+    ? t("item.closedBanner")
+    : isNotLiveStatus
+      ? t("item.notLiveBanner")
+      : t("item.endedBanner");
+  const closedSummaryText = item
+    ? isSoldStatus
+      ? t("item.closedSummary", { amount: formatMoney(item.current_price) })
+      : isNotLiveStatus
+        ? t("item.notLiveSummary", { amount: formatMoney(item.current_price) })
+        : t("item.endedSummary", { amount: formatMoney(item.current_price) })
+    : "";
   const severity = item ? remainingSeverity(remainingMs) : "normal";
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-      <View style={styles.topBar}>
-        <Pressable
-          hitSlop={4}
-          onPress={() => router.back()}
-          accessibilityRole="button"
-          accessibilityLabel={t("item.backA11y")}
-          style={({ pressed }) => [styles.backBtn, pressed && styles.pressed]}
-        >
-          <Text style={styles.backGlyph}>‹</Text>
-        </Pressable>
-        <Text style={styles.topTitle} numberOfLines={1} accessibilityRole="header">
-          {item ? item.title : t("item.fallbackTitle")}
-        </Text>
-        <View style={styles.backBtn} />
-      </View>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior="padding"
+      >
+        <View style={styles.topBar}>
+          <Pressable
+            hitSlop={4}
+            onPress={() => router.back()}
+            accessibilityRole="button"
+            accessibilityLabel={t("item.backA11y")}
+            style={({ pressed }) => [styles.backBtn, pressed && styles.pressed]}
+          >
+            <Text style={styles.backGlyph}>{writingDirection === "rtl" ? "›" : "‹"}</Text>
+          </Pressable>
+          <Text style={styles.topTitle} numberOfLines={1} accessibilityRole="header">
+            {item ? item.title : t("item.fallbackTitle")}
+          </Text>
+          <View style={styles.backBtn} />
+        </View>
 
-      {loading ? (
-        <View style={styles.center} accessible accessibilityLiveRegion="polite">
-          <ActivityIndicator
-            color={theme.state.loading}
-            size="large"
-            accessibilityLabel={t("item.loadingA11y")}
-          />
-        </View>
-      ) : error || !item ? (
-        <View style={styles.center}>
-          <Text style={styles.errorTitle} accessibilityRole="header">
-            {t("item.unavailableTitle")}
-          </Text>
-          <Text style={styles.errorBody} accessibilityRole="alert">
-            {error ?? t("item.unavailableFallback")}
-          </Text>
-          <NxsButton label={t("common.tryAgain")} onPress={() => void load()} />
-        </View>
-      ) : (
-        <>
-          <ScrollView contentContainerStyle={styles.scroll}>
+        {loading ? (
+          <View style={styles.center} accessible accessibilityLiveRegion="polite">
+            <ActivityIndicator
+              color={theme.state.loading}
+              size="large"
+              accessibilityLabel={t("item.loadingA11y")}
+            />
+          </View>
+        ) : error || !item ? (
+          <View style={styles.center}>
+            <Text style={styles.errorTitle} accessibilityRole="header">
+              {t("item.unavailableTitle")}
+            </Text>
+            <Text style={styles.errorBody} accessibilityRole="alert">
+              {error ?? t("item.unavailableFallback")}
+            </Text>
+            <NxsButton label={t("common.tryAgain")} onPress={() => void load()} />
+          </View>
+        ) : (
+          <>
+            <ScrollView
+              contentContainerStyle={styles.scroll}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+            >
             <View style={styles.heroWrap}>
               <ScrollView
                 horizontal
@@ -155,12 +447,12 @@ export default function ItemScreen() {
                 ))}
               </ScrollView>
 
-              {sold && (
+              {closed && (
                 <>
                   <View style={styles.soldVeil} pointerEvents="none" />
                   <View style={styles.soldBandWrap} pointerEvents="none">
                     <View style={styles.soldBand}>
-                      <Text style={styles.soldBandText}>{t("auction.soldBadge")}</Text>
+                      <Text style={styles.soldBandText}>{heroBadgeText}</Text>
                     </View>
                   </View>
                 </>
@@ -176,7 +468,41 @@ export default function ItemScreen() {
             </View>
 
             <View style={styles.block}>
-              <Text style={[styles.price, sold && styles.priceSold]}>{formatUSD(item.current_price)}</Text>
+              <View style={styles.priceRow}>
+                <Text style={[styles.price, closed && styles.priceSold]}>{formatMoney(item.current_price)}</Text>
+                <Pressable
+                  hitSlop={4}
+                  style={({ pressed }) => [
+                    styles.watchBtn,
+                    isWatching && styles.watchBtnActive,
+                    pressed && styles.pressed,
+                  ]}
+                  onPress={() => {
+                    setIsWatching((prev) => {
+                      const next = !prev;
+                      setLocalWatchCount((cnt) => {
+                        const base = cnt ?? item?.watch_count ?? 0;
+                        return next ? base + 1 : Math.max(0, base - 1);
+                      });
+                      return next;
+                    });
+                  }}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isWatching }}
+                  accessibilityLabel={isWatching ? t("item.unwatchA11y") : t("item.watchA11y")}
+                >
+                  <Text style={[styles.watchBtnText, isWatching && styles.watchBtnTextActive]}>
+                    {isWatching ? t("item.watching") : t("item.watch")}
+                  </Text>
+                </Pressable>
+              </View>
+
+              {item.buy_now_price != null && (
+                <Text style={styles.buyNowText}>
+                  {t("item.buyNowPrice", { amount: formatMoney(item.buy_now_price) })}
+                </Text>
+              )}
+
               <View style={styles.badges}>
                 <Text style={styles.badge}>{localizedConditionLabel(t, item.condition)}</Text>
                 <Text style={styles.badge}>{localizedCategoryLabel(t, item.category)}</Text>
@@ -189,12 +515,12 @@ export default function ItemScreen() {
 
               <View style={styles.statRow}>
                 <Stat label={t("item.bidsLabel")} value={String(item.bid_count)} styles={styles} />
-                <Stat label={t("item.watchingLabel")} value={String(item.watch_count)} styles={styles} />
+                <Stat label={t("item.watchingLabel")} value={String(localWatchCount ?? item.watch_count)} styles={styles} />
                 <Stat label={t("item.viewsLabel")} value={String(item.views)} styles={styles} />
               </View>
 
-              {sold ? (
-                <Text style={styles.closed}>{t("item.closedBanner")}</Text>
+              {closed ? (
+                <Text style={styles.closed}>{statusBannerText}</Text>
               ) : (
                 <Text style={[styles.timer, severity === "urgent" && styles.timerUrgent]}>
                   {t("item.endsInBanner", {
@@ -218,7 +544,7 @@ export default function ItemScreen() {
                   <Text style={styles.sellerMeta}>
                     {t("item.sellerMeta", {
                       city: item.city || t("item.defaultLocation"),
-                      shipping: localizedShippingLabel(t, item.shipping),
+                      shipping: localizedShippingLabel(t, item.shipping, item.shipping_fee),
                     })}
                   </Text>
                 </View>
@@ -234,40 +560,355 @@ export default function ItemScreen() {
 
             <View style={styles.block}>
               <Text style={styles.sectionTitle} accessibilityRole="header">
+                {t("item.conditionNotesTitle")}
+              </Text>
+              <Text style={styles.body}>
+                {t("item.conditionNoteText", { condition: localizedConditionLabel(t, item.condition) })}
+              </Text>
+              <Text style={styles.confidenceText}>{t("item.sellerConfidence")}</Text>
+            </View>
+
+            <View style={styles.block}>
+              <Text style={styles.sectionTitle} accessibilityRole="header">
+                {t("item.fulfilmentTitle")}
+              </Text>
+              <Row
+                k={t("item.shippingFee")}
+                v={localizedShippingLabel(t, item.shipping, item.shipping_fee)}
+                styles={styles}
+              />
+              <Row k={t("item.location")} v={item.city || t("item.defaultLocation")} styles={styles} />
+              <Text style={styles.fulfilmentNote}>{t("item.deliveryEstimate")}</Text>
+              <Text style={styles.fulfilmentNote}>{t("item.pickupAvailable")}</Text>
+            </View>
+
+            <View style={styles.block}>
+              <Text style={styles.sectionTitle} accessibilityRole="header">
                 {t("item.detailsTitle")}
               </Text>
-              <Row k={t("item.startingPrice")} v={formatUSD(item.start_price)} styles={styles} />
-              <Row k={t("item.shippingFee")} v={formatUSD(item.shipping_fee)} styles={styles} />
+              <Row k={t("item.startingPrice")} v={formatMoney(item.start_price)} styles={styles} />
+              <Row k={t("item.shippingFee")} v={formatMoney(item.shipping_fee)} styles={styles} />
               <Row k={t("item.location")} v={item.city || "—"} styles={styles} />
               <Row k={t("item.listingId")} v={String(item.id)} styles={styles} />
             </View>
+
+            {similarItems.length > 0 && (
+              <View style={styles.block}>
+                <Text style={styles.sectionTitle} accessibilityRole="header">
+                  {t("rec.similarAuctions")}
+                </Text>
+                <View style={styles.recGrid}>
+                  {similarItems.map((rec) => (
+                    <AuctionCard
+                      key={`sim-${rec.item.id}`}
+                      item={rec.item}
+                      width={Math.max(140, (heroWidth - screenPadding * 2 - 12) / 2)}
+                      now={now}
+                      onPress={() => router.push(`/item/${rec.item.id}` as never)}
+                    />
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {sellerItems.length > 0 && (
+              <View style={styles.block}>
+                <Text style={styles.sectionTitle} accessibilityRole="header">
+                  {t("rec.moreFromSeller", { seller: item.seller_username })}
+                </Text>
+                <View style={styles.recGrid}>
+                  {sellerItems.map((sel) => (
+                    <AuctionCard
+                      key={`seller-${sel.id}`}
+                      item={sel}
+                      width={Math.max(140, (heroWidth - screenPadding * 2 - 12) / 2)}
+                      now={now}
+                      onPress={() => router.push(`/item/${sel.id}` as never)}
+                    />
+                  ))}
+                </View>
+              </View>
+            )}
           </ScrollView>
 
           <View style={styles.ctaBar}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.ctaPrice}>{formatUSD(item.current_price)}</Text>
-              <Text style={styles.ctaSub}>
-                {sold
-                  ? t("auction.closedLabel")
-                  : t("item.nextBid", {
-                      amount: formatUSD(minNextBid(item.current_price, item.bid_count)),
-                    })}
-              </Text>
-            </View>
-            <Pressable
-              hitSlop={4}
-              disabled
-              style={[styles.cta, styles.ctaDisabled]}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: true }}
-              accessibilityLabel={sold ? t("item.closedCta") : t("item.biddingNextCta")}
-            >
-              <Text style={styles.ctaText}>{sold ? t("item.closedCta") : t("item.biddingNextCta")}</Text>
-            </Pressable>
+            {closed ? (
+              <View style={{ flex: 1, alignItems: "center" }}>
+                <Text style={styles.closed}>{closedSummaryText}</Text>
+              </View>
+            ) : session.phase !== "authenticated" ? (
+              <>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.ctaPrice}>{formatMoney(item.current_price)}</Text>
+                  <Text style={styles.ctaSub}>
+                    {session.phase === "session-invalid"
+                      ? t("item.authRevokedBanner")
+                      : t("item.nextMinimum", {
+                          amount: formatMoney(minNextBid(item.current_price, item.bid_count)),
+                        })}
+                  </Text>
+                </View>
+                <Pressable
+                  hitSlop={4}
+                  style={({ pressed }) => [styles.cta, pressed && styles.pressed]}
+                  onPress={() => router.push("/auth/login" as never)}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("item.signInToBidA11y")}
+                >
+                  <Text style={styles.ctaText}>{t("item.signInToBid")}</Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={styles.ctaSub}>
+                    {engineStatus === "connected"
+                      ? t("item.engineConnected")
+                      : engineStatus === "revoked"
+                        ? t("item.engineRevoked")
+                        : engineStatus === "error"
+                          ? t("item.engineError")
+                          : t("item.engineConnecting")}
+                  </Text>
+                  <View style={styles.amountRow}>
+                    <Text style={styles.amountPrefix}>{t("item.currencyPrefix")}</Text>
+                    <TextInput
+                      value={bidAmount}
+                      onChangeText={setBidAmount}
+                      keyboardType="decimal-pad"
+                      returnKeyType="done"
+                      onFocus={() => setBidInputFocused(true)}
+                      onBlur={() => setBidInputFocused(false)}
+                      onSubmitEditing={() => {
+                        setBidInputFocused(false);
+                        Keyboard.dismiss();
+                      }}
+                      style={styles.amountInput}
+                      accessibilityLabel={t("item.yourMaxBidA11y")}
+                      placeholder={String(minNextBid(item.current_price, item.bid_count))}
+                      placeholderTextColor={theme.text.secondary}
+                    />
+                  </View>
+                  {bidNote && (
+                    <Text
+                      accessibilityRole="alert"
+                      style={[
+                        styles.bidNote,
+                        bidNote.tone === "success" && styles.bidNoteOk,
+                        bidNote.tone === "warning" && styles.bidNoteWarn,
+                        bidNote.tone === "error" && styles.bidNoteBad,
+                        bidNote.tone === "unknown" && styles.bidNoteUnknown,
+                      ]}
+                    >
+                      {bidNote.text}
+                    </Text>
+                  )}
+                </View>
+                {engineStatus === "revoked" ? (
+                  <Pressable
+                    hitSlop={4}
+                    style={({ pressed }) => [styles.cta, pressed && styles.pressed]}
+                    onPress={() => router.push("/auth/login" as never)}
+                    testID="place-bid-button"
+                    accessibilityRole="button"
+                    accessibilityLabel={t("item.engineRevokedSignInA11y")}
+                  >
+                    <Text style={styles.ctaText}>{t("item.signInToBid")}</Text>
+                  </Pressable>
+                ) : engineStatus === "error" ? (
+                  <Pressable
+                    hitSlop={4}
+                    style={({ pressed }) => [styles.cta, pressed && styles.pressed]}
+                    onPress={() => {
+                      setBidNote(null);
+                      setEngineStatus("connecting");
+                      setEngineAttempt((n) => n + 1);
+                    }}
+                    testID="place-bid-button"
+                    accessibilityRole="button"
+                    accessibilityLabel={t("item.engineErrorRetryA11y")}
+                  >
+                    <Text style={styles.ctaText}>{t("item.engineRetry")}</Text>
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    hitSlop={4}
+                    disabled={bidding || !engineUp || closed}
+                    style={({ pressed }) => [
+                      styles.cta,
+                      (bidding || !engineUp || closed) && styles.ctaDisabled,
+                      pressed && styles.pressed,
+                    ]}
+                    onPress={async () => {
+                      if (biddingRef.current || !engineUp || closed) return;
+                      const amount = Number(bidAmount);
+                      if (!Number.isFinite(amount) || amount <= 0) {
+                        setBidNote({ tone: "error", text: t("item.enterBidAmount") });
+                        return;
+                      }
+                      // The field is prefilled from the tiered minimum, but typing
+                      // is free: refuse locally rather than round-tripping a bid
+                      // the engine will reject.
+                      const minimum = minNextBid(item.current_price, item.bid_count);
+                      if (amount < minimum) {
+                        setBidNote({
+                          tone: "error",
+                          text: t("item.minBidError", { amount: formatMoney(minimum) }),
+                        });
+                        return;
+                      }
+                      biddingRef.current = true;
+                      const attemptSeq = ++bidAttemptRef.current;
+                      const clientRequestId = createClientRequestId();
+                      setBidding(true);
+                      setBidNote(null);
+
+                      const targetAuctionId = item.id;
+                      const buyerIdentityId = identityRef.current;
+                      const baselineBidCount = item.bid_count;
+                      const snap = bidsSnapshotRef.current;
+                      const baselineTopBidId =
+                        snap.auctionId === targetAuctionId && snap.loaded
+                          ? (snap.bids[0]?.id ?? 0)
+                          : null;
+
+                      // CLOSE-02 / CERT-02: the completion and any canonical
+                      // post-ack reconciliation are published only while this
+                      // screen, this session, this connection, and this attempt
+                      // still own it.
+                      try {
+                        await runGuardedBid({
+                          guard: {
+                            sessionGeneration: () => session.sessionGeneration(),
+                            identityId: () => identityRef.current,
+                            isConnectionCurrent: (epoch) => biddingOwnershipToken() === epoch,
+                            isMounted: () => mountedRef.current,
+                          },
+                          takeOwnership: () => ({
+                            sessionGeneration: session.sessionGeneration(),
+                            identityId: buyerIdentityId,
+                            connectionEpoch: biddingOwnershipToken(),
+                          }),
+                          place: () => placeBid(targetAuctionId, amount, { clientRequestId }),
+                          reconcile: async (outcome) => {
+                            const reconciled = await reconcileBidOutcome(
+                              outcome,
+                              {
+                                auctionId: targetAuctionId,
+                                identityId: buyerIdentityId,
+                                maxAmount: amount,
+                                beforeTopBidId: baselineTopBidId,
+                                beforeBidCount: baselineBidCount,
+                              },
+                              formatMoney,
+                              readCanonicalBidSnapshot,
+                              t,
+                            );
+                            return (
+                              reconciled ?? {
+                                outcome,
+                                presentation: presentBidOutcome(outcome, formatMoney, t),
+                                auction: null,
+                              }
+                            );
+                          },
+                          publish: (reconciled) => {
+                            if (bidAttemptRef.current !== attemptSeq) return;
+                            biddingRef.current = false;
+                            const presented =
+                              reconciled.presentation ??
+                              presentBidOutcome(reconciled.outcome, formatMoney, t);
+                            if (reconciled.auction) {
+                              const nextView = toAuctionView(reconciled.auction);
+                              itemRef.current = nextView;
+                              setItem(nextView);
+                            }
+                            if (reconciled.bids) {
+                              bidsSnapshotRef.current = {
+                                auctionId: targetAuctionId,
+                                loaded: true,
+                                bids: reconciled.bids,
+                              };
+                            }
+                            setBidNote({ tone: presented.tone, text: presented.text });
+                            setBidding(false);
+                            // CLOSE-01: keep UI synchronized silently without blanking bidNote.
+                            if (reconciled.outcome.ok || presented.reconcile) {
+                              void load({ silent: true });
+                            }
+                          },
+                          onDiscarded: () => {
+                            // No result is claimed. Only clear busy state if no newer
+                            // bid attempt owns the ref/spinner.
+                            if (bidAttemptRef.current !== attemptSeq) return;
+                            biddingRef.current = false;
+                            if (mountedRef.current) setBidding(false);
+                          },
+                        });
+                      } finally {
+                        if (bidAttemptRef.current === attemptSeq) {
+                          biddingRef.current = false;
+                          if (mountedRef.current) setBidding(false);
+                        }
+                      }
+                    }}
+                    testID="place-bid-button"
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: bidding || !engineUp || closed }}
+                    accessibilityLabel={
+                      closed
+                        ? t("item.ctaClosed")
+                        : bidding
+                          ? t("item.ctaPlacing")
+                          : t("item.ctaPlaceBid")
+                    }
+                  >
+                    <Text style={styles.ctaText}>
+                      {closed
+                        ? t("item.ctaClosed")
+                        : bidding
+                          ? t("item.ctaPlacing")
+                          : t("item.ctaPlaceBid")}
+                    </Text>
+                  </Pressable>
+                )}
+              </>
+            )}
           </View>
         </>
       )}
-      <BottomNav />
+      {Platform.OS === "ios" &&
+        !closed &&
+        session.phase === "authenticated" &&
+        (keyboardOpen || bidInputFocused) && (
+          <View
+            style={[
+              styles.accessoryBar,
+              !keyboardOpen && insets.bottom > 0 ? { paddingBottom: insets.bottom } : null,
+            ]}
+          >
+            <Pressable
+              hitSlop={4}
+              onPress={() => {
+                setBidInputFocused(false);
+                Keyboard.dismiss();
+              }}
+              style={({ pressed }) => [styles.accessoryBtn, pressed && styles.pressed]}
+              accessibilityRole="button"
+              accessibilityLabel={t("item.doneA11y")}
+            >
+              <Text style={styles.accessoryText}>{t("item.done")}</Text>
+            </Pressable>
+          </View>
+        )}
+      </KeyboardAvoidingView>
+      {!(
+        keyboardOpen ||
+        (Platform.OS === "ios" &&
+          bidInputFocused &&
+          !closed &&
+          session.phase === "authenticated")
+      ) && <BottomNav />}
     </SafeAreaView>
   );
 }
@@ -318,6 +959,7 @@ function makeStyles(
 
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: theme.surface.canvas },
+    flex: { flex: 1 },
     topBar: {
       flexDirection: rowDirection,
       alignItems: "center",
@@ -396,6 +1038,61 @@ function makeStyles(
       paddingVertical: 14,
       gap: 8,
     },
+    priceRow: {
+      flexDirection: rowDirection,
+      justifyContent: "space-between",
+      alignItems: "center",
+      minHeight: 48,
+    },
+    watchBtn: {
+      minHeight: nxsTokens.touch.minimum,
+      minWidth: nxsTokens.touch.minimum,
+      paddingHorizontal: 14,
+      borderRadius: nxsTokens.radius.pill,
+      borderWidth: 1,
+      borderColor: theme.action.primary,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    watchBtnActive: {
+      backgroundColor: theme.surface.primaryTint,
+      borderColor: theme.action.primary,
+    },
+    watchBtnText: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: theme.action.primary,
+      textAlign: "center",
+    },
+    watchBtnTextActive: {
+      fontWeight: "800",
+    },
+    buyNowText: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: theme.brand.accent,
+      textAlign,
+    },
+    confidenceText: {
+      fontSize: 12,
+      color: theme.state.success,
+      fontWeight: "600",
+      marginTop: 4,
+      textAlign,
+    },
+    fulfilmentNote: {
+      fontSize: 12,
+      color: theme.text.secondary,
+      lineHeight: 18,
+      marginTop: 4,
+      textAlign,
+    },
+    recGrid: {
+      flexDirection: rowDirection,
+      flexWrap: "wrap",
+      gap: 10,
+      marginTop: 8,
+    },
     price: { fontSize: 26, fontWeight: "900", color: theme.state.warning, letterSpacing: -0.6, textAlign },
     priceSold: { color: theme.state.disabled, textDecorationLine: "line-through" },
     badges: { flexDirection: rowDirection, gap: 6, flexWrap: "wrap" },
@@ -469,6 +1166,45 @@ function makeStyles(
       backgroundColor: theme.action.primary,
     },
     ctaDisabled: { backgroundColor: theme.state.disabled },
+    amountRow: { flexDirection: rowDirection, alignItems: "center", gap: 4 },
+    amountPrefix: { fontSize: 15, fontWeight: "800", color: theme.state.warning },
+    amountInput: {
+      minWidth: 96,
+      minHeight: nxsTokens.touch.minimum,
+      paddingVertical: 10,
+      paddingHorizontal: 10,
+      borderWidth: 1.5,
+      borderColor: theme.action.primary,
+      borderRadius: nxsTokens.radius.input,
+      fontSize: 15,
+      fontWeight: "700",
+      color: theme.text.primary,
+      backgroundColor: theme.surface.raised,
+      textAlign,
+    },
+    bidNote: { fontSize: 12, lineHeight: 16, marginTop: 2, textAlign },
+    bidNoteOk: { color: theme.state.success },
+    bidNoteBad: { color: theme.state.error },
+    bidNoteWarn: { color: theme.state.warning },
+    bidNoteUnknown: { color: theme.text.secondary },
     ctaText: { color: theme.text.inverse, fontWeight: "800", fontSize: 14 },
+    accessoryBar: {
+      flexDirection: rowDirection,
+      justifyContent: "flex-end",
+      alignItems: "center",
+      paddingHorizontal: screenPadding,
+      paddingVertical: 4,
+      backgroundColor: theme.surface.section,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: theme.border.subtle,
+    },
+    accessoryBtn: {
+      minHeight: nxsTokens.touch.minimum,
+      minWidth: nxsTokens.touch.minimum,
+      paddingHorizontal: 14,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    accessoryText: { color: theme.action.primary, fontWeight: "700", fontSize: 15 },
   });
 }

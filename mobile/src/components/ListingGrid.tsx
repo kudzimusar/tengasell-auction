@@ -44,6 +44,8 @@ export function ListingGrid({ items, now, empty, header, contentPadding }: Props
     <FlatList
       data={items}
       numColumns={2}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
       keyExtractor={(i) => String(i.id)}
       ListHeaderComponent={header ?? undefined}
       columnWrapperStyle={{ flexDirection: rowDirection, gap: metrics.gap }}

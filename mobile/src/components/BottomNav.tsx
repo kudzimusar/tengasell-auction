@@ -1,23 +1,22 @@
-// Five-item bottom navigation, modelled on the requested reference layout:
-// Home · Categories · Search · Orders · You.
-// Icons are drawn with primitives so no icon package is required.
+// Four-item bottom navigation, auction-first layout:
+// Home · Categories · Live · You.
+// Icons are drawn with primitives so no external icon package is required.
 
 import { usePathname, useRouter } from "expo-router";
 import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import type { NxsStringKey } from "../nxs/localization/catalog";
-import { useNxsText } from "../nxs/localization/useNxsText";
 import { useNxs } from "../nxs/context/NxsProvider";
+import { useNxsText } from "../nxs/localization/useNxsText";
 import { nxsTokens, type NxsTheme } from "../nxs/tokens";
 
-type TabKey = "home" | "categories" | "search" | "orders" | "you";
+export type TabKey = "home" | "categories" | "live" | "you";
 
 const TABS: { key: TabKey; labelKey: NxsStringKey; route: string }[] = [
   { key: "home", labelKey: "nav.home", route: "/" },
   { key: "categories", labelKey: "nav.categories", route: "/categories" },
-  { key: "search", labelKey: "nav.search", route: "/search" },
-  { key: "orders", labelKey: "nav.orders", route: "/orders" },
+  { key: "live", labelKey: "nav.live", route: "/live" },
   { key: "you", labelKey: "nav.you", route: "/you" },
 ];
 
@@ -37,13 +36,11 @@ export function BottomNav({ active }: { active?: TabKey } = {}) {
       ? null
       : pathname === "/categories"
         ? "categories"
-        : pathname === "/search"
-          ? "search"
-          : pathname === "/orders"
-            ? "orders"
-            : pathname === "/you"
-              ? "you"
-              : "home");
+        : pathname === "/live"
+          ? "live"
+          : pathname === "/you" || pathname.startsWith("/account")
+            ? "you"
+            : "home");
 
   return (
     <View style={styles.bar}>
@@ -64,7 +61,12 @@ export function BottomNav({ active }: { active?: TabKey } = {}) {
             <View style={styles.iconWrap}>
               <Glyph name={tab.key} color={color} />
             </View>
-            <Text style={[styles.label, { color }, on && styles.labelActive]} numberOfLines={1}>
+            <Text
+              style={[styles.label, { color }, on && styles.labelActive]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.7}
+            >
               {label}
             </Text>
           </Pressable>
@@ -102,36 +104,55 @@ function Glyph({ name, color }: { name: TabKey; color: string }) {
           ))}
         </View>
       );
-    case "search":
+    case "live":
       return (
         <View style={{ width: 20, height: 20, alignItems: "center", justifyContent: "center" }}>
-          <View style={{ width: 12, height: 12, borderRadius: 6, borderWidth: 2, ...s }} />
           <View
             style={{
-              position: "absolute",
-              right: 2,
-              bottom: 2,
-              width: 7,
-              height: 2,
-              backgroundColor: color,
-              transform: [{ rotate: "45deg" }],
+              width: 13,
+              height: 7,
+              borderWidth: 2,
+              borderRadius: 2,
+              ...s,
+              transform: [{ rotate: "-30deg" }],
             }}
           />
-        </View>
-      );
-    case "orders":
-      return (
-        <View style={{ width: 20, height: 20, justifyContent: "center", gap: 3 }}>
-          {[0, 1, 2].map((i) => (
-            <View key={i} style={{ height: 2, width: i === 2 ? 10 : 16, backgroundColor: color, borderRadius: 1 }} />
-          ))}
+          <View
+            style={{
+              width: 2,
+              height: 9,
+              backgroundColor: color,
+              borderRadius: 1,
+              marginTop: -2,
+              transform: [{ rotate: "35deg" }],
+            }}
+          />
+          <View
+            style={{
+              width: 12,
+              height: 2,
+              backgroundColor: color,
+              borderRadius: 1,
+              marginTop: 1,
+            }}
+          />
         </View>
       );
     case "you":
       return (
         <View style={{ width: 20, height: 20, alignItems: "center" }}>
           <View style={{ width: 8, height: 8, borderRadius: 4, borderWidth: 2, ...s, marginTop: 1 }} />
-          <View style={{ width: 15, height: 8, borderTopLeftRadius: 8, borderTopRightRadius: 8, borderWidth: 2, ...s, marginTop: 2 }} />
+          <View
+            style={{
+              width: 15,
+              height: 8,
+              borderTopLeftRadius: 8,
+              borderTopRightRadius: 8,
+              borderWidth: 2,
+              ...s,
+              marginTop: 2,
+            }}
+          />
         </View>
       );
   }
@@ -155,6 +176,7 @@ function makeStyles(theme: NxsTheme, bottomInset: number, writingDirection: "ltr
       alignItems: "center",
       justifyContent: "center",
       gap: 3,
+      paddingHorizontal: 2,
       paddingVertical: 4,
     },
     pressed: { opacity: 0.78 },

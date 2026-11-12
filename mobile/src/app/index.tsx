@@ -1,4 +1,4 @@
-import { Link, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -15,20 +15,32 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useSession } from "../auth/session-context";
 import { AuctionCard } from "../components/AuctionCard";
 import { BottomNav } from "../components/BottomNav";
+import { SearchHeader } from "../components/SearchHeader";
+import { localizedCategoryLabel } from "../lib/format";
 import { computeGridMetrics } from "../lib/grid-layout";
+import {
+  endingSoon,
+  recommendedForHome,
+  type HistorySignals,
+  type Recommendation,
+} from "../lib/recommend";
 import { createRequestGuard } from "../lib/request-guard";
 import { fetchAuctions, fetchCategories, probeCanonical } from "../lib/trailbase";
 import { toAuctionView, type AuctionView, type Category } from "../lib/types";
+import {
+  clearRecentlyViewed,
+  getRecentlyViewed,
+  getSearchHistory,
+  getUserPreferences,
+} from "../lib/user-store";
 import { NxsButton } from "../nxs/components/NxsButton";
 import { useNxs } from "../nxs/context/NxsProvider";
 import { type NxsTranslator } from "../nxs/localization/catalog";
 import { localizeKnownRuntimeMessage } from "../nxs/localization/runtimeMessages";
 import { useNxsText } from "../nxs/localization/useNxsText";
-import type { NxsTheme } from "../nxs/tokens";
+import { nxsTokens, type NxsTheme } from "../nxs/tokens";
 
 const BRAND = "TengaSell";
-const BRAND_PREFIX = "Tenga";
-const BRAND_SUFFIX = "Sell";
 
 type AuthorityState = "checking" | "live" | "unavailable";
 
@@ -64,6 +76,11 @@ export default function HomeScreen() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [auctions, setAuctions] = useState<AuctionView[]>([]);
   const [sold, setSold] = useState<AuctionView[]>([]);
+  const [recentlyViewedItems, setRecentlyViewedItems] = useState<AuctionView[]>([]);
+  const [recommendations, setRecommendations] = useState<{
+    basis: "history" | "diverse";
+    items: Recommendation[];
+  }>({ basis: "diverse", items: [] });
   const [category, setCategory] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [listLoading, setListLoading] = useState(false);
@@ -78,21 +95,53 @@ export default function HomeScreen() {
     };
   }, []);
 
+  const loadUserData = useCallback(async (allAuctions: AuctionView[]) => {
+    const userId = session.identity?.id ?? null;
+    const [prefs, historyQueries, viewed] = await Promise.all([
+      getUserPreferences(),
+      getSearchHistory(userId),
+      getRecentlyViewed(userId),
+    ]);
+
+    // Filter viewed items to those currently available in the live or recent pool
+    const validViewed = viewed.filter((it) => it && it.id);
+    setRecentlyViewedItems(validViewed.slice(0, 6));
+
+    if (allAuctions.length > 0) {
+      const historySignals: HistorySignals | null =
+        prefs.personalizationEnabled && prefs.historyEnabled
+          ? {
+              recentQueries: historyQueries,
+              viewedCategories: validViewed.map((v) => v.category).filter(Boolean),
+            }
+          : null;
+
+      const recs = recommendedForHome(allAuctions, historySignals, {
+        now: Date.now(),
+        limit: 8,
+        maxPerSeller: 2,
+      });
+      setRecommendations(recs);
+    }
+  }, [session.identity?.id]);
+
   const boot = useCallback(async () => {
     const request = listRequestGuard.next();
     try {
       await probeCanonical();
       const [nextCategories, nextAuctions, nextSold] = await Promise.all([
         fetchCategories(),
-        fetchAuctions({ limit: 20 }),
+        fetchAuctions({ limit: 40 }),
         fetchAuctions({ status: "sold", limit: 6 }).catch(() => []),
       ]);
       if (!listRequestGuard.isCurrent(request)) return;
+      const parsedAuctions = nextAuctions.map(toAuctionView);
       setCategories(nextCategories);
-      setAuctions(nextAuctions.map(toAuctionView));
+      setAuctions(parsedAuctions);
       setSold(nextSold.map(toAuctionView));
       setAuthorityState("live");
       setError(null);
+      void loadUserData(parsedAuctions);
     } catch (bootError) {
       if (!listRequestGuard.isCurrent(request)) return;
       setCategories([]);
@@ -100,7 +149,7 @@ export default function HomeScreen() {
       setAuthorityState("unavailable");
       setError(errorMessage(bootError, t));
     }
-  }, [listRequestGuard, t]);
+  }, [listRequestGuard, loadUserData, t]);
 
   useEffect(() => {
     const task = setTimeout(() => {
@@ -137,6 +186,11 @@ export default function HomeScreen() {
     [listRequestGuard, t],
   );
 
+  const handleClearRecentlyViewed = async () => {
+    await clearRecentlyViewed(session.identity?.id ?? null);
+    setRecentlyViewedItems([]);
+  };
+
   const emptyAction = category ? (
     <NxsButton
       label={t("home.showFeaturedAuctions")}
@@ -162,37 +216,14 @@ export default function HomeScreen() {
     "home.sessionRecoveryUnavailable",
   );
 
+  const endingSoonList = useMemo(() => {
+    return endingSoon(auctions, { now, limit: 6 });
+  }, [auctions, now]);
+
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-      <View style={styles.header}>
-        <Text style={styles.wordmark} accessibilityRole="header">
-          {BRAND_PREFIX}
-          <Text style={styles.brandAccent}>{BRAND_SUFFIX}</Text>
-        </Text>
-        {session.phase === "authenticated" ? (
-          <Link href="/account" asChild>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t("home.openAccount")}
-              hitSlop={4}
-              style={({ pressed }) => [styles.headerButton, pressed && styles.pressed]}
-            >
-              <Text style={styles.headerButtonText}>{t("nav.account")}</Text>
-            </Pressable>
-          </Link>
-        ) : (
-          <Link href="/auth/login" asChild>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t("home.signInA11y", { brand: BRAND })}
-              hitSlop={4}
-              style={({ pressed }) => [styles.headerButton, pressed && styles.pressed]}
-            >
-              <Text style={styles.headerButtonText}>{t("nav.signIn")}</Text>
-            </Pressable>
-          </Link>
-        )}
-      </View>
+      {/* Search-First Top Header */}
+      <SearchHeader />
 
       <View
         style={styles.authorityRow}
@@ -290,6 +321,7 @@ export default function HomeScreen() {
         </View>
       ) : (
         <>
+          {/* Category Chips Bar */}
           <View style={styles.chipsWrap}>
             <ScrollView
               horizontal
@@ -312,32 +344,35 @@ export default function HomeScreen() {
                   {t("home.featured")}
                 </Text>
               </Pressable>
-              {categories.map((item) => (
-                <Pressable
-                  key={item.id}
-                  onPress={() => void loadCategory(item.slug)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: category === item.slug }}
-                  accessibilityLabel={t("home.showCategoryAuctions", {
-                    category: item.name,
-                  })}
-                  hitSlop={4}
-                  style={({ pressed }) => [
-                    styles.chip,
-                    category === item.slug && styles.chipActive,
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.chipText,
-                      category === item.slug && styles.chipTextActive,
+              {categories.map((item) => {
+                const label = localizedCategoryLabel(t, item.slug, item.name);
+                return (
+                  <Pressable
+                    key={item.id}
+                    onPress={() => void loadCategory(item.slug)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: category === item.slug }}
+                    accessibilityLabel={t("home.showCategoryAuctions", {
+                      category: label,
+                    })}
+                    hitSlop={4}
+                    style={({ pressed }) => [
+                      styles.chip,
+                      category === item.slug && styles.chipActive,
+                      pressed && styles.pressed,
                     ]}
                   >
-                    {item.name}
-                  </Text>
-                </Pressable>
-              ))}
+                    <Text
+                      style={[
+                        styles.chipText,
+                        category === item.slug && styles.chipTextActive,
+                      ]}
+                    >
+                      {label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </ScrollView>
           </View>
 
@@ -354,6 +389,102 @@ export default function HomeScreen() {
             numColumns={2}
             columnWrapperStyle={styles.columnRow}
             contentContainerStyle={styles.list}
+            ListHeaderComponent={
+              !category ? (
+                <View style={styles.discoveryHeader}>
+                  {/* Contextual Recommendations Module */}
+                  {recommendations.items.length > 0 && (
+                    <View style={styles.sectionWrap}>
+                      <View style={styles.sectionHeader}>
+                        <Text style={styles.sectionTitle} accessibilityRole="header">
+                          {t("rec.recommendedLive")}
+                        </Text>
+                        <Text style={styles.basisBadge}>
+                          {recommendations.basis === "history"
+                            ? t("rec.basisHistory")
+                            : t("rec.basisDiverse")}
+                        </Text>
+                      </View>
+                      <View style={styles.cardsRow}>
+                        {recommendations.items.slice(0, 4).map((rec) => (
+                          <AuctionCard
+                            key={`rec-${rec.item.id}`}
+                            item={rec.item}
+                            width={grid.cardWidth}
+                            now={now}
+                            onPress={() => router.push(`/item/${rec.item.id}` as never)}
+                          />
+                        ))}
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Recently Viewed Module (if history present) */}
+                  {recentlyViewedItems.length > 0 && (
+                    <View style={styles.sectionWrap}>
+                      <View style={styles.sectionHeader}>
+                        <Text style={styles.sectionTitle} accessibilityRole="header">
+                          {t("rec.recentlyViewed")}
+                        </Text>
+                        <Pressable
+                          hitSlop={4}
+                          onPress={() => void handleClearRecentlyViewed()}
+                          accessibilityRole="button"
+                          accessibilityLabel={t("rec.clearRecentlyViewedA11y")}
+                          style={({ pressed }) => [styles.clearBtn, pressed && styles.pressed]}
+                        >
+                          <Text style={styles.clearBtnText}>{t("rec.clearRecentlyViewed")}</Text>
+                        </Pressable>
+                      </View>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.horizontalScroll}
+                      >
+                        {recentlyViewedItems.map((item) => (
+                          <View key={`viewed-${item.id}`} style={{ width: Math.max(140, grid.cardWidth * 0.85) }}>
+                            <AuctionCard
+                              item={item}
+                              width={Math.max(140, grid.cardWidth * 0.85)}
+                              now={now}
+                              onPress={() => router.push(`/item/${item.id}` as never)}
+                            />
+                          </View>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  )}
+
+                  {/* Ending Soon Module */}
+                  {endingSoonList.length > 0 && (
+                    <View style={styles.sectionWrap}>
+                      <View style={styles.sectionHeader}>
+                        <Text style={styles.sectionTitle} accessibilityRole="header">
+                          {t("rec.endingSoon")}
+                        </Text>
+                      </View>
+                      <View style={styles.cardsRow}>
+                        {endingSoonList.slice(0, 2).map((item) => (
+                          <AuctionCard
+                            key={`soon-${item.id}`}
+                            item={item}
+                            width={grid.cardWidth}
+                            now={now}
+                            onPress={() => router.push(`/item/${item.id}` as never)}
+                          />
+                        ))}
+                      </View>
+                    </View>
+                  )}
+
+                  <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionTitle} accessibilityRole="header">
+                      {t("home.featured")}
+                    </Text>
+                  </View>
+                </View>
+              ) : undefined
+            }
             ListEmptyComponent={
               <View style={styles.emptyState}>
                 <Text style={styles.title} accessibilityRole="header">
@@ -394,7 +525,6 @@ export default function HomeScreen() {
               ) : undefined
             }
           />
-
         </>
       )}
       <BottomNav active="home" />
@@ -414,46 +544,10 @@ function createStyles(
 
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: theme.surface.canvas },
-    header: {
-      minHeight: 64,
-      flexDirection: rowDirection,
-      alignItems: "center",
-      justifyContent: "space-between",
-      paddingHorizontal: screenPadding,
-      paddingVertical: 8,
-      backgroundColor: theme.surface.section,
-    },
-    wordmark: {
-      fontSize: 22,
-      lineHeight: 29,
-      fontWeight: "800",
-      color: theme.action.primary,
-      letterSpacing: -0.5,
-      textAlign,
-    },
-    brandAccent: { color: theme.brand.accent },
-    headerButton: {
-      minHeight: 48,
-      minWidth: 48,
-      justifyContent: "center",
-      paddingHorizontal: 14,
-      borderRadius: 10,
-      borderWidth: 1,
-      borderColor: theme.action.secondary,
-    },
-    headerButtonText: {
-      color: theme.action.secondary,
-      fontSize: 15,
-      lineHeight: 20,
-      fontWeight: "700",
-      textAlign: "center",
-    },
-    pressed: { opacity: 0.78 },
     authorityRow: {
       minHeight: 48,
       justifyContent: "center",
       paddingHorizontal: screenPadding,
-      borderTopWidth: StyleSheet.hairlineWidth,
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderColor: theme.border.subtle,
       backgroundColor: theme.surface.section,
@@ -573,6 +667,58 @@ function createStyles(
       paddingHorizontal: screenPadding,
       paddingVertical: 12,
     },
+    discoveryHeader: {
+      marginBottom: 8,
+      gap: 12,
+    },
+    sectionWrap: {
+      marginBottom: 8,
+    },
+    sectionHeader: {
+      flexDirection: rowDirection,
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 8,
+      minHeight: 32,
+    },
+    sectionTitle: {
+      fontSize: 16,
+      lineHeight: 22,
+      fontWeight: "800",
+      color: theme.text.primary,
+      textAlign,
+    },
+    basisBadge: {
+      fontSize: 11,
+      fontWeight: "600",
+      color: theme.action.primary,
+      backgroundColor: theme.surface.primaryTint,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: nxsTokens.radius.pill,
+    },
+    clearBtn: {
+      minHeight: nxsTokens.touch.minimum,
+      minWidth: nxsTokens.touch.minimum,
+      justifyContent: "center",
+      alignItems: "center",
+      paddingHorizontal: 8,
+    },
+    clearBtnText: {
+      fontSize: 13,
+      color: theme.action.primary,
+      fontWeight: "700",
+    },
+    cardsRow: {
+      flexDirection: rowDirection,
+      flexWrap: "wrap",
+      gap: gridGap,
+    },
+    horizontalScroll: {
+      flexDirection: rowDirection,
+      gap: 10,
+      paddingVertical: 4,
+    },
     emptyState: {
       flexGrow: 1,
       alignItems: "center",
@@ -596,5 +742,6 @@ function createStyles(
       flexWrap: "wrap",
       gap: gridGap,
     },
+    pressed: { opacity: 0.78 },
   });
 }

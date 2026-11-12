@@ -158,10 +158,12 @@ export default function LoginScreen() {
     <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior="padding"
+        keyboardVerticalOffset={Platform.OS === "ios" ? 96 : 0}
       >
         <ScrollView
-          keyboardShouldPersistTaps="handled"
+          keyboardShouldPersistTaps="always"
+          keyboardDismissMode="on-drag"
           contentContainerStyle={styles.scrollContent}
         >
           <View style={styles.panel}>
@@ -198,9 +200,10 @@ export default function LoginScreen() {
                 style={styles.input}
                 autoCapitalize="none"
                 autoCorrect={false}
-                autoComplete="username"
-                textContentType="username"
+                autoComplete="off"
+                textContentType="none"
                 accessibilityLabel={t("login.emailOrUsername")}
+                testID="login-username-input"
                 returnKeyType="next"
                 onSubmitEditing={() => passwordRef.current?.focus()}
                 blurOnSubmit={false}
@@ -217,9 +220,10 @@ export default function LoginScreen() {
                 secureTextEntry={!passwordVisible}
                 autoCapitalize="none"
                 autoCorrect={false}
-                autoComplete="current-password"
-                textContentType="password"
+                autoComplete="off"
+                textContentType="none"
                 accessibilityLabel={t("login.password")}
+                testID="login-password-input"
                 onSubmitEditing={() => {
                   if (!submitting) void submit();
                 }}
@@ -240,6 +244,7 @@ export default function LoginScreen() {
 
             <NxsButton
               label={t("login.signIn")}
+              testID="login-submit-button"
               loading={submitting}
               disabled={submitting}
               onPress={() => void submit()}

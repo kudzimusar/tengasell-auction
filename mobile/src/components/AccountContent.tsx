@@ -2,6 +2,7 @@ import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,11 +13,19 @@ import { SafeAreaView, type Edge } from "react-native-safe-area-context";
 import { useSession } from "../auth/session-context";
 import { fetchAuthenticatedProfile } from "../lib/trailbase";
 import type { Profile } from "../lib/types";
+import {
+  clearRecentlyViewed,
+  clearSearchHistory,
+  DEFAULT_PREFERENCES,
+  getUserPreferences,
+  setUserPreferences,
+  type UserPreferences,
+} from "../lib/user-store";
 import { NxsButton } from "../nxs/components/NxsButton";
 import { useNxs } from "../nxs/context/NxsProvider";
 import { localizeKnownRuntimeMessage } from "../nxs/localization/runtimeMessages";
 import { useNxsText } from "../nxs/localization/useNxsText";
-import type { NxsTheme } from "../nxs/tokens";
+import { nxsTokens, type NxsTheme } from "../nxs/tokens";
 
 const BRAND = "TengaSell";
 
@@ -39,6 +48,8 @@ export function AccountContent({
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [prefs, setPrefs] = useState<UserPreferences>(DEFAULT_PREFERENCES);
+  const [clearedNotice, setClearedNotice] = useState<string | null>(null);
 
   // Embedded inside the bottom-tab bar (`/you`), `BottomNav` owns the bottom
   // safe-area inset and `SafeAreaView` takes the top edge (`headerShown: false`).
@@ -46,6 +57,29 @@ export function AccountContent({
   const edges: readonly Edge[] = embeddedTab
     ? ["top", "left", "right"]
     : ["left", "right", "bottom"];
+
+  useEffect(() => {
+    getUserPreferences().then(setPrefs).catch(() => undefined);
+  }, []);
+
+  const handleTogglePersonalization = async () => {
+    const next = await setUserPreferences({
+      personalizationEnabled: !prefs.personalizationEnabled,
+    });
+    setPrefs(next);
+  };
+
+  const handleClearSearch = async () => {
+    await clearSearchHistory(session.identity?.id ?? null);
+    setClearedNotice(t("account.historyClearedNotice"));
+    setTimeout(() => setClearedNotice(null), 3500);
+  };
+
+  const handleClearViewed = async () => {
+    await clearRecentlyViewed(session.identity?.id ?? null);
+    setClearedNotice(t("account.historyClearedNotice"));
+    setTimeout(() => setClearedNotice(null), 3500);
+  };
 
   const retryProfile = useCallback(async () => {
     if (session.phase !== "authenticated" || !session.identity) return;
@@ -206,22 +240,67 @@ export function AccountContent({
 
       return (
         <SafeAreaView style={styles.safe} edges={edges}>
-          <View style={styles.center}>
-            <Text style={styles.title} accessibilityRole="header">
-              {t("you.signedOutTitle", { brand: BRAND })}
-            </Text>
-            {invalidReason ? (
-              <Text style={styles.errorText} accessibilityRole="alert">
-                ⚠ {invalidReason}
-              </Text>
-            ) : null}
-            <Text style={styles.secondaryText}>{t("you.signedOutBody")}</Text>
-            <NxsButton
-              label={t("you.signInAction")}
-              accessibilityLabel={t("you.signInA11y", { brand: BRAND })}
-              onPress={() => router.push("/auth/login" as never)}
-            />
-          </View>
+          <ScrollView contentContainerStyle={styles.scrollContent}>
+            <View style={styles.panel}>
+              <View style={styles.card}>
+                <Text style={styles.title} accessibilityRole="header">
+                  {t("you.signedOutTitle", { brand: BRAND })}
+                </Text>
+                {invalidReason ? (
+                  <Text style={styles.errorText} accessibilityRole="alert">
+                    ⚠ {invalidReason}
+                  </Text>
+                ) : null}
+                <Text style={styles.secondaryText}>{t("you.signedOutBody")}</Text>
+                <NxsButton
+                  label={t("you.signInAction")}
+                  accessibilityLabel={t("you.signInA11y", { brand: BRAND })}
+                  onPress={() => router.push("/auth/login" as never)}
+                />
+              </View>
+
+              {/* Preferences for signed-out user */}
+              <View style={styles.card}>
+                <Text style={styles.sectionHeader} accessibilityRole="header">
+                  {t("account.settingsTitle")}
+                </Text>
+
+                <View style={styles.settingItem}>
+                  <Text style={styles.settingTitle}>{t("account.searchHistoryTitle")}</Text>
+                  <Text style={styles.settingDesc}>{t("account.historyEnabledDesc")}</Text>
+                  <View style={styles.buttonRow}>
+                    <NxsButton
+                      label={t("account.clearSearchHistoryBtn")}
+                      variant="secondary"
+                      onPress={() => void handleClearSearch()}
+                    />
+                    <NxsButton
+                      label={t("account.clearViewedHistoryBtn")}
+                      variant="secondary"
+                      onPress={() => void handleClearViewed()}
+                    />
+                  </View>
+                </View>
+
+                {clearedNotice && (
+                  <Text style={styles.noticeText} accessibilityRole="alert">
+                    {clearedNotice}
+                  </Text>
+                )}
+
+                <View style={styles.settingItem}>
+                  <Text style={styles.settingTitle}>{t("account.privacyTitle")}</Text>
+                  <Text style={styles.settingDesc}>{t("account.privacyDesc")}</Text>
+                </View>
+
+                <View style={styles.settingItem}>
+                  <Text style={styles.settingTitle}>{t("account.helpTitle")}</Text>
+                  <Text style={styles.settingDesc}>{t("account.helpDesc")}</Text>
+                  <Text style={styles.detailValue}>{t("account.helpEmail")}</Text>
+                </View>
+              </View>
+            </View>
+          </ScrollView>
         </SafeAreaView>
       );
     }
@@ -247,6 +326,7 @@ export function AccountContent({
             {t("account.authenticatedStatus")}
           </Text>
 
+          {/* User Profile Card */}
           <View style={styles.card}>
             {loading ? (
               <View style={styles.loadingRow} accessible accessibilityLiveRegion="polite">
@@ -272,6 +352,17 @@ export function AccountContent({
                 {profile.username && (
                   <Text style={styles.secondaryText}>@{profile.username}</Text>
                 )}
+                {profile.city && (
+                  <Text style={styles.detailValue}>📍 {profile.city}</Text>
+                )}
+                {profile.rating_count > 0 && (
+                  <Text style={styles.detailValue}>
+                    {t("account.ratingScore", {
+                      score: String(profile.rating_avg),
+                      count: profile.rating_count,
+                    })}
+                  </Text>
+                )}
                 <Text style={styles.identityLabel}>{t("account.userId")}</Text>
                 <Text selectable style={styles.identityValue}>
                   {session.identity.id}
@@ -296,6 +387,111 @@ export function AccountContent({
             )}
           </View>
 
+          {/* Orders Entry Route */}
+          <Pressable
+            hitSlop={4}
+            style={({ pressed }) => [styles.navRow, pressed && styles.pressed]}
+            onPress={() => router.push("/orders" as never)}
+            accessibilityRole="button"
+            accessibilityLabel={t("account.ordersRouteA11y")}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={styles.navRowTitle}>{t("account.myOrders")}</Text>
+              <Text style={styles.navRowSubtitle}>{t("account.myOrdersDesc")}</Text>
+            </View>
+            <Text style={styles.chevronGlyph}>›</Text>
+          </Pressable>
+
+          {/* Settings & Preferences Section */}
+          <View style={styles.card}>
+            <Text style={styles.sectionHeader} accessibilityRole="header">
+              {t("account.settingsTitle")}
+            </Text>
+
+            {/* Personalization Toggle */}
+            <View style={styles.settingItem}>
+              <Text style={styles.settingTitle}>{t("account.personalizationTitle")}</Text>
+              <Text style={styles.settingDesc}>{t("account.personalizationDesc")}</Text>
+              <View style={styles.toggleRow}>
+                <Text style={styles.toggleStatus}>
+                  {prefs.personalizationEnabled
+                    ? t("account.personalizationOn")
+                    : t("account.personalizationOff")}
+                </Text>
+                <Pressable
+                  hitSlop={4}
+                  style={({ pressed }) => [
+                    styles.toggleBtn,
+                    prefs.personalizationEnabled && styles.toggleBtnActive,
+                    pressed && styles.pressed,
+                  ]}
+                  onPress={() => void handleTogglePersonalization()}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("account.togglePersonalizationA11y")}
+                >
+                  <Text
+                    style={[
+                      styles.toggleBtnText,
+                      prefs.personalizationEnabled && styles.toggleBtnTextActive,
+                    ]}
+                  >
+                    {prefs.personalizationEnabled ? "ON" : "OFF"}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+
+            {/* Search & Browsing History Controls */}
+            <View style={styles.settingItem}>
+              <Text style={styles.settingTitle}>{t("account.searchHistoryTitle")}</Text>
+              <Text style={styles.settingDesc}>{t("account.historyEnabledDesc")}</Text>
+              <View style={styles.buttonRow}>
+                <NxsButton
+                  label={t("account.clearSearchHistoryBtn")}
+                  variant="secondary"
+                  onPress={() => void handleClearSearch()}
+                />
+                <NxsButton
+                  label={t("account.clearViewedHistoryBtn")}
+                  variant="secondary"
+                  onPress={() => void handleClearViewed()}
+                />
+              </View>
+            </View>
+
+            {clearedNotice && (
+              <Text style={styles.noticeText} accessibilityRole="alert">
+                {clearedNotice}
+              </Text>
+            )}
+
+            {/* Notifications */}
+            <View style={styles.settingItem}>
+              <Text style={styles.settingTitle}>{t("account.notificationsTitle")}</Text>
+              <Text style={styles.settingDesc}>{t("account.notificationsDesc")}</Text>
+            </View>
+
+            {/* Appearance */}
+            <View style={styles.settingItem}>
+              <Text style={styles.settingTitle}>{t("account.appearanceTitle")}</Text>
+              <Text style={styles.detailValue}>{t("account.appearanceValue")}</Text>
+            </View>
+
+            {/* Privacy & Data */}
+            <View style={styles.settingItem}>
+              <Text style={styles.settingTitle}>{t("account.privacyTitle")}</Text>
+              <Text style={styles.settingDesc}>{t("account.privacyDesc")}</Text>
+            </View>
+
+            {/* Help & Support */}
+            <View style={styles.settingItem}>
+              <Text style={styles.settingTitle}>{t("account.helpTitle")}</Text>
+              <Text style={styles.settingDesc}>{t("account.helpDesc")}</Text>
+              <Text style={styles.detailValue}>{t("account.helpEmail")}</Text>
+            </View>
+          </View>
+
+          {/* Sign Out Button */}
           <NxsButton
             label={t("account.signOut")}
             variant="destructive"
@@ -333,40 +529,41 @@ function createStyles(
     scrollContent: {
       flexGrow: 1,
       paddingHorizontal: screenPadding,
-      paddingVertical: 24,
+      paddingVertical: 16,
     },
     panel: {
       width: "100%",
       maxWidth,
       alignSelf: "center",
-      gap: 16,
+      gap: 14,
     },
     title: {
       color: theme.text.primary,
-      fontSize: 26,
-      lineHeight: 34,
+      fontSize: 24,
+      lineHeight: 32,
       fontWeight: "800",
       textAlign,
     },
     successText: {
       color: theme.state.success,
-      fontSize: 15,
-      lineHeight: 22,
+      fontSize: 14,
+      lineHeight: 20,
       fontWeight: "700",
       textAlign,
     },
     secondaryText: {
       color: theme.text.secondary,
-      fontSize: 16,
-      lineHeight: 24,
+      fontSize: 15,
+      lineHeight: 22,
       textAlign,
     },
     card: {
       padding: 16,
       borderRadius: 14,
       backgroundColor: theme.surface.raised,
+      gap: 12,
     },
-    stateGroup: { gap: 8 },
+    stateGroup: { gap: 6 },
     loadingRow: {
       minHeight: 48,
       flexDirection: rowDirection,
@@ -375,23 +572,29 @@ function createStyles(
     },
     profileName: {
       color: theme.text.primary,
-      fontSize: 22,
-      lineHeight: 29,
+      fontSize: 20,
+      lineHeight: 26,
       fontWeight: "800",
       textAlign,
     },
     identityLabel: {
-      marginTop: 8,
+      marginTop: 4,
       color: theme.text.secondary,
-      fontSize: 13,
-      lineHeight: 18,
+      fontSize: 12,
+      lineHeight: 16,
       fontWeight: "700",
       textAlign,
     },
     identityValue: {
       color: theme.text.primary,
-      fontSize: 14,
-      lineHeight: 21,
+      fontSize: 13,
+      lineHeight: 18,
+      textAlign,
+    },
+    detailValue: {
+      color: theme.text.secondary,
+      fontSize: 13,
+      lineHeight: 18,
       textAlign,
     },
     errorText: {
@@ -402,11 +605,113 @@ function createStyles(
     },
     partialText: {
       color: theme.state.info,
-      fontSize: 15,
-      lineHeight: 22,
+      fontSize: 14,
+      lineHeight: 20,
       fontWeight: "700",
       textAlign,
     },
     actionGroup: { gap: 12 },
+    navRow: {
+      minHeight: nxsTokens.touch.minimum,
+      flexDirection: rowDirection,
+      alignItems: "center",
+      backgroundColor: theme.surface.raised,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: theme.border.subtle,
+    },
+    navRowTitle: {
+      fontSize: 15,
+      fontWeight: "800",
+      color: theme.text.primary,
+      textAlign,
+    },
+    navRowSubtitle: {
+      fontSize: 12,
+      color: theme.text.secondary,
+      marginTop: 2,
+      textAlign,
+    },
+    chevronGlyph: {
+      fontSize: 22,
+      color: theme.action.primary,
+      fontWeight: "700",
+    },
+    sectionHeader: {
+      fontSize: 16,
+      fontWeight: "800",
+      color: theme.text.primary,
+      textAlign,
+    },
+    settingItem: {
+      gap: 4,
+      paddingVertical: 4,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: theme.border.subtle,
+    },
+    settingTitle: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: theme.text.primary,
+      textAlign,
+    },
+    settingDesc: {
+      fontSize: 12,
+      color: theme.text.secondary,
+      lineHeight: 16,
+      textAlign,
+    },
+    toggleRow: {
+      flexDirection: rowDirection,
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginTop: 4,
+      minHeight: 48,
+    },
+    toggleStatus: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: theme.text.secondary,
+      flex: 1,
+      textAlign,
+    },
+    toggleBtn: {
+      minHeight: nxsTokens.touch.minimum,
+      minWidth: nxsTokens.touch.minimum,
+      paddingHorizontal: 14,
+      borderRadius: nxsTokens.radius.pill,
+      borderWidth: 1,
+      borderColor: theme.border.subtle,
+      backgroundColor: theme.surface.raised,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    toggleBtnActive: {
+      backgroundColor: theme.action.primary,
+      borderColor: theme.action.primary,
+    },
+    toggleBtnText: {
+      fontSize: 12,
+      fontWeight: "800",
+      color: theme.text.secondary,
+    },
+    toggleBtnTextActive: {
+      color: theme.text.inverse,
+    },
+    buttonRow: {
+      flexDirection: rowDirection,
+      flexWrap: "wrap",
+      gap: 8,
+      marginTop: 6,
+    },
+    noticeText: {
+      color: theme.state.success,
+      fontSize: 13,
+      fontWeight: "700",
+      textAlign,
+    },
+    pressed: { opacity: 0.78 },
   });
 }

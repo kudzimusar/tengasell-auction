@@ -7,6 +7,7 @@ import {
   SessionRestorationBlockedError,
 } from "../src/auth/session-storage-logic.ts";
 import { translateNxs } from "../src/nxs/localization/catalog.ts";
+import { logoutTrailBase, TrailBaseError } from "../src/lib/trailbase.ts";
 
 const AUTH = "tengasell.session.auth_token";
 const REFRESH = "tengasell.session.refresh_token";
@@ -243,4 +244,67 @@ test("R3-13 English and both pseudolocales preserve dynamic domain values", () =
     assert.ok(cta.length > 2, locale + " actionable retry label");
   }
   assert.match(translateNxs("session.signoutIncomplete","ar-XB"), /\u2067/);
+});
+
+test("R3-14 logoutTrailBase handles TrailBase plain-text, 204, JSON, HTML fallback, and error responses", async () => {
+  const prevApi = process.env.EXPO_PUBLIC_TENGASELL_API;
+  const prevFetch = globalThis.fetch;
+  process.env.EXPO_PUBLIC_TENGASELL_API = "https://canonical.example.test";
+  try {
+    let seenUrl = "";
+    let seenAuth = "";
+    globalThis.fetch = async (url, init) => {
+      seenUrl = String(url);
+      seenAuth = init?.headers?.authorization ?? "";
+      return new Response("logged out", {
+        status: 200,
+        headers: { "content-type": "text/plain; charset=utf-8" },
+      });
+    };
+    await logoutTrailBase("test-token-1");
+    assert.match(seenUrl, /^https:\/\/canonical\.example\.test\/api\/auth\/v1\/logout\?XTransformPort=3001$/);
+    assert.equal(seenAuth, "Bearer test-token-1");
+
+    globalThis.fetch = async () => new Response(null, { status: 204 });
+    await logoutTrailBase("test-token-2");
+
+    globalThis.fetch = async () =>
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    await logoutTrailBase("test-token-3");
+
+    globalThis.fetch = async () =>
+      new Response("<!DOCTYPE html><html><body>fallback</body></html>", {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8" },
+      });
+    await assert.rejects(
+      () => logoutTrailBase("test-token-4"),
+      (err) => err instanceof TrailBaseError && err.kind === "malformed-response",
+    );
+
+    globalThis.fetch = async () =>
+      new Response("upstream unavailable", { status: 502, headers: { "content-type": "text/plain" } });
+    await assert.rejects(
+      () => logoutTrailBase("test-token-5"),
+      (err) => err instanceof TrailBaseError && err.kind === "http" && err.status === 502,
+    );
+
+    globalThis.fetch = async () => {
+      throw new Error("socket hang up");
+    };
+    await assert.rejects(
+      () => logoutTrailBase("test-token-6"),
+      (err) => err instanceof TrailBaseError && err.kind === "network",
+    );
+  } finally {
+    globalThis.fetch = prevFetch;
+    if (prevApi === undefined) {
+      delete process.env.EXPO_PUBLIC_TENGASELL_API;
+    } else {
+      process.env.EXPO_PUBLIC_TENGASELL_API = prevApi;
+    }
+  }
 });

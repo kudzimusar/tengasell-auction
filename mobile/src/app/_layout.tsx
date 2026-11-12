@@ -22,12 +22,13 @@ function NativeStack() {
           contentStyle: { backgroundColor: theme.surface.canvas },
         }}
       >
-        <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="categories" options={{ headerShown: false }} />
-        <Stack.Screen name="search" options={{ headerShown: false }} />
-        <Stack.Screen name="orders" options={{ headerShown: false }} />
-        <Stack.Screen name="you" options={{ headerShown: false }} />
-        <Stack.Screen name="item/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="index" options={{ headerShown: false, title: t("nav.home") }} />
+        <Stack.Screen name="categories" options={{ headerShown: false, title: t("categories.title") }} />
+        <Stack.Screen name="live" options={{ headerShown: false, title: t("live.title") }} />
+        <Stack.Screen name="search" options={{ headerShown: false, title: t("nav.search") }} />
+        <Stack.Screen name="orders" options={{ headerShown: false, title: t("orders.title") }} />
+        <Stack.Screen name="you" options={{ headerShown: false, title: t("nav.you") }} />
+        <Stack.Screen name="item/[id]" options={{ headerShown: false, title: t("item.fallbackTitle") }} />
         <Stack.Screen name="auth/login" options={{ title: t("nav.signIn") }} />
         <Stack.Screen name="account/index" options={{ title: t("nav.account") }} />
       </Stack>

@@ -5,7 +5,7 @@
 import { useMemo } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 
-import { formatRemaining, formatUSD } from "../lib/format";
+import { deriveListingState, formatRemaining, formatUSD } from "../lib/format";
 import type { AuctionView } from "../lib/types";
 import { useNxs } from "../nxs/context/NxsProvider";
 import { useNxsText } from "../nxs/localization/useNxsText";
@@ -29,18 +29,27 @@ export function AuctionCard({ item, width, now, onPress }: Props) {
   const endsMs = Date.parse(item.ends_at);
   const remainingMs = Number.isFinite(endsMs) ? endsMs - now : 0;
   // Status can lag the clock, and malformed timestamps fail closed as sold/closed.
-  const sold =
-    item.status === "sold" ||
-    item.status === "ended" ||
-    item.status === "cancelled" ||
-    !Number.isFinite(endsMs) ||
-    remainingMs <= 0;
-  const urgent = !sold && remainingMs > 0 && remainingMs < 3600_000;
-  const priceLabel = formatUSD(item.current_price);
+  const listingState = deriveListingState(item, now);
+  const closed = !listingState.biddable;
+  const urgent = !closed && remainingMs > 0 && remainingMs < 3600_000;
+  const priceLabel = formatUSD(item.current_price, { t });
   const remainingLabel = formatRemaining(Math.max(0, remainingMs));
-  const statusText = sold
-    ? t("auction.closedLabel")
-    : t("auction.endsRemaining", { remaining: remainingLabel });
+  const statusText =
+    listingState.availability === "not_live"
+      ? t("auction.notLiveStatus")
+      : closed
+        ? t("auction.closedLabel")
+        : t("auction.endsRemaining", { remaining: remainingLabel });
+  const badgeText =
+    listingState.availability === "sold"
+      ? t("auction.soldBadge")
+      : listingState.availability === "not_live"
+        ? t("auction.notLiveBadge")
+        : t("auction.closedBadge");
+  const bidCountText =
+    item.bid_count === 1
+      ? t("auction.bidCountSingle", { count: item.bid_count })
+      : t("auction.bidCount", { count: item.bid_count });
 
   return (
     <Pressable
@@ -48,14 +57,23 @@ export function AuctionCard({ item, width, now, onPress }: Props) {
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={
-        sold
-          ? t("auction.cardSummarySold", { title: item.title, price: priceLabel })
-          : t("auction.cardSummaryLive", {
-              title: item.title,
-              price: priceLabel,
-              count: item.bid_count,
-              remaining: remainingLabel,
-            })
+        listingState.availability === "not_live"
+          ? t("auction.cardSummaryNotLive", { title: item.title, price: priceLabel })
+          : closed
+            ? t("auction.cardSummarySold", { title: item.title, price: priceLabel })
+            : item.bid_count === 1
+              ? t("auction.cardSummaryLiveSingle", {
+                  title: item.title,
+                  price: priceLabel,
+                  count: item.bid_count,
+                  remaining: remainingLabel,
+                })
+              : t("auction.cardSummaryLive", {
+                  title: item.title,
+                  price: priceLabel,
+                  count: item.bid_count,
+                  remaining: remainingLabel,
+                })
       }
       style={({ pressed }) => [styles.card, pressed && styles.pressed]}
     >
@@ -66,18 +84,18 @@ export function AuctionCard({ item, width, now, onPress }: Props) {
           <View style={[styles.image, styles.imagePlaceholder]} />
         )}
 
-        {sold && (
+        {closed && (
           <>
             <View style={styles.soldVeil} pointerEvents="none" />
             <View style={styles.soldBandWrap} pointerEvents="none">
               <View style={styles.soldBand}>
-                <Text style={styles.soldBandText}>{t("auction.soldBadge")}</Text>
+                <Text style={styles.soldBandText}>{badgeText}</Text>
               </View>
             </View>
           </>
         )}
 
-        {!sold && urgent && (
+        {!closed && urgent && (
           <View style={styles.urgentChip}>
             <Text style={styles.urgentText}>{remainingLabel}</Text>
           </View>
@@ -90,11 +108,13 @@ export function AuctionCard({ item, width, now, onPress }: Props) {
         </Text>
 
         <View style={styles.priceRow}>
-          <Text style={[styles.price, sold && styles.priceSold]}>{priceLabel}</Text>
+          <Text style={[styles.price, closed && styles.priceSold]}>{priceLabel}</Text>
           <Text style={styles.count}>
-            {sold
-              ? t("auction.soldStatus")
-              : t("auction.bidCount", { count: item.bid_count })}
+            {listingState.availability === "not_live"
+              ? t("auction.notLiveStatus")
+              : closed
+                ? t("auction.soldStatus")
+                : bidCountText}
           </Text>
         </View>
 
@@ -183,8 +203,10 @@ function makeStyles(theme: NxsTheme, width: number, writingDirection: "ltr" | "r
     title: { fontSize: 13, lineHeight: 18, color: theme.text.primary, textAlign },
     priceRow: {
       flexDirection: rowDirection,
+      flexWrap: "wrap",
       alignItems: "baseline",
-      gap: 6,
+      rowGap: 2,
+      columnGap: 6,
       marginTop: 2,
     },
     price: {
@@ -195,7 +217,7 @@ function makeStyles(theme: NxsTheme, width: number, writingDirection: "ltr" | "r
       textAlign,
     },
     priceSold: { color: theme.state.disabled, textDecorationLine: "line-through" },
-    count: { fontSize: 12, color: theme.text.secondary, textAlign },
+    count: { fontSize: 12, color: theme.text.secondary, textAlign, flexShrink: 1 },
     meta: { fontSize: 11, color: theme.text.secondary, textAlign },
   });
 }

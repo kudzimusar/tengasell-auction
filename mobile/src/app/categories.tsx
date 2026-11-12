@@ -14,6 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BottomNav } from "../components/BottomNav";
 import { ListingGrid } from "../components/ListingGrid";
+import { localizedCategoryLabel } from "../lib/format";
 import { computeGridMetrics } from "../lib/grid-layout";
 import { createRequestGuard } from "../lib/request-guard";
 import { fetchAuctions, fetchCategories } from "../lib/trailbase";
@@ -115,7 +116,9 @@ export default function CategoriesScreen() {
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <View style={styles.header}>
         <Text style={styles.title} accessibilityRole="header">
-          {selected ? selected.name : t("categories.title")}
+          {selected
+            ? localizedCategoryLabel(t, selected.slug, selected.name)
+            : t("categories.title")}
         </Text>
         {selected && (
           <Pressable
@@ -168,23 +171,26 @@ export default function CategoriesScreen() {
         <ListingGrid items={items} now={now} empty={t("categories.empty")} />
       ) : (
         <ScrollView contentContainerStyle={styles.grid}>
-          {categories.map((c) => (
+          {categories.map((c) => {
+            const label = localizedCategoryLabel(t, c.slug, c.name);
+            return (
             <Pressable
               hitSlop={4}
               key={c.id}
               style={({ pressed }) => [styles.tile, pressed && styles.pressed]}
               onPress={() => open(c)}
               accessibilityRole="button"
-              accessibilityLabel={t("categories.openCategoryA11y", { category: c.name })}
+              accessibilityLabel={t("categories.openCategoryA11y", { category: label })}
             >
               <View style={styles.tileIcon}>
                 <Text style={styles.tileLetter}>{c.name.slice(0, 1)}</Text>
               </View>
               <Text style={styles.tileLabel} numberOfLines={2}>
-                {c.name}
+                {label}
               </Text>
             </Pressable>
-          ))}
+            );
+          })}
         </ScrollView>
       )}
       <BottomNav active="categories" />

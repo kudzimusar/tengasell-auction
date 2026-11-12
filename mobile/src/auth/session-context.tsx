@@ -59,6 +59,7 @@ interface SessionContextValue extends SessionSnapshot {
   logout: () => Promise<LogoutEvidence>;
   retryLogout: () => Promise<LogoutEvidence>;
   retrySessionRecovery: () => Promise<void>;
+  invalidateSession: (message?: string) => Promise<void>;
   withAuthenticatedToken: <T>(operation: (authToken: string) => Promise<T>) => Promise<T>;
   /**
    * Read the current session generation (RACE01 ownership counter).
@@ -402,6 +403,23 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     await restoreSession();
   }, [restoreSession, snapshot.phase]);
 
+  const invalidateSession = useCallback(
+    async (message?: string) => {
+      if (
+        logoutPromiseRef.current ||
+        snapshot.phase === "signout-incomplete" ||
+        snapshot.phase === "signout-pending"
+      ) {
+        return;
+      }
+      await clearLocalSession(
+        "session-invalid",
+        message ?? "Your session is no longer valid. Sign in again.",
+      );
+    },
+    [clearLocalSession, snapshot.phase],
+  );
+
   const value = useMemo<SessionContextValue>(
     () => ({
       ...snapshot,
@@ -409,10 +427,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       logout,
       retryLogout,
       retrySessionRecovery,
+      invalidateSession,
       withAuthenticatedToken,
       sessionGeneration: () => generationRef.current,
     }),
-    [login, logout, retryLogout, retrySessionRecovery, snapshot, withAuthenticatedToken],
+    [
+      invalidateSession,
+      login,
+      logout,
+      retryLogout,
+      retrySessionRecovery,
+      snapshot,
+      withAuthenticatedToken,
+    ],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
