@@ -25,6 +25,7 @@ const read = (p) => readFileSync(p, "utf8");
 const ROUTES = [
   "src/app/index.tsx",
   "src/app/categories.tsx",
+  "src/app/live.tsx",
   "src/app/search.tsx",
   "src/app/orders.tsx",
   "src/app/you.tsx",
@@ -39,21 +40,21 @@ test("NAV-01 every product route exists", () => {
 
 test("NAV-02 the root stack registers each route", () => {
   const layout = read("src/app/_layout.tsx");
-  for (const name of ["index", "categories", "search", "orders", "you", "item/[id]"]) {
+  for (const name of ["index", "categories", "live", "search", "orders", "you", "item/[id]"]) {
     assert.match(layout, new RegExp(`name="${name.replace("[", "\\[").replace("]", "\\]")}"`), `route not registered: ${name}`);
   }
 });
 
-test("NAV-03 the tab bar exposes exactly five destinations", () => {
+test("NAV-03 the tab bar exposes exactly four destinations", () => {
   const nav = read("src/components/BottomNav.tsx");
   const routes = [...nav.matchAll(/route: "([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(routes, ["/", "/categories", "/search", "/orders", "/you"]);
-  assert.equal((nav.match(/labelKey: "/g) ?? []).length, 5);
+  assert.deepEqual(routes, ["/", "/categories", "/live", "/you"]);
+  assert.equal((nav.match(/labelKey: "/g) ?? []).length, 4);
 });
 
 test("NAV-04 every tab route maps to a registered screen", () => {
   const nav = read("src/components/BottomNav.tsx");
-  const mapping = { "/": "index", "/categories": "categories", "/search": "search", "/orders": "orders", "/you": "you" };
+  const mapping = { "/": "index", "/categories": "categories", "/live": "live", "/you": "you" };
   const layout = read("src/app/_layout.tsx");
   for (const [, route] of [...nav.matchAll(/route: "([^"]+)"/g)]) {
     const screen = mapping[route];
@@ -208,6 +209,10 @@ test("MOB2-04 strict NXS gating covers all routes/components, live-only search c
     fee: "$5",
     name: "Tech",
     reason: "timeout",
+    filter: "ending",
+    sort: "relevance",
+    condition: "like_new",
+    score: "4.9",
   };
   for (const key of Object.keys(englishStrings)) {
     const en = translateNxs(key, "en", sampleValues);

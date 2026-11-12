@@ -24,6 +24,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useSession } from "../../auth/session-context";
 import { runGuardedBid } from "../../bids/bid-completion";
 import { reconcileBidOutcome } from "../../bids/bid-reconcile";
+import { AuctionCard } from "../../components/AuctionCard";
 import { BottomNav } from "../../components/BottomNav";
 import { presentBidOutcome } from "../../lib/bid-copy";
 import {
@@ -38,15 +39,21 @@ import {
   remainingSeverity,
 } from "../../lib/format";
 import {
+  moreFromSeller,
+  similarAuctions,
+  type Recommendation,
+} from "../../lib/recommend";
+import {
   biddingOwnershipToken,
   connectBidding,
   createClientRequestId,
   disconnectBidding,
   placeBid,
 } from "../../lib/socket";
-import { fetchAuction } from "../../lib/trailbase";
+import { fetchAuction, fetchAuctions } from "../../lib/trailbase";
 import { fetchAuctionBids, readCanonicalBidSnapshot } from "../../lib/trailbase-bids";
 import { toAuctionView, type AuctionView, type Bid } from "../../lib/types";
+import { recordViewedItem } from "../../lib/user-store";
 import { NxsButton } from "../../nxs/components/NxsButton";
 import { useNxs } from "../../nxs/context/NxsProvider";
 import { useNxsText } from "../../nxs/localization/useNxsText";
@@ -75,6 +82,10 @@ export default function ItemScreen() {
   const session = useSession();
   const [bidAmount, setBidAmount] = useState("");
   const [bidding, setBidding] = useState(false);
+  const [isWatching, setIsWatching] = useState(false);
+  const [localWatchCount, setLocalWatchCount] = useState<number | null>(null);
+  const [similarItems, setSimilarItems] = useState<Recommendation[]>([]);
+  const [sellerItems, setSellerItems] = useState<AuctionView[]>([]);
   const [bidNote, setBidNote] = useState<{
     tone: "success" | "warning" | "error" | "unknown";
     text: string;
@@ -133,6 +144,30 @@ export default function ItemScreen() {
             bidsSnapshotRef.current = { auctionId, loaded: true, bids: recentBids };
           }
           setBidAmount((current) => current || String(minNextBid(view.current_price, view.bid_count)));
+
+          // Fetch contextual recommendations and record on-device viewed listing
+          fetchAuctions({ limit: 40 })
+            .then((pool) => {
+              if (seq !== loadSeqRef.current || !mountedRef.current) return;
+              const views = pool.map(toAuctionView);
+              const sim = similarAuctions(view, views, {
+                now: Date.now(),
+                limit: 4,
+                liveOnly: false,
+              });
+              const sel = moreFromSeller(view, views, {
+                now: Date.now(),
+                limit: 4,
+                liveOnly: false,
+              });
+              setSimilarItems(sim);
+              setSellerItems(sel);
+            })
+            .catch((_recErr) => {
+              // Non-fatal recommendation failure
+            });
+
+          void recordViewedItem(view, identityRef.current);
         }
       } catch (e) {
         if (seq !== loadSeqRef.current || !mountedRef.current) return;
@@ -433,7 +468,41 @@ export default function ItemScreen() {
             </View>
 
             <View style={styles.block}>
-              <Text style={[styles.price, closed && styles.priceSold]}>{formatMoney(item.current_price)}</Text>
+              <View style={styles.priceRow}>
+                <Text style={[styles.price, closed && styles.priceSold]}>{formatMoney(item.current_price)}</Text>
+                <Pressable
+                  hitSlop={4}
+                  style={({ pressed }) => [
+                    styles.watchBtn,
+                    isWatching && styles.watchBtnActive,
+                    pressed && styles.pressed,
+                  ]}
+                  onPress={() => {
+                    setIsWatching((prev) => {
+                      const next = !prev;
+                      setLocalWatchCount((cnt) => {
+                        const base = cnt ?? item?.watch_count ?? 0;
+                        return next ? base + 1 : Math.max(0, base - 1);
+                      });
+                      return next;
+                    });
+                  }}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isWatching }}
+                  accessibilityLabel={isWatching ? t("item.unwatchA11y") : t("item.watchA11y")}
+                >
+                  <Text style={[styles.watchBtnText, isWatching && styles.watchBtnTextActive]}>
+                    {isWatching ? t("item.watching") : t("item.watch")}
+                  </Text>
+                </Pressable>
+              </View>
+
+              {item.buy_now_price != null && (
+                <Text style={styles.buyNowText}>
+                  {t("item.buyNowPrice", { amount: formatMoney(item.buy_now_price) })}
+                </Text>
+              )}
+
               <View style={styles.badges}>
                 <Text style={styles.badge}>{localizedConditionLabel(t, item.condition)}</Text>
                 <Text style={styles.badge}>{localizedCategoryLabel(t, item.category)}</Text>
@@ -446,7 +515,7 @@ export default function ItemScreen() {
 
               <View style={styles.statRow}>
                 <Stat label={t("item.bidsLabel")} value={String(item.bid_count)} styles={styles} />
-                <Stat label={t("item.watchingLabel")} value={String(item.watch_count)} styles={styles} />
+                <Stat label={t("item.watchingLabel")} value={String(localWatchCount ?? item.watch_count)} styles={styles} />
                 <Stat label={t("item.viewsLabel")} value={String(item.views)} styles={styles} />
               </View>
 
@@ -491,6 +560,30 @@ export default function ItemScreen() {
 
             <View style={styles.block}>
               <Text style={styles.sectionTitle} accessibilityRole="header">
+                {t("item.conditionNotesTitle")}
+              </Text>
+              <Text style={styles.body}>
+                {t("item.conditionNoteText", { condition: localizedConditionLabel(t, item.condition) })}
+              </Text>
+              <Text style={styles.confidenceText}>{t("item.sellerConfidence")}</Text>
+            </View>
+
+            <View style={styles.block}>
+              <Text style={styles.sectionTitle} accessibilityRole="header">
+                {t("item.fulfilmentTitle")}
+              </Text>
+              <Row
+                k={t("item.shippingFee")}
+                v={localizedShippingLabel(t, item.shipping, item.shipping_fee)}
+                styles={styles}
+              />
+              <Row k={t("item.location")} v={item.city || t("item.defaultLocation")} styles={styles} />
+              <Text style={styles.fulfilmentNote}>{t("item.deliveryEstimate")}</Text>
+              <Text style={styles.fulfilmentNote}>{t("item.pickupAvailable")}</Text>
+            </View>
+
+            <View style={styles.block}>
+              <Text style={styles.sectionTitle} accessibilityRole="header">
                 {t("item.detailsTitle")}
               </Text>
               <Row k={t("item.startingPrice")} v={formatMoney(item.start_price)} styles={styles} />
@@ -498,6 +591,44 @@ export default function ItemScreen() {
               <Row k={t("item.location")} v={item.city || "—"} styles={styles} />
               <Row k={t("item.listingId")} v={String(item.id)} styles={styles} />
             </View>
+
+            {similarItems.length > 0 && (
+              <View style={styles.block}>
+                <Text style={styles.sectionTitle} accessibilityRole="header">
+                  {t("rec.similarAuctions")}
+                </Text>
+                <View style={styles.recGrid}>
+                  {similarItems.map((rec) => (
+                    <AuctionCard
+                      key={`sim-${rec.item.id}`}
+                      item={rec.item}
+                      width={Math.max(140, (heroWidth - screenPadding * 2 - 12) / 2)}
+                      now={now}
+                      onPress={() => router.push(`/item/${rec.item.id}` as never)}
+                    />
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {sellerItems.length > 0 && (
+              <View style={styles.block}>
+                <Text style={styles.sectionTitle} accessibilityRole="header">
+                  {t("rec.moreFromSeller", { seller: item.seller_username })}
+                </Text>
+                <View style={styles.recGrid}>
+                  {sellerItems.map((sel) => (
+                    <AuctionCard
+                      key={`seller-${sel.id}`}
+                      item={sel}
+                      width={Math.max(140, (heroWidth - screenPadding * 2 - 12) / 2)}
+                      now={now}
+                      onPress={() => router.push(`/item/${sel.id}` as never)}
+                    />
+                  ))}
+                </View>
+              </View>
+            )}
           </ScrollView>
 
           <View style={styles.ctaBar}>
@@ -903,6 +1034,61 @@ function makeStyles(
       paddingHorizontal: screenPadding,
       paddingVertical: 14,
       gap: 8,
+    },
+    priceRow: {
+      flexDirection: rowDirection,
+      justifyContent: "space-between",
+      alignItems: "center",
+      minHeight: 48,
+    },
+    watchBtn: {
+      minHeight: nxsTokens.touch.minimum,
+      minWidth: nxsTokens.touch.minimum,
+      paddingHorizontal: 14,
+      borderRadius: nxsTokens.radius.pill,
+      borderWidth: 1,
+      borderColor: theme.action.primary,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    watchBtnActive: {
+      backgroundColor: theme.surface.primaryTint,
+      borderColor: theme.action.primary,
+    },
+    watchBtnText: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: theme.action.primary,
+      textAlign: "center",
+    },
+    watchBtnTextActive: {
+      fontWeight: "800",
+    },
+    buyNowText: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: theme.brand.accent,
+      textAlign,
+    },
+    confidenceText: {
+      fontSize: 12,
+      color: theme.state.success,
+      fontWeight: "600",
+      marginTop: 4,
+      textAlign,
+    },
+    fulfilmentNote: {
+      fontSize: 12,
+      color: theme.text.secondary,
+      lineHeight: 18,
+      marginTop: 4,
+      textAlign,
+    },
+    recGrid: {
+      flexDirection: rowDirection,
+      flexWrap: "wrap",
+      gap: 10,
+      marginTop: 8,
     },
     price: { fontSize: 26, fontWeight: "900", color: theme.state.warning, letterSpacing: -0.6, textAlign },
     priceSold: { color: theme.state.disabled, textDecorationLine: "line-through" },

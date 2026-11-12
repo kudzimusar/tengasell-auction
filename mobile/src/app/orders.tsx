@@ -49,7 +49,7 @@ export default function OrdersScreen() {
           />
         )}
       </View>
-      <BottomNav active="orders" />
+      <BottomNav />
     </SafeAreaView>
   );
 }
