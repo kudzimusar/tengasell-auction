@@ -162,7 +162,7 @@ export default function LoginScreen() {
         keyboardVerticalOffset={Platform.OS === "ios" ? 96 : 0}
       >
         <ScrollView
-          keyboardShouldPersistTaps="handled"
+          keyboardShouldPersistTaps="always"
           keyboardDismissMode="on-drag"
           contentContainerStyle={styles.scrollContent}
         >
@@ -200,8 +200,8 @@ export default function LoginScreen() {
                 style={styles.input}
                 autoCapitalize="none"
                 autoCorrect={false}
-                autoComplete="username"
-                textContentType="username"
+                autoComplete="off"
+                textContentType="none"
                 accessibilityLabel={t("login.emailOrUsername")}
                 testID="login-username-input"
                 returnKeyType="next"
@@ -220,8 +220,8 @@ export default function LoginScreen() {
                 secureTextEntry={!passwordVisible}
                 autoCapitalize="none"
                 autoCorrect={false}
-                autoComplete="current-password"
-                textContentType="password"
+                autoComplete="off"
+                textContentType="none"
                 accessibilityLabel={t("login.password")}
                 testID="login-password-input"
                 onSubmitEditing={() => {
@@ -244,6 +244,7 @@ export default function LoginScreen() {
 
             <NxsButton
               label={t("login.signIn")}
+              testID="login-submit-button"
               loading={submitting}
               disabled={submitting}
               onPress={() => void submit()}

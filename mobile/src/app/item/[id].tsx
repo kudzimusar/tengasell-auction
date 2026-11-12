@@ -709,6 +709,7 @@ export default function ItemScreen() {
                     hitSlop={4}
                     style={({ pressed }) => [styles.cta, pressed && styles.pressed]}
                     onPress={() => router.push("/auth/login" as never)}
+                    testID="place-bid-button"
                     accessibilityRole="button"
                     accessibilityLabel={t("item.engineRevokedSignInA11y")}
                   >
@@ -723,6 +724,7 @@ export default function ItemScreen() {
                       setEngineStatus("connecting");
                       setEngineAttempt((n) => n + 1);
                     }}
+                    testID="place-bid-button"
                     accessibilityRole="button"
                     accessibilityLabel={t("item.engineErrorRetryA11y")}
                   >
@@ -850,6 +852,7 @@ export default function ItemScreen() {
                         }
                       }
                     }}
+                    testID="place-bid-button"
                     accessibilityRole="button"
                     accessibilityState={{ disabled: bidding || !engineUp || closed }}
                     accessibilityLabel={
