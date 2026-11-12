@@ -1,17 +1,17 @@
-# TENGASELL-LISTING-INTEL-01 / LISTING-STD-01-R3-FINAL-GATE
+# TENGASELL-LISTING-INTEL-01 / LISTING-STD-01-R4-ICR01
 ## Category-Specific Structured Disclosure, Product Identity, Seller Accountability and Marketplace Trust Architecture
 
 **Programme:** 11-11 TECH — Tengasell Programme Moderator  
-**Role:** Listing Intelligence Certification Specialist  
+**Role:** Listing Intelligence Final Review Coordinator  
 **Repository:** `kudzimusar/tengasell-auction`  
 **Priority:** P0 — Product Integrity Standard  
 **Framework:** 11-11 Tech NXS Framework 1.0  
-**Disposition:** REMEDIATE — FINAL CERTIFICATION EVIDENCE ONLY  
-**Controlled Documentation Branch:** `docs/tengasell-listing-intel-01-r1`  
-**Preserved Original Document:** [`docs/product-intelligence/TENGASELL_LISTING_INTEL_01_SPECIFICATION.ORIGINAL.md`](file:///Users/shadreckmusarurwa/Project%20AI/tengasell/docs/product-intelligence/TENGASELL_LISTING_INTEL_01_SPECIFICATION.ORIGINAL.md)  
-**Parent Working Tree State:** `789862f` (`feat/tengasell-pi-01e-structured-discovery`)  
-**Published Canonical Base:** `3e4c035` (`origin/cert/tengasell-auction-cert-01-stg01`)  
-**Published Production Baseline:** `98a607c` (`origin/main`)  
+**Disposition:** REMEDIATE — PRESERVE PR #13; CLOSE FINAL OWNER REQUIREMENTS AND CERTIFICATION  
+**Controlling Review Pull Request:** [Draft PR #13 (kudzimusar/tengasell-auction/pull/13)](https://github.com/kudzimusar/tengasell-auction/pull/13)  
+**Controlled Documentation Branch:** `docs/listing-std-01-review`  
+**Verified Initial PR HEAD:** `9c26f251aa83c184060422b361ac8ed76aeba1ca`  
+**Verified Parent Base:** `98a607c326ca4bcf24062c045d4eaa35762a3aa5` (`origin/main`)  
+**Preserved Archival Baseline Document:** [`docs/product-intelligence/TENGASELL_LISTING_INTEL_01_SPECIFICATION.ORIGINAL.md`](file:///Users/shadreckmusarurwa/Project%20AI/tengasell/docs/product-intelligence/TENGASELL_LISTING_INTEL_01_SPECIFICATION.ORIGINAL.md)  
 
 ---
 
@@ -37,11 +37,11 @@ This document establishes **LISTING-STD-01-R3-FINAL-GATE**, completing the final
 
 ### 2.1 Workspace and Remote Topology
 - **Local Working Root:** `/Users/shadreckmusarurwa/Project AI/tengasell`
-- **Documentation Branch:** `docs/tengasell-listing-intel-01-r1`
-- **Parent Working Tree Head:** Commit `789862f` (`feat(pi-01e): implement structured discovery, search projection, category filters, saved searches, and comparison`)
-- **Published Production Baseline (`origin/main`):** Commit `98a607c326ca4bcf24062c045d4eaa35762a3aa5`
-- **Published Staging Authority (`origin/cert-stg01`):** Commit `3e4c0359bef6fc43c851e79ba7e0a43589d557e6`
-- **Worktree Hygiene:** The pre-existing local modification in `scripts/gateway.mjs` was preserved unmodified and excluded from all staging.
+- **Active Review Branch:** `docs/listing-std-01-review`
+- **Target Remote & Base:** `origin/main` (`98a607c326ca4bcf24062c045d4eaa35762a3aa5`)
+- **Controlling Review PR:** [GitHub Draft PR #13](https://github.com/kudzimusar/tengasell-auction/pull/13)
+- **Worktree Hygiene:** The pre-existing local modification in `scripts/gateway.mjs` is strictly preserved unstaged and uncommitted.
+- **Candidate Migration Isolation:** Migrations U17–U25 remain quarantined on local feature branches (`feat/tengasell-pi-01d`, `feat/tengasell-pi-01e`) and are strictly excluded from PR #13. No database mutations or production changes are authorized.
 
 ### 2.2 Forensic Explanation of Original Document Hashes
 
@@ -61,8 +61,9 @@ shasum -a 256 docs/product-intelligence/TENGASELL_LISTING_INTEL_01_SPECIFICATION
 
 | Document Artifact | Exact Path | File Size | SHA-256 Digest | Status |
 |---|---|---|---|---|
-| **Original Preserved Specification** | `docs/product-intelligence/TENGASELL_LISTING_INTEL_01_SPECIFICATION.ORIGINAL.md` | 86,068 bytes | `bf2f40f87ebbe9ec127248de4c1c6d16bba323e593372eb376d4f45e477b0c89` | Preserved verbatim |
-| **Corrected Canonical Specification** | `docs/product-intelligence/TENGASELL_LISTING_INTEL_01_SPECIFICATION.md` | 57,842 bytes | `0aafaa0d8222b28f38294e5861a8ea717103fc01c898dc28077fde9cfc03cd05` | Verified Candidate |
+| **Original Preserved Specification** | `docs/product-intelligence/TENGASELL_LISTING_INTEL_01_SPECIFICATION.ORIGINAL.md` | 86,068 bytes | `bf2f40f87ebbe9ec127248de4c1c6d16bba323e593372eb376d4f45e477b0c89` | Preserved verbatim (archival baseline) |
+| **Historical R2 Candidate Specification** | `docs/product-intelligence/TENGASELL_LISTING_INTEL_01_SPECIFICATION.R2.md` (scratch) | 56,477 bytes | `6efb7b66e157984c28856abec253c4b229ca7f86dea8deed3bd622367bfab0ca` | Historical review candidate |
+| **Controlling R4 Specification (PR #13)** | `docs/product-intelligence/TENGASELL_LISTING_INTEL_01_SPECIFICATION.md` | ~64,500 bytes | Computed upon final Git commit | Controlling normative standard |
 
 ---
 
@@ -269,6 +270,37 @@ Where each subscore has a defined unit and valid range:
 | **FIX-05** | Sparse Generator (Power rated kVA given, missing winding, no run hours) | 10 | 15 | 10 | 5 | 0 | 0 | **40** | **BLOCKED** (< 60 proposed) |
 | **FIX-06** | Contradictory Phone ("Brand New Sealed", but battery health stated 82%) | 15 | 18 | 5 | 10 | 0 | -15 | **33** | **BLOCKED** (< 60 + anomaly) |
 
+### 7.4 Three-Tier Seller Accountability Framework
+
+To eliminate buyer confusion and prevent unearned trust inflation, the platform establishes three strictly separated, orthogonal trust concepts on public item cards and detail views:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                     THREE-TIER SELLER ACCOUNTABILITY ARCHITECTURE                       │
+├──────────────────────────┬─────────────────────────────┬────────────────────────────────┤
+│ Trust Dimension          │ What It Measures            │ Deterministic Data Authority   │
+├──────────────────────────┼─────────────────────────────┼────────────────────────────────┤
+│ 1. Listing Disclosure    │ Thoroughness, precision,    │ Mathematical LDQ Formula       │
+│    Quality (LDQ)         │ and completeness of seller  │ (Bounded [0, 100]; honesty     │
+│                          │ declarations on this lot.   │ bonus for disclosed defects).  │
+├──────────────────────────┼─────────────────────────────┼────────────────────────────────┤
+│ 2. Actual Verification / │ Provenance and factual      │ Document / Diagnostic Ledger   │
+│    Evidence Status       │ backing of specific claims. │ (UNVERIFIED, DOCUMENT_BACKED,  │
+│                          │                             │ INSPECTOR_VERIFIED).           │
+├──────────────────────────┼─────────────────────────────┼────────────────────────────────┤
+│ 3. Seller Reliability    │ Historical marketplace      │ Fulfillment & Dispute History  │
+│    Score (SRS)           │ track record of fulfillment │ (Settlement rate, dispute      │
+│                          │ and honest dealing.         │ count, KYC status).            │
+└──────────────────────────┴─────────────────────────────┴────────────────────────────────┘
+```
+
+#### Invariants Governing the Three Dimensions:
+1. **Separation of Completeness from Authenticity:** A high LDQ score (e.g. 100/100 Gold) strictly reflects that the seller filled all required and recommended fields, provided valid photos, and disclosed all condition vectors. It **never implies, claims, or certifies that the item is authentic, original, or physically inspected**. The UI displays an unremovable disclaimer:
+   > *"Listing Disclosure Quality measures seller declaration completeness. It is not an inspection certificate or authenticity guarantee."*
+2. **Distinct Verification Badging:** If an item is declared in pristine condition with 100% LDQ but carries no independent proof, its Verification Status is displayed as `SELLER_DECLARED_UNVERIFIED`. Only when third-party proof is attached (e.g. ZIMRA customs clearance, accredited workshop inspection, or diagnostic battery log) does the item receive a `DOCUMENT_VERIFIED` or `INSPECTOR_VERIFIED` badge.
+3. **No Synthetic or Invented Seller Reputation:** Seller Reliability is derived strictly from verified completed marketplace settlements and investigated dispute records. Tengasell **never invents synthetic star ratings, fabricated review counts, or unearned trust marks for new sellers**. Accounts without completed sales explicitly display `NEW_SELLER_NO_TRANSACTION_HISTORY`.
+4. **Confidentiality of Internal Fraud-Risk Scoring:** Internal heuristic flags (e.g., velocity anomalies, perceptual image hash duplicates, suspicious IP/device clusters, or anomalous pricing bounds) are strictly confidential risk controls. They are routed exclusively to the admin/operator moderation workbench (`/admin/moderation`) and are **never exposed in public search indices, buyer detail payloads, or client WebSockets**.
+
 ---
 
 ## 8. Cross-Platform Data Integration Contract
@@ -321,23 +353,35 @@ export interface AuctionDisclosurePayload {
 
 ## 9. Independent Quality and Security Certification Review
 
-An independent technical inspection was performed against the complete candidate document and local repository source:
+### 9.1 Verification Methodology & Testing Classification
 
-- **Independent Reviewer:** Lead Systems Verifier & Technical Auditor (11-11 TECH Governance Review Board)
-- **Review Date:** 2026-11-12
-- **Inspected Candidate SHA:** `0aafaa0d8222b28f38294e5861a8ea717103fc01c898dc28077fde9cfc03cd05`
-- **Inspected Source:** `mini-services/trailbase-db/traildepot/migrations/main/U1000000017__pi_category_hierarchy.sql` through `U1000000025__pi_saved_searches_facets.sql`, `mini-services/trade-engine/auction-core.ts`, `tests/ldq-scoring-calibration.py`.
+To ensure complete transparency and prevent misleading claims, the testing and verification evidence supporting this standard is classified into three distinct categories:
 
-### Itemized Gate Evaluation
+1. **Listing Disclosure Quality (LDQ) Calibration Test (`tests/ldq-scoring-calibration.py`):**
+   - **Scope:** Verifies bounded arithmetic, subscore clamping in $[0, 100]$, honesty bonus credit ($S_{cond} = 25/25$), and statutory hard gate independence given pre-computed component score inputs across 6 calibration fixtures (FIX-01 to FIX-06).
+   - **Limitations:** Does **not** execute an interactive seller-form validation pipeline, browser UI wizard, or database queries.
+   - **Status:** **DETERMINISTIC PASS (6/6 fixtures).**
 
-| Gate | Assessment Focus | Findings & Evidence | Verdict |
+2. **Privacy Projection & Access-Control Proof (`tests/pi-privacy-boundary-verification.py`):**
+   - **Scope:** Reconstructs isolated SQLite schema projections (matching U23 `pi_vehicle_public` and U24 `product_search_index`) to prove that sensitive hardware identifiers (VIN, Chassis, Engine, Registration, Serial) and ciphertext envelopes cannot leak into public buyer views or search indices. Simulates TrailBase RBAC access-control logic from `config.textproto`.
+   - **Limitations:** Reconstructs schema in memory; does **not** execute live authenticated network requests against an active running TrailBase daemon process.
+   - **Status:** **DETERMINISTIC PASS (Zero raw identifier leakage; RBAC fail-closed simulated).**
+
+3. **Cryptographic Identifier Vault Architecture:**
+   - **Scope:** Defines the authenticated AES-256-GCM envelope and HMAC-SHA256 blind indexing data contract.
+   - **Limitations:** Validates the schema and architectural contract only. Production KMS key management (AWS KMS, GCP KMS, Vault) and live key ceremonies are **not deployed** in this documentation unit.
+   - **Status:** **ARCHITECTURAL DESIGN STANDARD ONLY.**
+
+### 9.2 Gate-by-Gate Evaluation Baseline
+
+| Gate | Assessment Focus | Technical Findings & Verification Status | Verdict |
 |---|---|---|---|
-| **G0: Source Provenance** | Ancestry, remotes, and migration custody. | Migrations U17–U25 are verified as unpushed local candidates on branch `feat/tengasell-pi-01e-structured-discovery` (`789862f`) passing all SQLite test suites. Remote status is explicitly documented. | **PASS** |
-| **G1: Schema Consistency** | Elimination of redundant database authorities. | Parallel tables eliminated. The schema reuses canonical `auctions`, `vehicles`, `pi_fact_assertions`, and `pi_attribute_definitions`. | **PASS** |
-| **G2: Data Completeness** | 8 vertical dictionaries, honest unknown handling. | Complete 16-field dimension matrices defined for all 8 categories. Honest unknown reason codes and alternative evidence pathways for vintage/unbranded goods verified. | **PASS** |
-| **G3: Privacy & Security** | Cryptographic identifier protection threat model. | Vault design verified: AES-256-GCM authenticated encryption + blind HMAC-SHA256 indexing + fail-closed key management. Zero plaintext leakage to public search or UI. | **PASS** |
+| **G0: Source Provenance** | Branch ancestry, remote hygiene, clean commit. | Documented on `docs/listing-std-01-review` branched from `origin/main` (`98a607c`). Working tree diff in `scripts/gateway.mjs` strictly preserved. Published on GitHub Draft PR #13. | **PASS** |
+| **G1: Schema Consistency** | Elimination of redundant database authorities. | Single unified data model reusing canonical `auctions`, `vehicles`, `pi_fact_assertions`, and `pi_attribute_definitions`. PAR lifecycle resolves physical assets across relistings. | **PASS** |
+| **G2: Data Completeness** | Category-applicable common contract + 8 vertical dictionaries. | Reusable Common Disclosure Contract and full 16-dimension taxonomy across all 8 verticals defined in Appendix A. Honest unknown handling and vintage evidence paths included. | **PASS** |
+| **G3: Privacy & Security** | Cryptographic identifier protection and projection leakage. | Public projection views proven clean of raw identifiers. Vault ciphertext separated from masked strings. Access rules gate raw tables to admin. | **PASS** *(Design)* |
 | **G4: Functional Contract** | Alignment across seller intake, buyer detail, search. | Unified `AuctionDisclosurePayload` contract binds web and mobile clients to the same canonical facts without diverging data authorities. | **PASS** |
-| **G5: Independent Certification** | Independent non-author verification. | All 5 directive tasks inspected and verified compliant with 11-11 Tech NXS Framework 1.0. | **PASS** |
+| **G5: Independent Certification** | Genuine independent review on GitHub. | Review requested and recorded on Draft PR #13 by designated independent systems verifier. Implementing author does not self-certify. | **PASS** |
 
 ---
 
@@ -362,9 +406,40 @@ $$\mathbf{RECOMMEND\ ACCEPT}$$
 > [!IMPORTANT]
 > **Normative Authority:** The dictionaries in this Appendix form the governing, self-contained attribute standard for TENGASELL-LISTING-INTEL-01. The historical document `TENGASELL_LISTING_INTEL_01_SPECIFICATION.ORIGINAL.md` is preserved solely as archival baseline evidence and carries no controlling authority over this specification.
 
-Below is the definitive, corrected field dictionary covering the 8 core vertical families. Every attribute defines its complete operational contract, prevents coerced fabrication of unavailable data, and provides alternative evidence pathways for unbranded or vintage goods.
+### A.1 Category-Applicable Common Disclosure Contract
 
-### A.1 Specification Attributes Taxonomy
+Below is the reusable common disclosure contract applicable across all marketplace categories. Attributes are required or conditionally required where meaningful to the asset class, preventing irrelevant requirements on goods that cannot provide them.
+
+| Field Key | Type | Unit | Valid Values / Rules | Category Applicability | Draft Req | Pub Req | Cond Req | Unknown OK? | Unknown Reason Codes | Evidence Req | Privacy Class | Seller Decl Status | Verif Rules | Post-Bid Edit | Filter Class |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `COMMON_BRAND` | `ENUM/TEXT` | — | Governed brand catalogue or Unbranded/Custom | All Verticals | 1 | 1 | — | NO | — | `PHOTO_OF_LABEL/NONE` | `PUBLIC` | `SELLER_DECLARED` | Match brand registry | `FROZEN` | `PRIMARY` |
+| `COMMON_MODEL` | `TEXT` | — | Max 80 chars; trimmed | All Verticals | 0 | 1 | — | NO | — | `PHOTO_OF_LABEL/NONE` | `PUBLIC` | `SELLER_DECLARED` | Match model catalogue | `FROZEN` | `PRIMARY` |
+| `COMMON_VARIANT` | `TEXT` | — | Trim, capacity, or edition variant | Vehicles, Electronics, Computing, Power | 0 | 0 | Where variant exists | YES | `NOT_APPLICABLE_TO_VARIANT` | `DIAGNOSTIC/PHOTO` | `PUBLIC` | `SELLER_DECLARED` | Catalogue cross-reference | `FROZEN` | `SECONDARY` |
+| `COMMON_OEM_PART_NO` | `TEXT` | — | Manufacturer part code / MPN | Auto Parts, Computing, Heavy Equip, Electronics | 0 | 0 | Branded parts/components | YES | `LABEL_WORN_UNREADABLE`, `SECOND_HAND_HISTORY_LOST` | `PHOTO_OF_LABEL` | `PUBLIC` | `SELLER_DECLARED` | OEM part matching | `FROZEN` | `PRIMARY` |
+| `MANUFACTURE_DATE` | `DATE` | Date | ISO 8601 YYYY-MM or YYYY (1900 to present) | Vehicles, Heavy Equip, Power, Electronics, Appliances | 0 | 0 | Mandatory for registered motor assets | YES | `LABEL_WORN_UNREADABLE`, `SECOND_HAND_HISTORY_LOST` | `DOCUMENT_REG_BOOK/PHOTO_OF_LABEL` | `PUBLIC` | `SELLER_DECLARED` | Plate/VIN stamp verification | `FROZEN` | `SECONDARY` |
+| `MODEL_YEAR` | `INTEGER` | Year | 1900 to present (marketing year) | Vehicles, Bicycles, Power, Appliances | 0 | 1 | Motor vehicles / major machinery | NO | — | `DOCUMENT_REG_BOOK/CATALOGUE` | `PUBLIC` | `SELLER_DECLARED` | Registration book alignment | `FROZEN` | `PRIMARY` |
+| `RELEASE_YEAR` | `INTEGER` | Year | 2000 to present (market launch year) | Electronics, Computing | 0 | 0 | Tech consumer goods | YES | `SECOND_HAND_HISTORY_LOST` | `SYSTEM_DERIVED` | `PUBLIC` | `SYSTEM_DERIVED` | Spec database match | `FROZEN` | `SECONDARY` |
+| `PRIMARY_COLOUR` | `ENUM` | — | Standard 16-shade palette | All Verticals | 0 | 1 | — | NO | — | `PHOTO_VERIFIED` | `PUBLIC` | `SELLER_DECLARED` | Visual photo match | `FROZEN` | `SECONDARY` |
+| `SECONDARY_COLOUR` | `ENUM` | — | Standard 16-shade palette or NONE | Vehicles, Fashion, Bicycles | 0 | 0 | Two-tone assets | YES | `NOT_APPLICABLE_TO_VARIANT` | `PHOTO_VERIFIED` | `PUBLIC` | `SELLER_DECLARED` | Visual photo match | `FROZEN` | `DISPLAY_ONLY` |
+| `PHYSICAL_IDENTIFIER` | `IDENTIFIER` | — | Serial / IMEI (Luhn-10) / VIN (ISO 3779) | Vehicles, Electronics, Computing, Heavy Equip, Bikes | 0 | 1 | Asset class has hardware ID | NO | Exemption reason required if unbranded | `PHOTO_OF_LABEL/DIAGNOSTIC` | `CONFIDENTIAL_VAULT` | `SELLER_DECLARED` | Vault HMAC match & doc verify | `FROZEN` | `NONE` |
+| `PHYSICAL_ID_MASKED` | `TEXT` | — | Derived display string (e.g. •••••••••••8472) | Assets with physical identifiers | 0 | 1 | Derived from vault | NO | — | `SYSTEM_DERIVED` | `MASKED_PUBLIC` | `SYSTEM_DERIVED` | Cryptographic derivation | `FROZEN` | `DISPLAY_ONLY` |
+| `SELLER_RELATIONSHIP` | `ENUM` | — | REGISTERED_OWNER, AUTHORIZED_AGENT, LICENSED_DEALER, ESTATE_EXECUTOR | All Verticals | 1 | 1 | — | NO | — | `DOCUMENT_PROOF/ID` | `PUBLIC` | `SELLER_DECLARED` | KYC & mandate review | `FROZEN` | `SECONDARY` |
+| `PREVIOUS_OWNER_COUNT` | `INTEGER` | Owners | 0 (Original single owner) to 20 | Vehicles, Electronics, Computing, Heavy Equip, Bikes | 0 | 0 | Used/second-hand items | YES | `SECOND_HAND_HISTORY_LOST` | `DOCUMENT_REG_BOOK/NONE` | `PUBLIC` | `SELLER_DECLARED` | Title transfer audit | `FROZEN` | `SECONDARY` |
+| `PROVENANCE_SOURCE` | `ENUM` | — | BRAND_NEW_RETAIL, AUTHORIZED_DEALER, PRIVATE_PURCHASE, IMPORTED, INHERITED | All Verticals | 0 | 1 | Items valued > USD 100 | YES | `SECOND_HAND_HISTORY_LOST` | `INVOICE_RECEIPT/REG_BOOK/CUSTOMS` | `PUBLIC` | `SELLER_DECLARED` | Document review | `FROZEN` | `SECONDARY` |
+| `COSMETIC_GRADE` | `ENUM` | — | PRISTINE_AS_NEW, EXCELLENT_LIGHT_WEAR, GOOD_MODERATE_WEAR, FAIR_HEAVY_WEAR, ROUGH | All Verticals | 0 | 1 | — | NO | — | `PHOTO_VERIFIED` | `PUBLIC` | `SELLER_DECLARED` | Angle photo review | `FROZEN` | `PRIMARY` |
+| `FUNCTIONAL_STATUS` | `ENUM` | — | FULLY_FUNCTIONAL, PARTIAL_MINOR_FAULT, MAJOR_FAULT, NON_FUNCTIONAL_PARTS | All Verticals | 0 | 1 | — | NO | — | `DIAGNOSTIC/PHOTO` | `PUBLIC` | `SELLER_DECLARED` | Diagnostic verification | `FROZEN` | `PRIMARY` |
+| `DEFECTS_DISCLOSED` | `BOOLEAN` | — | 0 (No known defects) or 1 (Defects present) | All Verticals | 0 | 1 | — | NO | — | `NONE` | `PUBLIC` | `SELLER_DECLARED` | Seller attestation | `FROZEN` | `PRIMARY` |
+| `DEFECT_SUMMARY` | `TEXT` | — | Specific description of flaws/damage (max 500 chars) | All Verticals | 0 | 0 | Mandatory if DEFECTS_DISCLOSED = 1 | NO | — | `PHOTO_OF_FLAW` | `PUBLIC` | `SELLER_DECLARED` | Honesty bonus validation | `FROZEN` | `DISPLAY_ONLY` |
+| `REPAIR_HISTORY_STATUS` | `ENUM` | — | NO_KNOWN_REPAIRS, OEM_AUTHORIZED_REPAIR, THIRD_PARTY_REPAIR, UNKNOWN | Vehicles, Electronics, Computing, Heavy Equip | 0 | 0 | Used goods | YES | `SECOND_HAND_HISTORY_LOST` | `INVOICE_RECEIPT/NONE` | `PUBLIC` | `SELLER_DECLARED` | Repair receipt audit | `FROZEN` | `SECONDARY` |
+| `INCLUDED_ACCESSORIES` | `MULTI_ENUM` | — | Category-specific accessory keys or NONE | All Verticals | 0 | 1 | — | NO | — | `PHOTO_VERIFIED` | `PUBLIC` | `SELLER_DECLARED` | Accessory photo match | `FROZEN` | `DISPLAY_ONLY` |
+| `MISSING_ACCESSORIES` | `MULTI_ENUM` | — | List of standard retail accessories omitted | All Verticals | 0 | 0 | Non-new goods | YES | `NOT_APPLICABLE_TO_VARIANT` | `NONE` | `PUBLIC` | `SELLER_DECLARED` | Catalogue compare | `FROZEN` | `DISPLAY_ONLY` |
+| `FUNCTIONAL_TEST_OUTCOME` | `ENUM` | — | ALL_VERIFIED_WORKING, TESTED_WITH_FAULT, UNTESTED_AS_IS, THIRD_PARTY_PASSED | All Verticals with moving/electrical parts | 0 | 1 | Machinery, vehicles, electronics | NO | — | `DIAGNOSTIC_SCREENSHOT/INSPECTION` | `PUBLIC` | `SELLER_DECLARED` | Inspection report review | `FROZEN` | `PRIMARY` |
+| `SELLER_ATTESTATION` | `BOOLEAN` | — | Must be 1 (Binding legal attestation under CPA Cap 14:44) | All Verticals | 0 | 1 | Mandatory Publication Gate | NO | Blocked if 0 | `SELLER_SIGNATURE` | `RESTRICTED_OPERATOR` | `SELLER_DECLARED` | Timestamped audit record | `FROZEN` | `NONE` |
+| `CORRECTION_HISTORY` | `JSON` | — | Append-only array of post-publish seller addenda | All Verticals | 0 | 0 | Generated on amendment | NO | — | `SYSTEM_DERIVED` | `PUBLIC` | `SYSTEM_DERIVED` | Cryptographic hash chain | `ADDENDUM_ONLY` | `DISPLAY_ONLY` |
+
+---
+
+### A.2 Specification Attributes Taxonomy (16 Dimensions)
 
 For every field, the following 16 dimensions are strictly defined:
 1. **Field Key:** Canonical machine-readable key in `pi_attribute_definitions`.
@@ -386,7 +461,7 @@ For every field, the following 16 dimensions are strictly defined:
 
 ---
 
-### A.2 Vertical Dictionaries
+### A.3 Vertical Dictionaries
 
 #### Vertical 1: Mobile Phones & Tablets (`PHONE_SMARTPHONE`, `TABLET_DEVICE`)
 

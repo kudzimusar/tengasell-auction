@@ -1,16 +1,23 @@
 #!/usr/bin/env python3
 """
 LDQ Scoring and Publication Gate Calibration Test Suite
-Part of TENGASELL-LISTING-INTEL-01-R3-FINAL-GATE verification.
+Part of TENGASELL-LISTING-INTEL-01 / LISTING-STD-01-R4 verification.
 
-Validates:
-1. Valid range and unit of each subscore.
-2. Overall bounds strictly in [0, 100].
-3. Handling of legitimate unknown values.
-4. Positive reward (honesty bonus) for candid defect disclosure.
-5. Independence of hard publication gates (numeric score cannot override).
-6. Execution of 6 reproducible calibration fixtures.
-7. Verification that high LDQ cannot be mistaken for an authenticity guarantee.
+SCOPE & TEST LIMITATIONS:
+- Verifies bounded arithmetic, subscore clamping, and calibration invariants
+  using pre-computed/supplied component score inputs.
+- Does NOT execute an end-to-end seller intake form validation pipeline or
+  browser-driven intake wizard.
+- Does NOT perform runtime SQL queries or mutate database state.
+
+VALIDATION FOCUS:
+1. Valid range and unit of each subscore (s_id, s_tech, s_cond, s_photo, s_evid).
+2. Overall bounds strictly clamped in [0, 100].
+3. Handling of legitimate unknown values with reason codes.
+4. Positive reward (honesty bonus) for candid defect disclosure (s_cond = 25/25).
+5. Independence of hard statutory publication gates (numeric score cannot override).
+6. Execution of 6 reproducible calibration fixtures (FIX-01 to FIX-06).
+7. Strict non-guarantee invariant: high LDQ never implies authenticity or inspection.
 """
 
 from __future__ import annotations

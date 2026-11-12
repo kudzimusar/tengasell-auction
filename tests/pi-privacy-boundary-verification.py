@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
 """
-TENGASELL-LISTING-INTEL-01 / LISTING-STD-01-R3
+TENGASELL-LISTING-INTEL-01 / LISTING-STD-01-R4
 Privacy Access-Control & Identifier Projection Verification Test
 
-Deterministic proof that:
-1. Public projection (pi_vehicle_public) excludes raw identifiers (VIN, Chassis, Engine, Reg).
-2. Search index (product_search_index) excludes raw identifiers and ciphertext.
-3. Raw underlying vehicle tables are strictly admin-gated in TrailBase access rules.
-4. Identifier vault separation enforces masking on public fields and encryption envelope on private fields.
+SCOPE & METHODOLOGY CLASSIFICATION:
+1. Schema Projection Verification: Reconstructs isolated SQLite schema objects
+   and views (matching U23 pi_vehicle_public and U24 product_search_index) to prove
+   that raw identifier strings (VIN, Chassis, Engine, Reg, Serial) and ciphertext
+   cannot leak into public buyer projections or search indices.
+2. Access Control Simulation: Simulates TrailBase RBAC rule evaluation based on
+   config.textproto definitions (EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)),
+   proving fail-closed (403) behaviour for unauthenticated / non-admin callers.
+3. Limitations & Disclaimers:
+   - Does NOT execute live network calls against an active running TrailBase daemon.
+   - Evaluates the proposed architectural schema contract; does NOT imply that
+     production encryption keys (KMS) or database migrations are deployed in production.
 """
 
 import sqlite3
