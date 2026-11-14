@@ -34,6 +34,7 @@ interface GatewayLiveState {
 
 function resolveGatewayLiveState({
   sessions,
+  sessionsLoaded,
   events,
   eventsLoading,
   currentLot,
@@ -41,6 +42,7 @@ function resolveGatewayLiveState({
   lotError,
 }: {
   sessions: LiveSession[];
+  sessionsLoaded: boolean;
   events: AuctionEvent[];
   eventsLoading: boolean;
   currentLot: Auction | null;
@@ -59,23 +61,34 @@ function resolveGatewayLiveState({
     .sort((a, b) => a.starts_at.localeCompare(b.starts_at))[0] ?? null;
 
   if (liveSession) {
-    const eventCompatibleStatus =
-      liveSession.event_id != null
-        ? eventsLoading
-          ? null
-          : (linkedEvent?.status ?? "CLOSED")
-        : null;
-    const lotReady = !lotLoading && !lotError && (!liveSession.event_id || !eventsLoading);
-    const eventLotMismatch =
-      liveSession.event_id != null &&
-      liveSession.current_lot_id != null &&
-      linkedEvent?.current_lot_id == null;
+    const eventBacked = liveSession.event_id != null;
+    const eventCompatibleStatus = eventBacked
+      ? eventsLoading
+        ? null
+        : (linkedEvent?.status ?? "CLOSED")
+      : null;
+    const lotReady = Boolean(!lotLoading && !lotError && (!eventBacked || !eventsLoading) && (liveSession.current_lot_id == null || currentLot != null));
+    const lotMatchesSession =
+      liveSession.current_lot_id == null ||
+      (currentLot != null && Number(currentLot.id) === Number(liveSession.current_lot_id));
     const display = getLiveEventDisplay({
       sessionStatus: liveSession.status,
+      sessionExists: true,
+      sessionLoaded: sessionsLoaded,
+      eventBacked,
       eventStatus: eventCompatibleStatus,
+      eventLoaded: !eventBacked || !eventsLoading,
+      sessionMatchesEvent:
+        !eventBacked ||
+        !linkedEvent ||
+        (linkedEvent.session_id == null || Number(linkedEvent.session_id) === Number(liveSession.id)),
       currentLotId: liveSession.current_lot_id,
-      lotStatus: eventLotMismatch ? "MISMATCH" : (currentLot?.status ?? null),
+      eventCurrentLotId: eventBacked ? (linkedEvent?.current_lot_id ?? null) : undefined,
+      lotMatchesSession,
+      lotAuctionStatus: currentLot?.status ?? null,
+      lotStatus: currentLot?.status ?? null,
       lotLoaded: lotReady,
+      dataError: Boolean(lotError),
       requireLotVerification: liveSession.current_lot_id != null,
     });
     return { liveSession, linkedEvent, nextSession, nextEvent, display };
@@ -89,7 +102,11 @@ function resolveGatewayLiveState({
       nextEvent,
       display: getLiveEventDisplay({
         sessionStatus: nextSession ? "scheduled" : null,
+        sessionExists: Boolean(nextSession),
+        sessionLoaded: sessionsLoaded,
+        eventBacked: Boolean(nextEvent),
         eventStatus: nextEvent ? nextEvent.status : null,
+        eventLoaded: !eventsLoading,
         currentLotId: null,
         requireLotVerification: false,
       }),
@@ -413,6 +430,7 @@ export default function HomePage() {
 
   const liveState = resolveGatewayLiveState({
     sessions,
+    sessionsLoaded: !sessionsRes.loading || Boolean(sessionsRes.data),
     events,
     eventsLoading: eventsRes.loading && !eventsRes.data,
     currentLot: currentLotRes.data ?? null,

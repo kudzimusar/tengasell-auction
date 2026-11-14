@@ -29,13 +29,15 @@ vm.runInNewContext(outputText, {
   Boolean,
 });
 
-const { getTimedAuctionDisplay, getLiveEventDisplay } = mod.exports;
+const { getTimedAuctionDisplay, getLiveEventDisplay, getItemAuctionModePresentation } = mod.exports;
 // Normalize realm prototype for cross-VM assert.deepEqual
 const getTimed = (auction, ms) => ({ ...getTimedAuctionDisplay(auction, ms) });
 const getLive = (input) => ({ ...getLiveEventDisplay(input) });
+const getItemMode = (input) => ({ ...getItemAuctionModePresentation(input) });
 
 assert.equal(typeof getTimedAuctionDisplay, "function", "getTimedAuctionDisplay must be exported");
 assert.equal(typeof getLiveEventDisplay, "function", "getLiveEventDisplay must be exported");
+assert.equal(typeof getItemAuctionModePresentation, "function", "getItemAuctionModePresentation must be exported");
 
 const nowMs = Date.parse("2026-11-14T12:00:00.000Z");
 
@@ -145,8 +147,17 @@ assert.equal(
 // Genuine authoritative live room
 const activeDisplay = getLiveEventDisplay({
   sessionStatus: "live",
+  sessionExists: true,
+  sessionLoaded: true,
+  eventBacked: true,
   eventStatus: "LIVE",
+  eventLoaded: true,
+  sessionMatchesEvent: true,
   currentLotId: 101,
+  eventCurrentLotId: 5001,
+  lotMatchesSession: true,
+  eventLotStatus: "LIVE",
+  lotAuctionStatus: "live",
   lotStatus: "live",
   lotLoaded: true,
   requireLotVerification: true,
@@ -155,6 +166,84 @@ assert.equal(activeDisplay.isAuthoritativeLive, true);
 assert.equal(activeDisplay.state, "live_bidding");
 assert.equal(activeDisplay.label, "Live Bidding Now");
 assert.equal(activeDisplay.ctaLabel, "Enter Live Room");
+
+// 1b. Mandatory A2 10 negative cases — MUST NEVER return isAuthoritativeLive: true
+const negativeCases = [
+  ["1. event.status=LIVE with session=null", { sessionStatus: null, sessionExists: false, sessionLoaded: true, eventBacked: true, eventStatus: "LIVE", currentLotId: null }],
+  ["2. event.status=LIVE with session.status=scheduled", { sessionStatus: "scheduled", sessionExists: true, eventBacked: true, eventStatus: "LIVE", currentLotId: 101, lotLoaded: true }],
+  ["3. event.status=LIVE with session.status=closed", { sessionStatus: "closed", sessionExists: true, eventBacked: true, eventStatus: "LIVE", currentLotId: 101, lotLoaded: true }],
+  ["4. session.status=live with event.status=SCHEDULED", { sessionStatus: "live", sessionExists: true, eventBacked: true, eventStatus: "SCHEDULED", currentLotId: 101, lotStatus: "live", lotLoaded: true }],
+  ["5. session.status=live with event.status=CANCELLED", { sessionStatus: "live", sessionExists: true, eventBacked: true, eventStatus: "CANCELLED", currentLotId: 101, lotStatus: "live", lotLoaded: true }],
+  ["6. current_lot_id present while lot fetch pending", { sessionStatus: "live", sessionExists: true, eventBacked: true, eventStatus: "LIVE", currentLotId: 101, lotLoaded: false }],
+  ["7. current_lot_id present while lot fetch failed", { sessionStatus: "live", sessionExists: true, eventBacked: true, eventStatus: "LIVE", currentLotId: 101, lotLoaded: true, dataError: true }],
+  ["8a. AuctionLot.status=PASSED", { sessionStatus: "live", sessionExists: true, eventBacked: true, eventStatus: "LIVE", currentLotId: 101, eventCurrentLotId: 5001, eventLotStatus: "PASSED", lotAuctionStatus: "live", lotLoaded: true }],
+  ["8b. AuctionLot.status=SOLD", { sessionStatus: "live", sessionExists: true, eventBacked: true, eventStatus: "LIVE", currentLotId: 101, eventCurrentLotId: 5001, eventLotStatus: "SOLD", lotAuctionStatus: "sold", lotLoaded: true }],
+  ["8c. AuctionLot.status=WITHDRAWN", { sessionStatus: "live", sessionExists: true, eventBacked: true, eventStatus: "LIVE", currentLotId: 101, eventCurrentLotId: 5001, eventLotStatus: "WITHDRAWN", lotAuctionStatus: "live", lotLoaded: true }],
+  ["9a. Auction.status=ended", { sessionStatus: "live", sessionExists: true, eventBacked: true, eventStatus: "LIVE", currentLotId: 101, eventCurrentLotId: 5001, eventLotStatus: "LIVE", lotAuctionStatus: "ended", lotLoaded: true }],
+  ["9b. Auction.status=sold", { sessionStatus: "live", sessionExists: true, eventBacked: true, eventStatus: "LIVE", currentLotId: 101, eventCurrentLotId: 5001, eventLotStatus: "LIVE", lotAuctionStatus: "sold", lotLoaded: true }],
+  ["9c. Auction.status=cancelled", { sessionStatus: "live", sessionExists: true, eventBacked: true, eventStatus: "LIVE", currentLotId: 101, eventCurrentLotId: 5001, eventLotStatus: "LIVE", lotAuctionStatus: "cancelled", lotLoaded: true }],
+  ["10a. Reconnecting socket", { sessionStatus: "live", sessionExists: true, eventBacked: true, eventStatus: "LIVE", currentLotId: 101, eventCurrentLotId: 5001, eventLotStatus: "LIVE", lotAuctionStatus: "live", lotLoaded: true, reconnecting: true }],
+  ["10b. Stale state", { sessionStatus: "live", sessionExists: true, eventBacked: true, eventStatus: "LIVE", currentLotId: 101, eventCurrentLotId: 5001, eventLotStatus: "LIVE", lotAuctionStatus: "live", lotLoaded: true, stale: true }],
+];
+for (const [desc, input] of negativeCases) {
+  const out = getLive(input);
+  assert.equal(out.isAuthoritativeLive, false, `${desc} MUST NOT return isAuthoritativeLive=true`);
+  assert.notEqual(out.state, "live_bidding", `${desc} MUST NOT return state='live_bidding'`);
+}
+
+// 1c. Mandatory A5 Item-page auction mode states
+assert.equal(
+  getItemMode({ auction: { id: 101, status: "live", ends_at: "2026-11-14T20:00:00Z", live_session_id: null }, nowMs }).mode,
+  "standalone_timed",
+);
+assert.equal(
+  getItemMode({
+    auction: { id: 201, status: "live", ends_at: "2026-11-14T20:00:00Z", live_session_id: 702 },
+    session: { id: 702, status: "scheduled", current_lot_id: null, event_id: 72 },
+    sessionLoaded: true,
+    event: { id: 72, session_id: 702, status: "SCHEDULED", current_lot_id: null },
+    eventLoaded: true,
+    lot: { id: 5002, auction_id: 201, status: "READY" },
+    nowMs,
+  }).mode,
+  "live_event_scheduled",
+);
+assert.equal(
+  getItemMode({
+    auction: { id: 201, status: "live", ends_at: "2026-11-14T20:00:00Z", live_session_id: 701 },
+    session: { id: 701, status: "live", current_lot_id: 201, event_id: 71 },
+    sessionLoaded: true,
+    event: { id: 71, session_id: 701, status: "LIVE", current_lot_id: 5001 },
+    eventLoaded: true,
+    lot: { id: 5001, auction_id: 201, status: "LIVE" },
+    nowMs,
+  }).mode,
+  "live_floor_active",
+);
+assert.equal(
+  getItemMode({
+    auction: { id: 201, status: "sold", ends_at: "2026-11-14T20:00:00Z", live_session_id: 701 },
+    session: { id: 701, status: "closed", current_lot_id: null, event_id: 71 },
+    sessionLoaded: true,
+    event: { id: 71, session_id: 701, status: "CLOSED", current_lot_id: null },
+    eventLoaded: true,
+    lot: { id: 5001, auction_id: 201, status: "SOLD" },
+    nowMs,
+  }).mode,
+  "live_event_concluded",
+);
+assert.equal(
+  getItemMode({
+    auction: { id: 201, status: "live", ends_at: "2026-11-14T20:00:00Z", live_session_id: 701 },
+    session: { id: 701, status: "live", current_lot_id: 202, event_id: 71 },
+    sessionLoaded: true,
+    event: { id: 71, session_id: 701, status: "LIVE", current_lot_id: 5002 },
+    eventLoaded: true,
+    lot: { id: 5001, auction_id: 201, status: "WITHDRAWN" },
+    nowMs,
+  }).mode,
+  "returned_to_timed",
+);
 
 // 2. UI surface & terminology contracts
 const homePage = read("src/components/tengasell/pages/home/home-page.tsx");
@@ -213,16 +302,21 @@ const eventsPage = read("src/components/tengasell/pages/events/auction-events.ts
 assert(eventsPage.includes("LiveEventStatusBadge"), "auction-events.tsx must use LiveEventStatusBadge");
 assert(eventsPage.includes("AuctionCommsNotice"), "auction-events.tsx must include comms discoverability");
 assert(eventsPage.includes("events-empty-guidance"), "auction-events.tsx must explain empty schedules");
+assert(eventsPage.includes("bundleCacheRef") && eventsPage.includes("CONCURRENCY_LIMIT"), "auction-events.tsx must deduplicate and bound bundle requests");
+assert(eventsPage.includes("}, [liveEventsKey])"), "auction-events.tsx must not include raw live array reference in useEffect deps");
 
 const liveRoom = read("src/components/tengasell/pages/live/live-room.tsx");
 assert(liveRoom.includes("getLiveEventDisplay"), "live-room.tsx must derive status via getLiveEventDisplay");
 assert(liveRoom.includes("Room Open — Awaiting Next Lot"), "live-room.tsx must label open room awaiting lot");
 assert(liveRoom.includes("Status temporarily unavailable"), "live-room.tsx must fail closed on mismatch");
+assert(liveRoom.includes("hammer-clock-pending"), "live-room.tsx HammerClock must render neutral pending state when local timer elapses");
+assert(!liveRoom.includes('t("room.clock.sold")') || liveRoom.includes("isSoldAuthoritatively"), "live-room.tsx HammerClock must gate SOLD on authoritative lot status");
 assert(!/\banimate-pulse\b/.test(liveRoom.replace(/motion-safe:animate-pulse/g, "")), "live-room.tsx must gate animate-pulse on motion-safe:");
 
 const itemPage = read("src/components/tengasell/pages/item/item-page.tsx");
 assert(itemPage.includes("TimedAuctionBadge"), "item-page.tsx must show TimedAuctionBadge");
 assert(itemPage.includes("AuctionCommsNotice"), "item-page.tsx must link to Communications Centre");
+assert(itemPage.includes("getItemAuctionModePresentation"), "item-page.tsx must derive item auction mode via getItemAuctionModePresentation");
 
 const commsCenter = read("src/components/tengasell/pages/account/comms-center.tsx");
 const myPage = read("src/components/tengasell/pages/account/my-page.tsx");

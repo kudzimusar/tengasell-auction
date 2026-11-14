@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
   ArrowLeft,
@@ -67,8 +67,8 @@ function AuctionHub() {
   const navigate = useRouter().navigate;
   const eventsRes = useResource(() => api.auctionEvents(), []);
   const sessionsRes = useResource(() => api.liveSessions(), []);
-  const events = eventsRes.data ?? [];
-  const sessions = sessionsRes.data ?? [];
+  const events = useMemo(() => eventsRes.data ?? [], [eventsRes.data]);
+  const sessions = useMemo(() => sessionsRes.data ?? [], [sessionsRes.data]);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -76,48 +76,141 @@ function AuctionHub() {
   const [venueName, setVenueName] = useState("");
   const [venueCity, setVenueCity] = useState("Harare");
 
-  const live = events.filter((event) => event.status === "LIVE");
-  const upcoming = events.filter((event) => event.status === "SCHEDULED" || event.status === "DRAFT");
-  const recent = events
-    .filter((event) => event.status === "CLOSED" || event.status === "CANCELLED")
-    .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+  const live = useMemo(() => events.filter((event) => event.status === "LIVE"), [events]);
+  const upcoming = useMemo(
+    () => events.filter((event) => event.status === "SCHEDULED" || event.status === "DRAFT"),
+    [events],
+  );
+  const recent = useMemo(
+    () =>
+      events
+        .filter((event) => event.status === "CLOSED" || event.status === "CANCELLED")
+        .sort((a, b) => b.updated_at.localeCompare(a.updated_at)),
+    [events],
+  );
 
-  const liveEventsKey = live.map((e) => `${e.id}:${e.current_lot_id ?? ""}`).join(",");
+  const liveEventsKey = useMemo(
+    () =>
+      live
+        .map((e) => `${e.id}:${e.version}:${e.run_list_version}:${e.current_lot_id ?? ""}:${e.status}`)
+        .join(","),
+    [live],
+  );
+  type HubLotVerification = {
+    loaded: boolean;
+    status: string | null;
+    lotAuctionStatus: string | null;
+    sessionExists: boolean;
+    sessionStatus: "scheduled" | "live" | "closed" | null;
+    sessionMatchesEvent: boolean;
+    lotMatchesSession: boolean;
+    dataError: boolean;
+  };
+  const bundleCacheRef = useRef<Map<number, { sig: string; result: HubLotVerification }>>(new Map());
+  const reqSeqRef = useRef(0);
   const [lotStatusState, setLotStatusState] = useState<{
     key: string;
-    map: Record<number, { loaded: boolean; status: string | null }>;
+    map: Record<number, HubLotVerification>;
   }>({ key: "", map: {} });
   const lotStatusByEvent =
     liveEventsKey && lotStatusState.key === liveEventsKey ? lotStatusState.map : {};
+
   useEffect(() => {
     if (!liveEventsKey) return;
+    const seq = ++reqSeqRef.current;
     let alive = true;
-    void Promise.all(
-      live.map(async (ev) => {
-        if (ev.current_lot_id == null) {
-          return [ev.id, { loaded: true, status: null }] as const;
-        }
-        try {
-          const bundle = await api.auctionEventBundle(ev.id);
-          const match = bundle.lots.find((l) => l.id === ev.current_lot_id);
-          const sessOk =
-            !bundle.session ||
-            (bundle.session.status === "live" &&
-              bundle.session.current_lot_id != null &&
-              match?.auction_id === bundle.session.current_lot_id);
-          const lotOk = Boolean(match && match.status === "LIVE" && sessOk);
-          return [ev.id, { loaded: true, status: lotOk ? "LIVE" : (match?.status ?? "MISMATCH") }] as const;
-        } catch {
-          return [ev.id, { loaded: true, status: "UNAVAILABLE" }] as const;
-        }
-      }),
-    ).then((entries) => {
-      if (alive) setLotStatusState({ key: liveEventsKey, map: Object.fromEntries(entries) });
-    });
+    const cache = bundleCacheRef.current;
+    const resultMap: Record<number, HubLotVerification> = {};
+    const pending: Array<{ eventId: number; sig: string }> = [];
+
+    for (const sig of liveEventsKey.split(",").filter(Boolean)) {
+      const eventId = Number(sig.split(":")[0]);
+      const cached = cache.get(eventId);
+      if (cached && cached.sig === sig) {
+        resultMap[eventId] = cached.result;
+      } else {
+        pending.push({ eventId, sig });
+      }
+    }
+
+    const CONCURRENCY_LIMIT = 3;
+    const runQueue = async () => {
+      if (pending.length > 0) {
+        let cursor = 0;
+        const worker = async () => {
+          while (cursor < pending.length && alive && reqSeqRef.current === seq) {
+            const item = pending[cursor++];
+            if (!item) break;
+            const { eventId, sig } = item;
+            try {
+              const bundle = await api.auctionEventBundle(eventId);
+              const bundleSession = bundle.session ?? null;
+              const bundleEvent = bundle.event ?? null;
+              const match =
+                bundleEvent?.current_lot_id != null
+                  ? (bundle.lots.find((l) => l.id === bundleEvent.current_lot_id) ?? null)
+                  : null;
+              const sessionMatchesEvent = Boolean(
+                bundleSession &&
+                  (bundleSession.event_id == null || Number(bundleSession.event_id) === eventId) &&
+                  (bundleEvent?.session_id == null ||
+                    Number(bundleEvent.session_id) === Number(bundleSession.id)),
+              );
+              const lotMatchesSession = Boolean(
+                bundleSession &&
+                  match &&
+                  bundleSession.current_lot_id != null &&
+                  Number(match.auction_id) === Number(bundleSession.current_lot_id),
+              );
+              const result: HubLotVerification = {
+                loaded: true,
+                status: match?.status ?? null,
+                lotAuctionStatus: match?.auction?.status ?? null,
+                sessionExists: bundleSession != null,
+                sessionStatus: bundleSession?.status ?? null,
+                sessionMatchesEvent,
+                lotMatchesSession,
+                dataError: false,
+              };
+              cache.set(eventId, { sig, result });
+              resultMap[eventId] = result;
+            } catch {
+              const result: HubLotVerification = {
+                loaded: true,
+                status: null,
+                lotAuctionStatus: null,
+                sessionExists: false,
+                sessionStatus: null,
+                sessionMatchesEvent: false,
+                lotMatchesSession: false,
+                dataError: true,
+              };
+              cache.set(eventId, { sig, result });
+              resultMap[eventId] = result;
+            }
+          }
+        };
+
+        const workers = Array.from(
+          { length: Math.min(CONCURRENCY_LIMIT, pending.length) },
+          () => worker(),
+        );
+        await Promise.all(workers);
+      } else {
+        await Promise.resolve();
+      }
+      if (alive && reqSeqRef.current === seq) {
+        setLotStatusState((prev) =>
+          prev.key === liveEventsKey ? prev : { key: liveEventsKey, map: { ...resultMap } },
+        );
+      }
+    };
+
+    void runQueue();
     return () => {
       alive = false;
     };
-  }, [live, liveEventsKey]);
+  }, [liveEventsKey]);
 
   const calendarDays = useMemo(() => {
     const today = new Date();
@@ -342,6 +435,17 @@ function AuctionHub() {
   );
 }
 
+type HubLotStatusEntry = {
+  loaded: boolean;
+  status: string | null;
+  lotAuctionStatus?: string | null;
+  sessionExists?: boolean;
+  sessionStatus?: "scheduled" | "live" | "closed" | null;
+  sessionMatchesEvent?: boolean;
+  lotMatchesSession?: boolean;
+  dataError?: boolean;
+};
+
 function EventStatusBadges({
   event,
   sessions,
@@ -351,22 +455,37 @@ function EventStatusBadges({
   event: AuctionEvent;
   sessions: Array<{ id: number; event_id?: number | null; status: "scheduled" | "live" | "closed"; current_lot_id?: number | null }>;
   sessionsLoaded: boolean;
-  lotStatusByEvent: Record<number, { loaded: boolean; status: string | null }>;
+  lotStatusByEvent: Record<number, HubLotStatusEntry>;
 }) {
-  const linkedSession = sessions.find((s) => Number(s.event_id) === Number(event.id));
+  const linkedSession = sessions.find(
+    (s) => Number(s.event_id) === Number(event.id) || (event.session_id != null && Number(s.id) === Number(event.session_id)),
+  );
   const lotCheck = lotStatusByEvent[event.id];
+  const sessionExists = lotCheck?.loaded
+    ? lotCheck.sessionExists === true && Boolean(linkedSession)
+    : Boolean(linkedSession);
+  const effectiveSessionStatus = lotCheck?.loaded
+    ? (lotCheck.sessionStatus ?? linkedSession?.status ?? null)
+    : (linkedSession?.status ?? null);
   const display = getLiveEventDisplay({
-    sessionStatus: linkedSession?.status ?? null,
+    sessionStatus: effectiveSessionStatus,
+    sessionExists,
+    sessionLoaded: sessionsLoaded && (event.status !== "LIVE" || Boolean(lotCheck?.loaded)),
+    eventBacked: true,
     eventStatus: event.status,
-    currentLotId: linkedSession
-      ? (event.current_lot_id != null ? linkedSession.current_lot_id : null)
-      : (event.current_lot_id ?? null),
+    eventLoaded: true,
+    sessionMatchesEvent: lotCheck?.loaded
+      ? Boolean(lotCheck.sessionMatchesEvent && linkedSession && Number(linkedSession.event_id ?? event.id) === Number(event.id))
+      : Boolean(!linkedSession || Number(linkedSession.event_id ?? event.id) === Number(event.id)),
+    currentLotId: linkedSession?.current_lot_id ?? null,
+    eventCurrentLotId: event.current_lot_id ?? null,
+    lotMatchesSession: lotCheck?.loaded ? Boolean(lotCheck.lotMatchesSession) : true,
+    eventLotStatus: lotCheck?.status ?? null,
+    lotAuctionStatus: lotCheck?.lotAuctionStatus ?? null,
     lotStatus: lotCheck?.status ?? null,
     lotLoaded: Boolean(sessionsLoaded && lotCheck?.loaded),
-    requireLotVerification:
-      event.status === "LIVE" &&
-      event.current_lot_id != null &&
-      (!linkedSession || (linkedSession.status === "live" && linkedSession.current_lot_id != null)),
+    dataError: Boolean(lotCheck?.dataError),
+    requireLotVerification: event.status === "LIVE" && effectiveSessionStatus === "live" && (linkedSession?.current_lot_id != null || event.current_lot_id != null),
   });
   return (
     <>
@@ -389,7 +508,7 @@ function EventGroup({
   empty: string;
   sessions?: Array<{ id: number; event_id?: number | null; status: "scheduled" | "live" | "closed"; current_lot_id?: number | null }>;
   sessionsLoaded?: boolean;
-  lotStatusByEvent?: Record<number, { loaded: boolean; status: string | null }>;
+  lotStatusByEvent?: Record<number, HubLotStatusEntry>;
 }) {
   return (
     <section aria-label={title} className="rounded-card border border-border bg-raised p-4">
@@ -516,15 +635,26 @@ function EventDetail({ eventId }: { eventId: number }) {
   const locked = event.run_list_locked === 1;
   const detailDisplay = getLiveEventDisplay({
     sessionStatus: session.status,
+    sessionExists: true,
+    sessionLoaded: !res.loading,
+    eventBacked: true,
     eventStatus: event.status,
-    currentLotId: event.current_lot_id != null ? session.current_lot_id : null,
-    lotStatus: current ? (current.auction_id === session.current_lot_id ? current.status : "MISMATCH") : null,
+    eventLoaded: !res.loading,
+    sessionMatchesEvent:
+      (session.event_id == null || Number(session.event_id) === Number(event.id)) &&
+      (event.session_id == null || Number(event.session_id) === Number(session.id)),
+    currentLotId: session.current_lot_id ?? null,
+    eventCurrentLotId: event.current_lot_id ?? null,
+    lotMatchesSession: current != null && session.current_lot_id != null && Number(current.auction_id) === Number(session.current_lot_id),
+    eventLotStatus: current?.status ?? null,
+    lotAuctionStatus: current?.auction?.status ?? null,
+    lotStatus: current ? current.status : null,
     lotLoaded: !res.loading,
+    dataError: Boolean(res.error),
     requireLotVerification:
       event.status === "LIVE" &&
-      event.current_lot_id != null &&
       session.status === "live" &&
-      session.current_lot_id != null,
+      (session.current_lot_id != null || event.current_lot_id != null),
   });
 
   const addAuction = async () => {

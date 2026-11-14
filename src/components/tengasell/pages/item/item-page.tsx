@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeftRight,
+  Calendar,
   Check,
   CheckCircle2,
   ChevronRight,
@@ -21,6 +22,7 @@ import {
   MessageCircle,
   MessageCircleQuestion,
   Package,
+  Radio,
   SearchX,
   Star,
   Trophy,
@@ -38,8 +40,10 @@ import { useLinkProps, useRouter } from "@/lib/tengasell/router";
 import {
   toAuctionView,
   type Auction,
+  type AuctionEventBundle,
   type Bid,
   type CurrentUser,
+  type LiveSession,
   type Offer,
   type Order,
 } from "@/lib/tengasell/types";
@@ -90,6 +94,7 @@ import {
   Countdown,
   EmptyState,
   ErrorState,
+  getItemAuctionModePresentation,
   PriceTag,
   RatingStars,
   StatusPill,
@@ -147,6 +152,49 @@ export default function ItemPage({ id }: { id: number }) {
   const questionsRes = useResource(() => api.questions(id), [id], {
     events: ["question:update"],
   });
+
+  const liveSessionRes = useResource<LiveSession | null>(
+    () =>
+      auction?.live_session_id != null
+        ? api.liveSession(auction.live_session_id)
+        : Promise.resolve(null),
+    [auction?.live_session_id],
+    { events: ["auction:update", "auction:ended"] },
+  );
+  const eventBundleRes = useResource<AuctionEventBundle | null>(
+    () =>
+      liveSessionRes.data?.event_id != null
+        ? api.auctionEventBundle(Number(liveSessionRes.data.event_id))
+        : Promise.resolve(null),
+    [liveSessionRes.data?.event_id],
+    { events: ["auction:update", "auction:ended"] },
+  );
+  const eventBundleData = eventBundleRes.data;
+  const linkedLot = useMemo(() => {
+    if (!auction || !eventBundleData?.lots) return null;
+    return eventBundleData.lots.find((l) => l.auction_id === auction.id) ?? null;
+  }, [auction, eventBundleData]);
+  const modePresentation = useMemo(
+    () =>
+      auction
+        ? getItemAuctionModePresentation({
+            auction,
+            session: liveSessionRes.data ?? null,
+            sessionLoaded: auction.live_session_id == null || !liveSessionRes.loading,
+            event: eventBundleData?.event ?? null,
+            eventLoaded: liveSessionRes.data?.event_id == null || !eventBundleRes.loading,
+            lot: linkedLot,
+          })
+        : null,
+    [
+      auction,
+      liveSessionRes.data,
+      liveSessionRes.loading,
+      eventBundleData,
+      eventBundleRes.loading,
+      linkedLot,
+    ],
+  );
 
   // "won by me" detection — buying orders for this auction (status gates the
   // fetch so we only hit it once the auction leaves "live").
@@ -505,19 +553,55 @@ export default function ItemPage({ id }: { id: number }) {
 
         {/* ── right: sticky bid panel ───────────────────────────────── */}
         <aside className="lg:sticky lg:top-28 space-y-4 min-w-0" aria-label="Auction summary">
-          <div className="space-y-2">
+          <div className="space-y-2" data-item-auction-mode={modePresentation?.mode ?? "standalone_timed"}>
             <div className="flex flex-wrap items-center gap-2">
-              <TimedAuctionBadge auction={auction} />
-              <span className="text-caption text-muted-foreground">Timed Auction</span>
-              {auction.live_session_id != null && (
+              {modePresentation?.isStandaloneTimed || modePresentation?.mode === "returned_to_timed" ? (
+                <>
+                  <TimedAuctionBadge auction={auction} />
+                  <span className="text-caption text-muted-foreground">{modePresentation.badgeLabel}</span>
+                </>
+              ) : modePresentation?.mode === "live_floor_active" ? (
+                <span className="inline-flex items-center gap-1.5 rounded-pill border border-danger/30 bg-danger/10 px-2.5 py-0.5 text-[11px] font-bold text-urgent whitespace-nowrap">
+                  <span className="size-1.5 rounded-full bg-urgent motion-safe:animate-pulse" aria-hidden="true" />
+                  <Radio className="size-3 shrink-0" aria-hidden="true" />
+                  <span>{modePresentation.badgeLabel}</span>
+                </span>
+              ) : modePresentation?.mode === "live_event_concluded" ? (
+                <span className="inline-flex items-center gap-1 rounded-pill border border-border bg-muted px-2.5 py-0.5 text-[11px] font-bold text-muted-foreground whitespace-nowrap">
+                  <Gavel className="size-3 shrink-0" aria-hidden="true" />
+                  <span>{modePresentation.badgeLabel}</span>
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-pill border border-teal/30 bg-teal-tint px-2.5 py-0.5 text-[11px] font-bold text-teal-deep dark:text-teal-soft whitespace-nowrap">
+                  <Calendar className="size-3 shrink-0" aria-hidden="true" />
+                  <span>{modePresentation?.badgeLabel ?? "Scheduled for Live Auction Event"}</span>
+                </span>
+              )}
+              {modePresentation?.primaryActionHref && modePresentation.primaryActionLabel && (
                 <a
-                  href={`#/live/${auction.live_session_id}`}
+                  href={modePresentation.primaryActionHref}
                   className="text-caption font-semibold text-teal-deep hover:underline focus-visible:outline-2 focus-visible:outline-ring rounded-sm"
                 >
-                  Assigned Live Room →
+                  {modePresentation.primaryActionLabel} →
                 </a>
               )}
             </div>
+            {modePresentation?.bannerTitle && (
+              <div
+                data-testid="item-auction-mode-banner"
+                className={cn(
+                  "rounded-control border p-3 text-caption",
+                  modePresentation.mode === "live_floor_active"
+                    ? "border-danger/30 bg-danger/10 text-foreground"
+                    : "border-teal/30 bg-teal-tint/40 text-foreground",
+                )}
+              >
+                <p className="font-bold">{modePresentation.bannerTitle}</p>
+                {modePresentation.bannerBody ? (
+                  <p className="mt-0.5 text-muted-foreground">{modePresentation.bannerBody}</p>
+                ) : null}
+              </div>
+            )}
             <h1 className="text-headline text-foreground leading-snug">{auction.title}</h1>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-caption text-muted-foreground">
               <span className="inline-flex items-center gap-1.5">
@@ -616,18 +700,43 @@ export default function ItemPage({ id }: { id: number }) {
               </div>
             )}
 
-            {/* place bid */}
-            <motion.div whileTap={reduced ? undefined : { scale: 0.98 }}>
+            {/* place bid or direct to live room */}
+            {modePresentation?.mode === "live_floor_active" && modePresentation.primaryActionHref ? (
+              <Button asChild className="w-full min-h-12 text-bodyStrong rounded-control bg-urgent text-white hover:bg-urgent/90">
+                <a href={modePresentation.primaryActionHref}>
+                  <Radio className="size-5" aria-hidden="true" />
+                  {modePresentation.primaryActionLabel ?? "Enter Live Room"}
+                </a>
+              </Button>
+            ) : modePresentation && !modePresentation.allowTimedBidding && isLive ? (
               <Button
-                onClick={() => setBidOpen(true)}
-                disabled={!isLive}
-                aria-haspopup="dialog"
+                asChild={Boolean(modePresentation.primaryActionHref)}
+                disabled={!modePresentation.primaryActionHref}
+                variant="outline"
                 className="w-full min-h-12 text-bodyStrong rounded-control"
               >
-                <Gavel className="size-5" aria-hidden="true" />
-                {isLive ? t("action.bid") : "Bidding closed"}
+                {modePresentation.primaryActionHref ? (
+                  <a href={modePresentation.primaryActionHref}>
+                    <Calendar className="size-5" aria-hidden="true" />
+                    {modePresentation.primaryActionLabel ?? "View Live Event"}
+                  </a>
+                ) : (
+                  <span>Assigned to Live Auction Event</span>
+                )}
               </Button>
-            </motion.div>
+            ) : (
+              <motion.div whileTap={reduced ? undefined : { scale: 0.98 }}>
+                <Button
+                  onClick={() => setBidOpen(true)}
+                  disabled={!isLive}
+                  aria-haspopup="dialog"
+                  className="w-full min-h-12 text-bodyStrong rounded-control"
+                >
+                  <Gavel className="size-5" aria-hidden="true" />
+                  {isLive ? t("action.bid") : "Bidding closed"}
+                </Button>
+              </motion.div>
+            )}
             {/* Gap-8 F2: Best-Offer secondary CTA (offers-enabled live items) */}
             {canOffer && (
               <Button
@@ -756,9 +865,9 @@ export default function ItemPage({ id }: { id: number }) {
           footer instead of covering it. Desktop keeps the full aside. */}
       <MobileBidBar
         auction={auction}
-        isLive={isLive}
-        canBuyNow={canBuyNow}
-        canOffer={canOffer}
+        isLive={isLive && (modePresentation?.allowTimedBidding ?? true)}
+        canBuyNow={canBuyNow && (modePresentation?.allowTimedBidding ?? true)}
+        canOffer={canOffer && (modePresentation?.allowTimedBidding ?? true)}
         onBid={() => setBidOpen(true)}
         onOffer={() => setOfferOpen(true)}
       />

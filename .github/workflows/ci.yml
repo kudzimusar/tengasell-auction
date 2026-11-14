@@ -12,11 +12,18 @@ on:
       - fix/tengasell-auction-imp-lr01-r1-rbac-preview
       - feat/tengasell-auction-imp-lr02-commercial-operations
       - cert/tengasell-auction-cert-01-stg01
+      - feat/tengasell-live-comms-ux01-r1
+      - feat/tengasell-live-comms-ux01-r2-room-floor
+      - feat/tengasell-live-comms-ux01-r3a-first-party-reminders
   pull_request:
     branches:
       - main
+      - cert/tengasell-auction-cert-01-stg01
       - feat/tengasell-auction-imp01-authority-safety-barrier
       - feat/tengasell-auction-imp-lr01-core-vehicle-events
+      - feat/tengasell-live-comms-ux01-r1
+      - feat/tengasell-live-comms-ux01-r2-room-floor
+      - feat/tengasell-live-comms-ux01-r3a-first-party-reminders
   workflow_dispatch:
 
 concurrency:

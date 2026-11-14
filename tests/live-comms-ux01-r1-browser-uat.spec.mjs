@@ -178,31 +178,48 @@ function buildFixtures(mode) {
     sequence_no: 1,
     lot_order: 1,
     lot_number: "LOT-001",
-    status: mode === "active_live" ? "LIVE" : mode === "ended_lot_mismatch" ? "SOLD" : "READY",
+    status:
+      mode === "active_live" || mode === "expired_timer_unsettled"
+        ? "LIVE"
+        : mode === "ended_lot_mismatch"
+          ? "SOLD"
+          : "READY",
     title: liveLotAuction.title,
     auction: liveLotAuction,
   };
 
-  const session701 = {
-    id: 701,
-    event_id: 71,
-    host_user: "admin-id",
-    host_username: "admin",
-    title: "Harare Fleet Auction Day 1",
-    description: "Scheduled flagship vehicle floor event.",
-    scheduled_at: isoOffset(-15 * 60_000),
-    started_at: isoOffset(-15 * 60_000),
-    ended_at: null,
-    status: "live",
-    current_lot_id:
-      mode === "active_live" || mode === "sync_mismatch" || mode === "ended_lot_mismatch"
-        ? 201
-        : null,
-    close_at: mode === "active_live" ? isoOffset(30 * 60_000) : null,
-    lot_index: mode === "active_live" ? 1 : 0,
-    created_at: isoOffset(-86400_000),
-    updated_at: isoOffset(-60_000),
-  };
+  const session701 =
+    mode === "missing_session_mismatch"
+      ? null
+      : {
+          id: 701,
+          event_id: 71,
+          host_user: "admin-id",
+          host_username: "admin",
+          title: "Harare Fleet Auction Day 1",
+          description: "Scheduled flagship vehicle floor event.",
+          scheduled_at: isoOffset(-15 * 60_000),
+          started_at: isoOffset(-15 * 60_000),
+          ended_at: null,
+          status: "live",
+          current_lot_id:
+            mode === "active_live" ||
+            mode === "sync_mismatch" ||
+            mode === "ended_lot_mismatch" ||
+            mode === "expired_timer_unsettled" ||
+            mode === "cancelled_event"
+              ? 201
+              : null,
+          close_at:
+            mode === "active_live"
+              ? isoOffset(30 * 60_000)
+              : mode === "expired_timer_unsettled"
+                ? isoOffset(-5000)
+                : null,
+          lot_index: mode === "active_live" || mode === "expired_timer_unsettled" ? 1 : 0,
+          created_at: isoOffset(-86400_000),
+          updated_at: isoOffset(-60_000),
+        };
 
   const session702 = {
     id: 702,
@@ -229,15 +246,20 @@ function buildFixtures(mode) {
     title: "Harare Fleet Auction Day 1",
     description: "Live floor fleet clearance event.",
     venue_id: 5,
-    session_id: 701,
+    session_id: mode === "missing_session_mismatch" ? null : 701,
     starts_at: isoOffset(-15 * 60_000),
     ends_at: null,
     timezone: "Africa/Harare",
-    status: mode === "sync_mismatch" ? "SCHEDULED" : "LIVE",
+    status: mode === "sync_mismatch" ? "SCHEDULED" : mode === "cancelled_event" ? "CANCELLED" : "LIVE",
     version: 1,
     run_list_version: 3,
     run_list_locked: 1,
-    current_lot_id: mode === "active_live" || mode === "ended_lot_mismatch" ? 5001 : null,
+    current_lot_id:
+      mode === "active_live" ||
+      mode === "ended_lot_mismatch" ||
+      mode === "expired_timer_unsettled"
+        ? 5001
+        : null,
     next_lot_id: null,
     created_at: isoOffset(-86400_000),
     updated_at: isoOffset(-60_000),
@@ -315,9 +337,11 @@ function buildFixtures(mode) {
   const sessions =
     mode === "empty_schedule"
       ? []
-      : mode === "upcoming_only"
+      : mode === "upcoming_only" || mode === "missing_session_mismatch"
         ? [session702]
-        : [session701, session702];
+        : [session701, session702].filter(Boolean);
+
+  const metrics = { bundleCalls: 0 };
 
   const events =
     mode === "empty_schedule"
@@ -341,6 +365,7 @@ function buildFixtures(mode) {
     bidsMap,
     sessions,
     events,
+    metrics,
   };
 }
 
@@ -464,6 +489,7 @@ async function installUx01Authority(page, { mode = "active_live", signedIn = tru
       if (event === "event:list") {
         reply = { ok: true, events: fx.events };
       } else if (event === "event:bundle") {
+        fx.metrics.bundleCalls += 1;
         const evId = Number(arg.eventId);
         if (evId === 71 && mode !== "empty_schedule" && mode !== "upcoming_only") {
           reply = {
@@ -684,6 +710,7 @@ test("R1 scenarios 4, 6, 8, 9, 10: empty schedule, active room, awaiting lot, sy
   // Scenario 9b: Item page timed bidding (#/item/101) remains functional & shows Open for Bids + Comms link
   await mismatchPage.goto(`${BASE}/#/item/101`);
   await expect(mismatchPage.getByRole("heading", { name: "2019 Mazda CX-5 Touring AWD" })).toBeVisible();
+  await expect(mismatchPage.locator("[data-item-auction-mode='standalone_timed']").first()).toBeVisible();
   await expect(mismatchPage.locator("[data-timed-state='open']").first()).toContainText("Open for Bids");
   await expect(mismatchPage.getByTestId("item-comms-notice")).toBeVisible();
   await mismatchPage.getByRole("button", { name: /Place bid/i }).click();
@@ -696,4 +723,56 @@ test("R1 scenarios 4, 6, 8, 9, 10: empty schedule, active room, awaiting lot, sy
   await expect(mismatchPage.getByText("US$14,600").first()).toBeVisible();
   await captureShot(mismatchPage, "ux01-r1-item-page-1280.png");
   await mismatchCtx.close();
+});
+
+test("R1 remediation A1-A5: zero request amplification, negative LIVE fails closed, LotStage gated, no premature SOLD, honest item modes", async ({ browser }) => {
+  // A1: Auction Hub does not amplify or loop event:bundle calls across re-renders
+  const hubCtx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const hubPage = await hubCtx.newPage();
+  const hubFx = await installUx01Authority(hubPage, { mode: "active_live", signedIn: true });
+  await hubPage.goto(`${BASE}/#/events`);
+  await expect(hubPage.locator("[data-live-state='live_bidding']").first()).toBeVisible();
+  await hubPage.waitForTimeout(800);
+  expect(hubFx.metrics.bundleCalls).toBeLessThanOrEqual(2);
+  await hubCtx.close();
+
+  // A2: event.status=LIVE + missing session fails closed on Auction Hub (zero red Live Bidding Now / ON AIR)
+  const missCtx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const missPage = await missCtx.newPage();
+  await installUx01Authority(missPage, { mode: "missing_session_mismatch", signedIn: true });
+  await missPage.goto(`${BASE}/#/events`);
+  await expect(missPage.getByRole("heading", { name: "Auction Hub" })).toBeVisible();
+  await expect(missPage.locator("[data-live-state='live_bidding']")).toHaveCount(0);
+  await expect(missPage.getByText("ON AIR")).toHaveCount(0);
+  await missCtx.close();
+
+  // A3: Cancelled event & ended lot in LiveRoom strictly hide/block live bid form
+  const cancelCtx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const cancelPage = await cancelCtx.newPage();
+  await installUx01Authority(cancelPage, { mode: "cancelled_event", signedIn: true });
+  await cancelPage.goto(`${BASE}/#/live/701`);
+  await expect(cancelPage.locator("[data-live-state='cancelled']").first()).toBeVisible();
+  await expect(cancelPage.getByText("This live auction event has been cancelled. Bidding is closed.")).toBeVisible();
+  await expect(cancelPage.locator("#ts-room-max-bid")).toHaveCount(0);
+  await cancelCtx.close();
+
+  // A4: Expired HammerClock countdown on live lot with bids shows neutral settlement-pending state (NEVER SOLD!)
+  const expCtx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const expPage = await expCtx.newPage();
+  await installUx01Authority(expPage, { mode: "expired_timer_unsettled", signedIn: true });
+  await expPage.goto(`${BASE}/#/live/701`);
+  await expect(expPage.getByTestId("hammer-clock-pending")).toContainText(/Countdown elapsed/i);
+  await expect(expPage.getByText("SOLD!", { exact: true })).toHaveCount(0);
+  await expCtx.close();
+
+  // A5: Event-linked active floor vehicle (#/item/201) shows live floor identity, NOT contradictory Timed Auction label
+  const itemCtx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const itemPage = await itemCtx.newPage();
+  await installUx01Authority(itemPage, { mode: "active_live", signedIn: true });
+  await itemPage.goto(`${BASE}/#/item/201`);
+  await expect(itemPage.locator("[data-item-auction-mode='live_floor_active']").first()).toBeVisible();
+  await expect(itemPage.getByTestId("item-auction-mode-banner")).toContainText("Currently on the Live Auction Floor");
+  await expect(itemPage.getByRole("link", { name: /Enter Live Room/i }).first()).toBeVisible();
+  await expect(itemPage.getByText("Timed Auction", { exact: true })).toHaveCount(0);
+  await itemCtx.close();
 });
