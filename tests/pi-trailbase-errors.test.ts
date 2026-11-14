@@ -2,6 +2,7 @@
 // Automated verification of TrailBase read-error correctness and 404 semantics.
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "bun:test";
 import http from "node:http";
+import { NextRequest } from "next/server";
 import {
   TrailBaseError,
   statusToCode,
@@ -12,6 +13,8 @@ import {
   tbLogin,
   invalidateToken,
 } from "../src/lib/server/trailbase-admin";
+import { GET as searchGet } from "../src/app/api/pi/search/route";
+import { POST as comparePost } from "../src/app/api/pi/compare/route";
 
 describe("TrailBase Error Handling & 404 Semantics", () => {
   let server: http.Server;
@@ -284,6 +287,79 @@ describe("TrailBase Error Handling & 404 Semantics", () => {
         expect(err.status).toBe(503);
         expect(err.code).toBe("TRAILBASE_UNAVAILABLE");
       }
+    });
+  });
+
+  describe("API Route Error Propagation (Search & Compare)", () => {
+    it("GET /api/pi/search returns HTTP 503 SEARCH_UNAVAILABLE when TrailBase is down (never false empty 200)", async () => {
+      mockHandler = (req, res) => {
+        res.writeHead(503, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "TrailBase search index database unavailable" }));
+      };
+
+      const req = new NextRequest("http://127.0.0.1:3000/api/pi/search?category=vehicles");
+      const res = await searchGet(req);
+      expect(res.status).toBe(503);
+      const data = await res.json();
+      expect(data.ok).toBe(false);
+      expect(data.code).toBe("SEARCH_UNAVAILABLE");
+      expect(data.error).toBe("Search is temporarily unavailable.");
+    });
+
+    it("GET /api/pi/search returns HTTP 429 SEARCH_RATE_LIMITED when TrailBase is rate limited", async () => {
+      mockHandler = (req, res) => {
+        res.writeHead(429, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "rate limit exceeded" }));
+      };
+
+      const req = new NextRequest("http://127.0.0.1:3000/api/pi/search?q=toyota");
+      const res = await searchGet(req);
+      expect(res.status).toBe(429);
+      const data = await res.json();
+      expect(data.ok).toBe(false);
+      expect(data.code).toBe("SEARCH_RATE_LIMITED");
+    });
+
+    it("POST /api/pi/compare returns HTTP 503 COMPARE_UNAVAILABLE when TrailBase is down (never false 404)", async () => {
+      mockHandler = (req, res) => {
+        res.writeHead(503, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "TrailBase database down" }));
+      };
+
+      const req = new NextRequest("http://127.0.0.1:3000/api/pi/compare", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ auctionIds: [10, 20] }),
+      });
+      const res = await comparePost(req);
+      expect(res.status).toBe(503);
+      const data = await res.json();
+      expect(data.ok).toBe(false);
+      expect(data.code).toBe("COMPARE_UNAVAILABLE");
+      expect(data.error).toBe("Product comparison is temporarily unavailable.");
+    });
+
+    it("POST /api/pi/compare returns HTTP 404 when listing is genuinely not found", async () => {
+      mockHandler = (req, res) => {
+        if (req.url?.includes("/api/records/v1/auctions/")) {
+          res.writeHead(404, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "not found" }));
+          return;
+        }
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ records: [] }));
+      };
+
+      const req = new NextRequest("http://127.0.0.1:3000/api/pi/compare", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ auctionIds: [9999, 8888] }),
+      });
+      const res = await comparePost(req);
+      expect(res.status).toBe(404);
+      const data = await res.json();
+      expect(data.ok).toBe(false);
+      expect(data.code).toBe("COMPARE_LISTING_NOT_FOUND");
     });
   });
 });

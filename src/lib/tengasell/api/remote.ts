@@ -38,6 +38,9 @@ import type {
   VehicleInspection,
   VehicleFinding,
   VehicleDocument,
+  CategoryFilterMetadata,
+  ProductComparisonResponse,
+  SavedSearchFacet,
 } from "../types";
 
 const TB = 3001;
@@ -333,6 +336,114 @@ export class RemoteApi {
   }
 
   async auctions(q: AuctionQuery = {}): Promise<Paginated<Auction>> {
+    const activeFacets: Record<string, unknown> = {};
+    if (q.facets) {
+      for (const [k, v] of Object.entries(q.facets)) {
+        if (v !== undefined && v !== null && String(v).trim() !== "") {
+          activeFacets[k] = v;
+        }
+      }
+    }
+    const hasPiFilter = Boolean(
+      q.make ||
+        q.model ||
+        q.minYear != null ||
+        q.maxYear != null ||
+        q.minKm != null ||
+        q.maxKm != null ||
+        q.bodyType ||
+        q.fuel ||
+        q.transmission ||
+        q.drivetrain ||
+        q.exteriorColour ||
+        q.inspectionGrade ||
+        q.vehicleClass ||
+        Object.keys(activeFacets).length > 0,
+    );
+
+    if (hasPiFilter) {
+      const searchOrder =
+        q.order === "price_asc" || q.order === "price_desc" || q.order === "newest" || q.order === "ending"
+          ? q.order
+          : "ending";
+      const searchInput: Record<string, unknown> = {
+        status: q.status ?? "live",
+        order: searchOrder,
+        limit: q.limit ?? 24,
+        offset: q.offset ?? 0,
+      };
+      if (q.search) searchInput.search = q.search;
+      if (q.category) searchInput.categoryKey = q.category;
+      if (q.city) searchInput.city = q.city;
+      if (q.condition) searchInput.condition = q.condition;
+      if (q.minPrice != null) searchInput.minPrice = q.minPrice;
+      if (q.maxPrice != null) searchInput.maxPrice = q.maxPrice;
+      if (q.minYear != null) searchInput.minYear = q.minYear;
+      if (q.maxYear != null) searchInput.maxYear = q.maxYear;
+      if (q.minKm != null) searchInput.minMileage = q.minKm;
+      if (q.maxKm != null) searchInput.maxMileage = q.maxKm;
+      if (q.make) searchInput.make = q.make;
+      if (q.model) searchInput.model = q.model;
+      if (q.vehicleClass) searchInput.vehicleClass = q.vehicleClass;
+      if (q.bodyType) searchInput.bodyType = q.bodyType;
+      if (q.fuel) searchInput.fuel = q.fuel;
+      if (q.transmission) searchInput.transmission = q.transmission;
+      if (q.drivetrain) searchInput.drivetrain = q.drivetrain;
+      if (q.exteriorColour) searchInput.colour = q.exteriorColour;
+      if (q.inspectionGrade) searchInput.inspectionGrade = q.inspectionGrade;
+      if (q.endingWithinMinutes != null) searchInput.endingWithinMinutes = q.endingWithinMinutes;
+      if (Object.keys(activeFacets).length > 0) searchInput.facets = activeFacets;
+
+      let searchData: { items?: any[]; total?: number } | null = null;
+      try {
+        const res = await rpc<{ ok: boolean; items?: any[]; total?: number }>(
+          "product:search:query",
+          { query: searchInput },
+        );
+        if (res?.ok && Array.isArray(res.items)) {
+          searchData = res;
+        }
+      } catch {
+        /* fallback to HTTP /api/pi/search */
+      }
+
+      if (!searchData) {
+        const qs = new URLSearchParams();
+        for (const [k, v] of Object.entries(searchInput)) {
+          if (v === undefined || v === null || v === "") continue;
+          if (k === "categoryKey") qs.set("category", String(v));
+          else if (k === "facets") qs.set("facets", JSON.stringify(v));
+          else qs.set(k, String(v));
+        }
+        const httpRes = await fetch(`/api/pi/search?${qs.toString()}`);
+        if (!httpRes.ok) throw new Error(await errorMessage(httpRes));
+        searchData = await httpRes.json();
+      }
+
+      const rawItems = searchData?.items ?? [];
+      const hydrated = await Promise.all(
+        rawItems.map(async (item: any) => {
+          const aid = Number(item.auction_id ?? item.id ?? 0);
+          const pub = aid > 0 ? await this.auction(aid).catch(() => null) : null;
+          if (!pub) return null;
+          if (q.seller && pub.seller_username !== q.seller) return null;
+          return {
+            ...pub,
+            year: item.year ?? pub.year ?? null,
+            mileage: item.mileage ?? pub.mileage ?? null,
+            fuel: item.fuel ?? pub.fuel ?? null,
+            transmission: item.transmission ?? pub.transmission ?? null,
+            inspection_grade: item.inspection_grade ?? pub.inspection_grade ?? null,
+            make: item.make ?? pub.make ?? null,
+            model: item.model ?? pub.model ?? null,
+            body_type: item.body_type ?? pub.body_type ?? null,
+          } as Auction;
+        }),
+      );
+      const items = hydrated.filter((x): x is Auction => x !== null);
+      return { items, total: q.seller ? items.length : (searchData?.total ?? items.length) };
+    }
+
     const params: Record<string, string | number> = {
       ...filterParams(q),
       order: orderParam(q),
@@ -593,6 +704,50 @@ export class RemoteApi {
     const res = await rpc<{ ok: boolean; bundle?: PublicProductBundle }>("product:public:get", { auctionId });
     if (!res.bundle) throw new Error("Public product details could not be loaded.");
     return res.bundle;
+  }
+
+  async categoryFilters(categoryKey?: string): Promise<CategoryFilterMetadata> {
+    try {
+      const res = await rpc<{ ok: boolean; metadata?: CategoryFilterMetadata }>("product:filters:get", { categoryKey });
+      if (res?.metadata) return res.metadata;
+    } catch {
+      /* fallback */
+    }
+    const targetKey = categoryKey || "VEHICLE_PASSENGER_CAR";
+    const httpRes = await fetch(`/api/pi/categories/${encodeURIComponent(targetKey)}/filters`);
+    if (httpRes.ok) {
+      const data = await httpRes.json();
+      if (data.ok) return data;
+    }
+    throw new Error("Could not load category filter metadata.");
+  }
+
+  async compareProducts(auctionIds: number[]): Promise<ProductComparisonResponse> {
+    try {
+      const res = await rpc<{ ok: boolean; comparison?: ProductComparisonResponse; error?: string }>(
+        "product:compare",
+        { auctionIds },
+      );
+      if (res?.ok && res.comparison) return res.comparison;
+      if (res && res.ok === false) {
+        throw new Error(res.error || "Could not compare products.");
+      }
+    } catch (err: any) {
+      if (err?.message && !String(err.message).toLowerCase().includes("not connected") && !String(err.message).toLowerCase().includes("timeout")) {
+        // Re-throw explicit validation/policy errors from the RPC handler; fall through to HTTP only on transport failure
+        if (/compare|listing|distinct|at least|at most|public/i.test(String(err.message))) {
+          throw err;
+        }
+      }
+    }
+    const httpRes = await fetch("/api/pi/compare", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ auctionIds }),
+    });
+    const data = await httpRes.json().catch(() => ({}));
+    if (httpRes.ok && data.ok && data.comparison) return data.comparison;
+    throw new Error(data.error || "Could not compare products.");
   }
 
   async openProductIntake(input: {
@@ -976,12 +1131,45 @@ export class RemoteApi {
     }
   }
 
-  // ── Gap-8: saved searches (user-owned, TrailBase REST) ───────────
+  // ── Gap-8: saved searches (user-owned, TrailBase REST + DISC-03 facets) ───────────
   async savedSearches(): Promise<SavedSearch[]> {
     if (!this.cachedUser && !(await this.currentUser())) return [];
     const res = await tbFetch("/api/records/v1/saved_searches", {
       headers: this.authHeaders(),
       params: { order: "-created_at", limit: 100 },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const searches = (data.records ?? []) as SavedSearch[];
+    for (const s of searches) {
+      s.facets = await this.savedSearchFacets(s.id).catch(() => []);
+    }
+    return searches;
+  }
+
+  async savedSearchFacets(savedSearchId: number): Promise<SavedSearchFacet[]> {
+    if (!this.cachedUser && !(await this.currentUser())) return [];
+    let transportError = false;
+    try {
+      const res = await rpc<{ ok: boolean; facets?: SavedSearchFacet[]; error?: string }>(
+        "saved-search:facets:get",
+        { savedSearchId },
+      );
+      if (res?.ok && Array.isArray(res.facets)) return res.facets;
+      if (res && res.ok === false) {
+        throw new Error(res.error || "Not authorized to load saved search facets.");
+      }
+    } catch (err: any) {
+      const msg = String(err?.message ?? "");
+      if (msg && !/not connected|timeout|socket/i.test(msg)) {
+        throw err;
+      }
+      transportError = true;
+    }
+    if (!transportError) return [];
+    const res = await tbFetch("/api/records/v1/saved_search_facets", {
+      headers: this.authHeaders(),
+      params: { [`filter[saved_search_id][$eq]`]: savedSearchId, limit: 100 },
     });
     if (!res.ok) return [];
     const data = await res.json();
@@ -991,6 +1179,35 @@ export class RemoteApi {
   async saveSearch(input: SaveSearchInput): Promise<SavedSearch> {
     if (!this.cachedUser && !(await this.currentUser()))
       throw new Error("Sign in to save searches.");
+    const normalizedInput: SaveSearchInput = {
+      ...input,
+      facets: Array.isArray(input.facets)
+        ? input.facets.map((f) => ({
+            attributeKey: f.attributeKey.toUpperCase() === "YEAR" ? "MODEL_YEAR" : f.attributeKey.toUpperCase(),
+            operator: f.operator.toUpperCase(),
+            valueText: f.valueText ?? f.optionValue ?? f.textValue ?? null,
+            valueNumber: f.valueNumber ?? null,
+            valueBoolean: f.valueBoolean ?? f.booleanValue ?? null,
+            valueMin: f.valueMin ?? f.minNumeric ?? null,
+            valueMax: f.valueMax ?? f.maxNumeric ?? null,
+          }))
+        : undefined,
+    };
+    try {
+      const res = await rpc<{ ok: boolean; savedSearch?: SavedSearch; error?: string }>(
+        "saved-search:save",
+        { search: normalizedInput },
+      );
+      if (res?.ok && res.savedSearch) return res.savedSearch;
+      if (res && res.ok === false) {
+        throw new Error(res.error || "Could not save search.");
+      }
+    } catch (err: any) {
+      const msg = String(err?.message ?? "");
+      if (msg && !/not connected|timeout|socket/i.test(msg)) {
+        throw err;
+      }
+    }
     // high-water mark: only listings created AFTER this point trigger alerts
     const top = await tbFetch("/api/records/v1/auction_public", {
       headers: this.authHeaders(),
@@ -1004,12 +1221,15 @@ export class RemoteApi {
       headers: this.authHeaders(),
       body: JSON.stringify({
         user: this.cachedUser!.id,
-        name: input.name.slice(0, 80),
-        query: input.query?.trim() || null,
-        category: input.category || null,
-        min_price: input.minPrice ?? null,
-        max_price: input.maxPrice ?? null,
-        alerts: input.alerts === false ? 0 : 1,
+        name: normalizedInput.name.slice(0, 80),
+        query: normalizedInput.query?.trim() || null,
+        category: normalizedInput.category || null,
+        product_category_id: normalizedInput.productCategoryId ?? null,
+        product_schema_version_id: normalizedInput.productSchemaVersionId ?? null,
+        category_key: normalizedInput.categoryKey ?? null,
+        min_price: normalizedInput.minPrice ?? null,
+        max_price: normalizedInput.maxPrice ?? null,
+        alerts: normalizedInput.alerts === false ? 0 : 1,
         last_seen_id: lastSeen,
         created_at: now,
         updated_at: now,
@@ -1017,12 +1237,36 @@ export class RemoteApi {
     });
     if (!res.ok) throw new Error(await errorMessage(res));
     const data = await res.json();
+    const createdId = Number(data.ids?.[0] ?? 0);
+    if (Array.isArray(normalizedInput.facets)) {
+      for (const f of normalizedInput.facets) {
+        if (!f.attributeKey || !f.operator) continue;
+        await tbFetch("/api/records/v1/saved_search_facets", {
+          method: "POST",
+          headers: this.authHeaders(),
+          body: JSON.stringify({
+            saved_search_id: createdId,
+            attribute_key: f.attributeKey.toUpperCase(),
+            operator: f.operator.toUpperCase(),
+            value_text: f.valueText ?? null,
+            value_number: f.valueNumber ?? null,
+            value_boolean: f.valueBoolean != null ? (f.valueBoolean ? 1 : 0) : null,
+            value_min: f.valueMin ?? null,
+            value_max: f.valueMax ?? null,
+            value_json: "{}",
+            created_at: now,
+          }),
+        }).catch(() => null);
+      }
+    }
     const created = await tbFetch(
-      `/api/records/v1/saved_searches/${data.ids?.[0] ?? 0}`,
+      `/api/records/v1/saved_searches/${createdId}`,
       { headers: this.authHeaders() },
     );
     if (!created.ok) throw new Error("Search saved but could not be read back.");
-    return await created.json();
+    const saved = await created.json();
+    saved.facets = await this.savedSearchFacets(createdId);
+    return saved;
   }
 
   async deleteSearch(id: number): Promise<void> {

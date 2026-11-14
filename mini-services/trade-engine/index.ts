@@ -62,13 +62,28 @@ import {
   vehicleBundle,
 } from "./vehicle-authority";
 import {
+  ProductIntelligenceError,
+  categoryFilterMetadata,
+  deleteOwnedSavedSearch,
+  getOwnedSavedSearchFacets,
   intakeSession,
+  listOwnedSavedSearches,
   openProductIntake,
+  productCompare,
   productSchema,
   publicProductBundle,
   publishIntake,
   saveIntakeStep,
+  saveOwnedSearch,
+  setOwnedSavedSearchAlerts,
 } from "./product-intelligence";
+import {
+  SearchValidationError,
+  consumeSearchProjectionOutbox,
+  queryProductSearch,
+  rebuildProductSearchIndex,
+  refreshAuctionSearch,
+} from "./search-indexing";
 import {
   createAuctionEvent,
   eventBundle,
@@ -222,11 +237,45 @@ async function updateRecord(table: string, id: number | string, patch: unknown):
   return res.ok;
 }
 
+async function deleteRecord(table: string, id: number | string): Promise<boolean> {
+  const res = await tb("DELETE", `/api/records/v1/${table}/${id}`);
+  return res.ok;
+}
+
+async function searchFtsRecords(rawQuery: string): Promise<number[] | null> {
+  const dataDir = resolveTrailBaseDataDir();
+  if (!dataDir) return null;
+  const tokens = String(rawQuery ?? "")
+    .trim()
+    .split(/[\s\-_/.,:;]+/)
+    .map((t) => t.replace(/[^\p{L}\p{N}_]/gu, ""))
+    .filter((t) => t.length > 0);
+  if (tokens.length === 0) return [];
+  const ftsQuery = tokens.map((t) => `"${t}"*`).join(" AND ");
+  try {
+    const mainDb = new Database(path.join(dataDir, "main.db"), { readonly: true });
+    try {
+      mainDb.exec("PRAGMA busy_timeout = 2000;");
+      const rows = mainDb
+        .query("SELECT auction_id FROM product_search_fts WHERE product_search_fts MATCH ? ORDER BY bm25(product_search_fts) LIMIT 5000")
+        .all(ftsQuery) as Array<{ auction_id: number }>;
+      return rows.map((r) => Number(r.auction_id));
+    } finally {
+      mainDb.close();
+    }
+  } catch (err) {
+    console.warn("[searchFts]", err);
+    return null;
+  }
+}
+
 const auctionCoreStore = {
   create: createRecord,
   get: getRecord,
   list: getRecords,
   update: updateRecord,
+  remove: deleteRecord,
+  searchFts: searchFtsRecords,
 };
 
 function nowIso(): string {
@@ -901,11 +950,20 @@ async function publishAuctionCoreEvent(event: AuctionOutboxEnvelope): Promise<vo
   }
 }
 
+async function drainPiProjectionOutbox(): Promise<void> {
+  try {
+    await consumeSearchProjectionOutbox(auctionCoreStore, { limit: 100 });
+  } catch (err) {
+    console.error("[pi-projection-outbox]", err);
+  }
+}
+
 async function drainAuctionOutbox(): Promise<void> {
   if (auctionOutboxDraining) return;
   auctionOutboxDraining = true;
   try {
     await flushAuctionOutbox(auctionCoreStore, publishAuctionCoreEvent);
+    await drainPiProjectionOutbox();
   } finally {
     auctionOutboxDraining = false;
   }
@@ -1044,18 +1102,87 @@ async function sweepOfferExpiry() {
   }
 }
 
-/** Does this auction match a saved-search row? (Gap-8 alerts) */
-function matchesSearch(a: any, ss: any): boolean {
+/** Does this auction match a saved-search row? (Gap-8 alerts + DISC-03 structured facets) */
+function matchesSearch(a: any, ss: any, facets: any[] = [], psi: any = null): boolean {
   if (a.live_session_id != null) return false; // live-room lots aren't "new listings"
   if (ss.query) {
     const q = String(ss.query).toLowerCase();
     const hay = `${a.title ?? ""} ${a.description ?? ""}`.toLowerCase();
     if (!hay.includes(q)) return false;
   }
-  if (ss.category && a.category !== ss.category) return false;
+  if (ss.category && a.category !== ss.category && a.category_key !== ss.category) return false;
+  if (ss.category_key && a.category_key && a.category_key !== ss.category_key) return false;
   const price = Number(a.current_price ?? a.start_price ?? 0);
   if (ss.min_price != null && price < Number(ss.min_price)) return false;
   if (ss.max_price != null && price > Number(ss.max_price)) return false;
+
+  if (!facets || facets.length === 0) return true;
+
+  // Evaluate structured facets against search projection / auction fields
+  for (const f of facets) {
+    const key = String(f.attribute_key).toUpperCase();
+    const op = String(f.operator).toUpperCase();
+
+    let actualValue: any = null;
+    if (psi) {
+      switch (key) {
+        case "MAKE": actualValue = psi.make; break;
+        case "MODEL": actualValue = psi.model; break;
+        case "MODEL_YEAR":
+        case "YEAR": actualValue = psi.year; break;
+        case "ODOMETER_KM": actualValue = psi.mileage; break;
+        case "BODY_TYPE": actualValue = psi.body_type; break;
+        case "VEHICLE_CLASS": actualValue = psi.vehicle_class; break;
+        case "FUEL_TYPE": actualValue = psi.fuel; break;
+        case "TRANSMISSION": actualValue = psi.transmission; break;
+        case "DRIVETRAIN": actualValue = psi.drivetrain; break;
+        case "EXTERIOR_COLOUR": actualValue = psi.exterior_colour; break;
+        case "INSPECTION_GRADE": actualValue = psi.inspection_grade; break;
+        case "ROADWORTHY": actualValue = psi.roadworthy; break;
+        case "SERVICE_HISTORY_CLASS": actualValue = psi.service_history_class; break;
+        case "ACCIDENT_HISTORY": actualValue = psi.accident_history; break;
+        case "CUSTOMS_STATUS": actualValue = psi.customs_status; break;
+        default: actualValue = psi[key.toLowerCase()] ?? null;
+      }
+    } else {
+      actualValue = a[key.toLowerCase()] ?? null;
+    }
+
+    if (actualValue == null) return false; // constraint required but missing
+
+    switch (op) {
+      case "EQ":
+        if (f.value_text != null && String(actualValue).toLowerCase() !== String(f.value_text).toLowerCase()) return false;
+        if (f.value_number != null && Number(actualValue) !== Number(f.value_number)) return false;
+        if (f.value_boolean != null && Boolean(actualValue) !== Boolean(f.value_boolean)) return false;
+        break;
+      case "IN":
+        let allowed: string[] = [];
+        try {
+          allowed = f.value_text ? f.value_text.split(",").map((s: string) => s.trim().toLowerCase()) : [];
+        } catch { /* ignore */ }
+        if (!allowed.includes(String(actualValue).toLowerCase())) return false;
+        break;
+      case "MIN": {
+        const minBound = f.value_min ?? f.value_number;
+        if (minBound != null && Number(actualValue) < Number(minBound)) return false;
+        break;
+      }
+      case "MAX": {
+        const maxBound = f.value_max ?? f.value_number;
+        if (maxBound != null && Number(actualValue) > Number(maxBound)) return false;
+        break;
+      }
+      case "BETWEEN":
+        if (f.value_min != null && Number(actualValue) < Number(f.value_min)) return false;
+        if (f.value_max != null && Number(actualValue) > Number(f.value_max)) return false;
+        break;
+      case "EXISTS":
+        if (actualValue == null || actualValue === "") return false;
+        break;
+    }
+  }
+
   return true;
 }
 
@@ -1073,7 +1200,20 @@ async function sweepSavedSearches() {
       "auctions",
       `filter[id][$gt]=${Number(ss.last_seen_id ?? 0)}&filter[status][$eq]=live&order=id&limit=50`,
     );
-    const matches = candidates.filter((a: any) => matchesSearch(a, ss));
+    const facets = await getRecords("saved_search_facets", `filter[saved_search_id][$eq]=${ss.id}&limit=50`).catch(() => []);
+
+    const matches: any[] = [];
+    for (const a of candidates) {
+      let psi: any = null;
+      if (facets.length > 0) {
+        const psiRows = await getRecords("product_search_index", `filter[auction_id][$eq]=${a.id}&limit=1`).catch(() => []);
+        psi = psiRows[0] ?? null;
+      }
+      if (matchesSearch(a, ss, facets, psi)) {
+        matches.push(a);
+      }
+    }
+
     let username: string | null = null;
     for (const m of matches.slice(0, 5)) {
       if (!username) {
@@ -1304,6 +1444,134 @@ io.on("connection", (socket: Socket) => {
     } catch (err) {
       console.error("[product:intake:publish]", err);
       ack?.({ ok: false, error: "Product publish readiness could not be checked." });
+    }
+  });
+
+  socket.on("product:filters:get", async (data: any, ack?: Ack) => {
+    try {
+      const metadata = await categoryFilterMetadata(auctionCoreStore, data?.categoryKey);
+      ack?.({ ok: true, metadata });
+    } catch (err) {
+      console.error("[product:filters:get]", err);
+      ack?.({ ok: false, error: "Filter metadata is temporarily unavailable." });
+    }
+  });
+
+  socket.on("product:search:query", async (data: any, ack?: Ack) => {
+    try {
+      const res = await queryProductSearch(auctionCoreStore, data?.query ?? {});
+      ack?.({ ok: true, ...res });
+    } catch (err: any) {
+      if (err instanceof SearchValidationError) {
+        return ack?.({ ok: false, code: err.code, error: err.message });
+      }
+      console.error("[product:search:query]", err);
+      ack?.({ ok: false, error: "Search query failed." });
+    }
+  });
+
+  socket.on("product:compare", async (data: any, ack?: Ack) => {
+    try {
+      const res = await productCompare(auctionCoreStore, data?.auctionIds ?? []);
+      ack?.({ ok: true, comparison: res });
+    } catch (err: any) {
+      if (err instanceof ProductIntelligenceError) {
+        return ack?.({ ok: false, code: err.code, error: err.message });
+      }
+      console.error("[product:compare]", err);
+      ack?.({ ok: false, error: "Product comparison failed." });
+    }
+  });
+
+  socket.on("product:search:rebuild", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user?.admin) return ack?.({ ok: false, error: "Admin authority required to rebuild search index." });
+      const res = await rebuildProductSearchIndex(auctionCoreStore);
+      ack?.({ ok: true, count: res.count, removed: res.removed });
+    } catch (err) {
+      console.error("[product:search:rebuild]", err);
+      ack?.({ ok: false, error: "Search rebuild failed." });
+    }
+  });
+
+  socket.on("saved-search:list", async (_data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, code: "AUTH_REQUIRED", error: "Sign in to view saved searches." });
+      const savedSearches = await listOwnedSavedSearches(auctionCoreStore, user);
+      ack?.({ ok: true, savedSearches });
+    } catch (err: any) {
+      if (err instanceof ProductIntelligenceError) {
+        return ack?.({ ok: false, code: err.code, error: err.message });
+      }
+      console.error("[saved-search:list]", err);
+      ack?.({ ok: false, error: "Saved searches could not be loaded." });
+    }
+  });
+
+  socket.on("saved-search:facets:get", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, code: "AUTH_REQUIRED", error: "Sign in to view saved search facets." });
+      const facets = await getOwnedSavedSearchFacets(auctionCoreStore, user, Number(data?.savedSearchId));
+      ack?.({ ok: true, facets });
+    } catch (err: any) {
+      if (err instanceof ProductIntelligenceError) {
+        return ack?.({ ok: false, code: err.code, error: err.message });
+      }
+      console.error("[saved-search:facets:get]", err);
+      ack?.({ ok: false, error: "Saved search facets could not be loaded." });
+    }
+  });
+
+  socket.on("saved-search:save", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, code: "AUTH_REQUIRED", error: "Sign in to save searches." });
+      const savedSearch = await saveOwnedSearch(auctionCoreStore, user, data?.search ?? {});
+      ack?.({ ok: true, savedSearch });
+    } catch (err: any) {
+      if (err instanceof ProductIntelligenceError) {
+        return ack?.({ ok: false, code: err.code, error: err.message });
+      }
+      console.error("[saved-search:save]", err);
+      ack?.({ ok: false, error: "Saving search failed." });
+    }
+  });
+
+  socket.on("saved-search:delete", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, code: "AUTH_REQUIRED", error: "Sign in to delete saved searches." });
+      const ok = await deleteOwnedSavedSearch(auctionCoreStore, user, Number(data?.savedSearchId));
+      ack?.({ ok });
+    } catch (err: any) {
+      if (err instanceof ProductIntelligenceError) {
+        return ack?.({ ok: false, code: err.code, error: err.message });
+      }
+      console.error("[saved-search:delete]", err);
+      ack?.({ ok: false, error: "Deleting saved search failed." });
+    }
+  });
+
+  socket.on("saved-search:alerts:set", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, code: "AUTH_REQUIRED", error: "Sign in to update saved search alerts." });
+      const savedSearch = await setOwnedSavedSearchAlerts(
+        auctionCoreStore,
+        user,
+        Number(data?.savedSearchId),
+        Boolean(data?.alerts),
+      );
+      ack?.({ ok: true, savedSearch });
+    } catch (err: any) {
+      if (err instanceof ProductIntelligenceError) {
+        return ack?.({ ok: false, code: err.code, error: err.message });
+      }
+      console.error("[saved-search:alerts:set]", err);
+      ack?.({ ok: false, error: "Updating saved search alerts failed." });
     }
   });
 

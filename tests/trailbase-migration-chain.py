@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATIONS = ROOT / "mini-services/trailbase-db/traildepot/migrations/main"
-EXPECTED = [f"U{1_000_000_000 + i}__" for i in range(1, 24)]
+EXPECTED = [f"U{1_000_000_000 + i}__" for i in range(1, 26)]
 
 def connection() -> sqlite3.Connection:
     db = sqlite3.connect(":memory:")
@@ -29,8 +29,8 @@ def connection() -> sqlite3.Connection:
 def migration_files() -> list[Path]:
     files = sorted(MIGRATIONS.glob("U*.sql"))
     names = [p.name for p in files]
-    if len(files) != 23:
-        raise AssertionError(f"expected 23 main migrations, found {names}")
+    if len(files) != 25:
+        raise AssertionError(f"expected 25 main migrations, found {names}")
     for prefix, name in zip(EXPECTED, names):
         if not name.startswith(prefix):
             raise AssertionError(f"migration sequence mismatch: expected {prefix}, got {name}")
@@ -72,10 +72,26 @@ def assert_tip(db: sqlite3.Connection) -> None:
         "pi_document_fact_assertions","product_intake_sessions","product_intake_steps",
         "product_intake_open_commands","product_intake_step_commands","product_intake_publish_commands",
         "pi_projection_outbox",
+        "product_search_index","product_search_facet_values","product_search_fts","saved_search_facets",
     }
     missing = required - tables(db)
     if missing:
         raise AssertionError(f"missing tip tables: {sorted(missing)}")
+
+    psi_cols = {row[1] for row in db.execute("PRAGMA table_info(product_search_index)")}
+    sensitive = {"vin", "chassis_number", "registration_number", "engine_number", "document_number", "imei", "serial_number"}
+    leaked = sensitive.intersection(psi_cols)
+    if leaked:
+        raise AssertionError(f"sensitive identifiers leaked into product_search_index: {leaked}")
+
+    ss_cols = {row[1] for row in db.execute("PRAGMA table_info(saved_searches)")}
+    for col in ("product_category_id", "product_schema_version_id", "category_key"):
+        if col not in ss_cols:
+            raise AssertionError(f"saved_searches missing {col}")
+
+    ca_cols = {row[1] for row in db.execute("PRAGMA table_info(pi_category_attributes)")}
+    if "filter_class" not in ca_cols:
+        raise AssertionError("pi_category_attributes missing filter_class")
 
     public_cols = {row[1] for row in db.execute("PRAGMA table_info(auction_public)")}
     if "reserve_price" in public_cols:
@@ -224,8 +240,8 @@ def main() -> None:
     upgraded.close()
 
     print("TrailBase migration chain proof: PASS")
-    print("  blank fresh install U1 -> U23: PASS")
-    print("  U1-U6 parent -> U23 tip: PASS")
+    print("  blank fresh install U1 -> U25: PASS")
+    print("  U1-U6 parent -> U25 tip: PASS")
     print("  legacy duplicate orders preserved: PASS")
     print("  canonical outcome-key uniqueness: PASS")
     print("  IMP-02/03/04/05/06/07/08/09 + CERT integrity present: PASS")
@@ -233,6 +249,7 @@ def main() -> None:
     print("  redacted auction_public reserve privacy: PASS")
     print("  unconfigured Production policy remains fail-closed: PASS")
     print("  PI-01D U17-U23 schema/category/privacy/intake projections: PASS")
+    print("  PI-01E U24-U25 search projection/FTS/facets/saved searches: PASS")
 
 if __name__ == "__main__":
     main()
