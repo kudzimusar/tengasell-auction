@@ -25,21 +25,28 @@ import {
   ArrowLeft,
   ArrowRight,
   CalendarClock,
+  CarFront,
   CheckCircle2,
   ChevronDown,
   Clock,
+  FileCheck2,
   Gavel,
+  Gauge,
   Hammer,
   Info,
   ListPlus,
   Loader2,
   LogIn,
+  MapPin,
   Play,
   Plus,
   Radio,
+  RefreshCw,
   ShieldCheck,
   SkipForward,
   UserRound,
+  Wifi,
+  WifiOff,
   X,
   XCircle,
   Zap,
@@ -75,17 +82,20 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { api } from "@/lib/tengasell/api";
 import { useAuth } from "@/lib/tengasell/auth";
-import { bus } from "@/lib/tengasell/bus";
+import { bus, type SocketConnectionState } from "@/lib/tengasell/bus";
 import { formatUSD, minNextBid, round2 } from "@/lib/tengasell/format";
 import { useResource } from "@/lib/tengasell/hooks";
 import { useI18n } from "@/lib/tengasell/i18n";
 import { useLinkProps, useRouter } from "@/lib/tengasell/router";
+import { getConnectionState, rpc } from "@/lib/tengasell/socket";
 import {
   toAuctionView,
   type Auction,
+  type AuctionVenue,
   type Bid,
   type CurrentUser,
   type LiveSession,
+  type VehicleBundle,
 } from "@/lib/tengasell/types";
 import { cn } from "@/lib/utils";
 import {
@@ -116,6 +126,56 @@ function maskUser(name: string): string {
   if (!name) return "—";
   if (name.length <= 3) return `${name[0]!}***`;
   return `${name.slice(0, 2)}***${name.slice(-1)}`;
+}
+
+type QualificationFloorBundle = {
+  qualification?: {
+    status?: string | null;
+    deposit_state?: string | null;
+    credit_state?: string | null;
+    reason_code?: string | null;
+  } | null;
+  capacity?: { available?: number | null } | null;
+};
+
+type QualificationFloorState = {
+  loaded: boolean;
+  bundle: QualificationFloorBundle | null;
+};
+
+type BidderStanding = {
+  code: "leading" | "outbid" | "watching" | "seller" | "guest";
+  tone: "good" | "danger" | "muted" | "warn";
+  label: string;
+};
+
+function computeBidderStanding(
+  user: CurrentUser | null,
+  isSeller: boolean,
+  bids: Bid[],
+): BidderStanding {
+  if (isSeller) {
+    return { code: "seller", tone: "warn", label: "Seller — cannot bid on own lot" };
+  }
+  if (!user) {
+    return { code: "guest", tone: "muted", label: "Sign in to bid" };
+  }
+  const matchesUser = (b: Bid) => b.user === user.id || b.bidder_username === user.username;
+  const activeBid = bids.find((b) => b.status === "active") ?? null;
+  if (activeBid && matchesUser(activeBid)) {
+    return { code: "leading", tone: "good", label: "Leading Bidder" };
+  }
+  if (bids.some((b) => b.status === "superseded" && matchesUser(b))) {
+    return { code: "outbid", tone: "danger", label: "Outbid — Increase bid to lead" };
+  }
+  return { code: "watching", tone: "muted", label: "Watching — Ready to Bid" };
+}
+
+function formatReserveDisclosure(lot: Auction): string {
+  if (lot.reserve_disclosure === "NO_RESERVE") return "No reserve";
+  if (lot.reserve_disclosure === "RESERVE_APPLIES") return "Reserve applies";
+  if (lot.reserve_disclosure === "UPSET_APPLIES") return "Upset price applies";
+  return "Reserve disclosure pending";
 }
 
 /** Engine live-room broadcast payload. The shared bus EventMap predates
@@ -585,12 +645,31 @@ function LiveRoom({ sessionId }: { sessionId: number }) {
   const bump = useCallback(() => setTick((n) => n + 1), []);
   const bumpLots = useCallback(() => setLotTick((n) => n + 1), []);
 
+  const bestLotSnapshotRef = useRef<Map<number, Auction>>(new Map());
+  const bestBidsSnapshotRef = useRef<Map<number, Bid[]>>(new Map());
+
   const sessionRes = useResource(() => api.liveSession(sessionId), [sessionId, tick, lotTick]);
   // "auction:update" fires on every accepted bid (room lots included) —
   // keeps the stage price/bid count live between lot changes.
-  const lotsRes = useResource(() => api.roomLots(sessionId), [sessionId, lotTick], {
-    events: ["auction:update"],
-  });
+  const lotsRes = useResource(
+    async () => {
+      const rows = await api.roomLots(sessionId);
+      return rows.map((row) => {
+        const prev = bestLotSnapshotRef.current.get(row.id);
+        if (prev && prev.status === "live" && row.status === "live") {
+          if (row.bid_count < prev.bid_count || row.current_price < prev.current_price) {
+            return prev;
+          }
+        }
+        bestLotSnapshotRef.current.set(row.id, row);
+        return row;
+      });
+    },
+    [sessionId, lotTick],
+    {
+      events: ["auction:update"],
+    },
+  );
 
   const session = sessionRes.data ?? null;
   const eventBacked = session?.event_id != null;
@@ -609,23 +688,66 @@ function LiveRoom({ sessionId }: { sessionId: number }) {
   );
   const currentLotId = session?.current_lot_id ?? null;
   const currentLot = currentLotId != null ? lots.find((l) => l.id === currentLotId) ?? null : null;
+  const currentLotIdx = currentLot != null ? lots.findIndex((l) => l.id === currentLot.id) : -1;
+  const nextUpLot = useMemo(() => {
+    if (lots.length === 0) return null;
+    if (currentLotIdx >= 0) {
+      return lots.slice(currentLotIdx + 1).find((l) => l.status === "live") ?? null;
+    }
+    return lots.find((l) => l.id !== currentLotId && l.status === "live") ?? null;
+  }, [lots, currentLotIdx, currentLotId]);
 
+  const [socketState, setSocketState] = useState<SocketConnectionState>(() => getConnectionState());
   const [socketReconnecting, setSocketReconnecting] = useState(false);
-  const wasSocketConnectedRef = useRef(false);
+  const wasSocketConnectedRef = useRef(getConnectionState() === "connected");
   useEffect(() => {
-    return bus.on("connection:changed", ({ connected }) => {
+    return bus.on("connection:changed", ({ connected, reconnecting, state }) => {
+      const nextState: SocketConnectionState =
+        state ?? (connected ? "connected" : reconnecting ? "reconnecting" : "disconnected");
+      setSocketState(nextState);
       if (connected) {
         wasSocketConnectedRef.current = true;
         setSocketReconnecting(false);
         bump();
         bumpLots();
-      } else if (wasSocketConnectedRef.current) {
+      } else if (wasSocketConnectedRef.current || reconnecting) {
         setSocketReconnecting(true);
       }
     });
   }, [bump, bumpLots]);
 
+  const vehicleRes = useResource(
+    async (): Promise<VehicleBundle | null> => {
+      if (!currentLot) return null;
+      try {
+        return await api.vehicleForAuction(currentLot.id);
+      } catch {
+        return null;
+      }
+    },
+    [currentLot?.id, lotTick],
+  );
+
+  const qualificationRes = useResource(
+    async (): Promise<QualificationFloorState> => {
+      if (!session?.event_id || !user) {
+        return { loaded: false, bundle: null };
+      }
+      try {
+        const response = await rpc<{ ok: boolean; bundle?: QualificationFloorBundle }>(
+          "qualification:bundle",
+          { eventId: Number(session.event_id) },
+        );
+        return { loaded: Boolean(response?.ok), bundle: response?.bundle ?? null };
+      } catch {
+        return { loaded: false, bundle: null };
+      }
+    },
+    [session?.event_id, user?.id, tick],
+  );
+
   const associatedEvent = eventBacked ? (eventBundleRes.data?.event ?? null) : null;
+  const associatedVenue: AuctionVenue | null = eventBacked ? (eventBundleRes.data?.venue ?? null) : null;
   const associatedLotRecord =
     eventBacked && associatedEvent?.current_lot_id != null
       ? (eventBundleRes.data?.lots.find((l) => l.id === associatedEvent.current_lot_id) ?? null)
@@ -675,7 +797,17 @@ function LiveRoom({ sessionId }: { sessionId: number }) {
     : null;
 
   const bidsRes = useResource(
-    () => (currentLotId != null ? api.bids(currentLotId) : Promise.resolve<Bid[]>([])),
+    async () => {
+      if (currentLotId == null) return [] as Bid[];
+      const fetched = await api.bids(currentLotId);
+      const prevLot = bestLotSnapshotRef.current.get(currentLotId);
+      const prevBids = bestBidsSnapshotRef.current.get(currentLotId);
+      if (prevBids && prevLot?.status === "live" && fetched.length < prevBids.length) {
+        return prevBids;
+      }
+      bestBidsSnapshotRef.current.set(currentLotId, fetched);
+      return fetched;
+    },
     [currentLotId, tick, lotTick],
   );
   const bids = useMemo(
@@ -783,9 +915,20 @@ function LiveRoom({ sessionId }: { sessionId: number }) {
     );
   }
 
+  const syncStatus: "unavailable" | "reconnecting" | "connected" | "updates_delayed" =
+    dataStaleOrErrored
+      ? "unavailable"
+      : socketReconnecting || socketState === "reconnecting"
+        ? "reconnecting"
+        : socketState === "connected"
+          ? "connected"
+          : "updates_delayed";
+
+  const lotPosition = currentLotIdx >= 0 ? currentLotIdx + 1 : Math.max(0, session.lot_index || 0);
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-4 space-y-4">
-      {/* slim top strip: back + room status + on-air dot */}
+      {/* slim top strip: back + room status + event link + sync telemetry */}
       <div className="flex flex-wrap items-center gap-2">
         <a
           {...backLink}
@@ -805,14 +948,61 @@ function LiveRoom({ sessionId }: { sessionId: number }) {
             </a>
           </Button>
         ) : null}
+        <span
+          data-testid="live-sync-banner"
+          data-sync-state={syncStatus}
+          role={syncStatus === "unavailable" || syncStatus === "reconnecting" ? "alert" : "status"}
+          className={cn(
+            "ms-auto inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 py-1 text-caption font-semibold",
+            syncStatus === "connected" && "border-teal/30 bg-teal-tint/60 text-teal-deep dark:text-teal",
+            syncStatus === "reconnecting" && "border-warn/40 bg-warn/15 text-warn-foreground",
+            syncStatus === "unavailable" && "border-danger/40 bg-danger/10 text-danger",
+            syncStatus === "updates_delayed" && "border-border bg-muted/60 text-muted-foreground",
+          )}
+        >
+          {syncStatus === "connected" ? (
+            <Wifi className="size-3.5 shrink-0" aria-hidden="true" />
+          ) : (
+            <WifiOff className="size-3.5 shrink-0" aria-hidden="true" />
+          )}
+          <span>
+            {syncStatus === "connected"
+              ? "Realtime Floor Connected"
+              : syncStatus === "reconnecting"
+                ? "Reconnecting to live bidding floor…"
+                : syncStatus === "unavailable"
+                  ? "Live updates unavailable"
+                  : "Live updates via polling sync"}
+          </span>
+          {(syncStatus === "unavailable" || syncStatus === "updates_delayed") && (
+            <button
+              type="button"
+              onClick={() => {
+                bump();
+                bumpLots();
+              }}
+              className="ms-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-caption font-bold underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              <RefreshCw className="size-3" aria-hidden="true" />
+              Sync
+            </button>
+          )}
+        </span>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
         {/* ── left 2/3 — stage + lot feed ─────────────────────────── */}
-        <div className="space-y-4 lg:col-span-2">
+        <div className="min-w-0 space-y-4 lg:col-span-2">
           <LotStage
             session={session}
+            eventTitle={associatedEvent?.title ?? null}
+            venue={associatedVenue}
             lot={currentLot}
+            lotPosition={lotPosition}
+            totalLots={lots.length}
+            nextUpLot={nextUpLot}
+            vehicleBundle={vehicleRes.data ?? null}
+            qualificationState={qualificationRes.data ?? { loaded: false, bundle: null }}
             display={roomDisplay}
             eventLotStatus={associatedLotRecord?.status ?? null}
             lotLoaded={lotsAndEventLoaded}
@@ -827,9 +1017,11 @@ function LiveRoom({ sessionId }: { sessionId: number }) {
         </div>
 
         {/* ── right 1/3 — room info, parade, presence ────────────── */}
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <section aria-label={session.title} className="rounded-card border border-border bg-raised p-4">
-            <h2 className="text-bodyStrong font-bold leading-snug text-foreground">{session.title}</h2>
+            <h2 className="text-bodyStrong font-bold leading-snug text-foreground">
+              {associatedEvent?.title ?? session.title}
+            </h2>
             <div className="mt-2 flex items-center gap-1.5">
               <Avatar username={session.host_username} size={20} />
               <span className="text-caption text-muted-foreground">
@@ -837,6 +1029,13 @@ function LiveRoom({ sessionId }: { sessionId: number }) {
                 <span className="font-semibold text-foreground">{session.host_username}</span>
               </span>
             </div>
+            {associatedVenue ? (
+              <p className="mt-1.5 flex items-center gap-1.5 text-caption text-muted-foreground">
+                <MapPin className="size-3.5 shrink-0" aria-hidden="true" />
+                {associatedVenue.name}
+                {associatedVenue.city ? ` · ${associatedVenue.city}` : ""}
+              </p>
+            ) : null}
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {roomDisplay ? <LiveEventStatusBadge display={roomDisplay} /> : null}
               <span className="ts-numeric text-caption text-muted-foreground">
@@ -887,7 +1086,14 @@ function LiveRoom({ sessionId }: { sessionId: number }) {
 
 function LotStage({
   session,
+  eventTitle = null,
+  venue = null,
   lot,
+  lotPosition = 0,
+  totalLots = 0,
+  nextUpLot = null,
+  vehicleBundle = null,
+  qualificationState = { loaded: false, bundle: null },
   display,
   eventLotStatus = null,
   lotLoaded,
@@ -900,7 +1106,14 @@ function LotStage({
   onChanged,
 }: {
   session: LiveSession;
+  eventTitle?: string | null;
+  venue?: AuctionVenue | null;
   lot: Auction | null;
+  lotPosition?: number;
+  totalLots?: number;
+  nextUpLot?: Auction | null;
+  vehicleBundle?: VehicleBundle | null;
+  qualificationState?: QualificationFloorState;
   display: LiveEventDisplay | null;
   eventLotStatus?: string | null;
   lotLoaded: boolean;
@@ -998,7 +1211,15 @@ function LotStage({
     return (
       <LotStageBody
         session={session}
+        eventTitle={eventTitle}
+        venue={venue}
         lot={lot}
+        lotPosition={lotPosition}
+        totalLots={totalLots}
+        nextUpLot={nextUpLot}
+        vehicleBundle={vehicleBundle}
+        qualificationState={qualificationState}
+        display={display}
         eventLotStatus={eventLotStatus}
         canBid={canBidAuthoritatively}
         bids={bids}
@@ -1021,7 +1242,15 @@ function LotStage({
 
 function LotStageBody({
   session,
+  eventTitle = null,
+  venue = null,
   lot,
+  lotPosition = 0,
+  totalLots = 0,
+  nextUpLot = null,
+  vehicleBundle = null,
+  qualificationState = { loaded: false, bundle: null },
+  display = null,
   eventLotStatus = null,
   canBid,
   bids,
@@ -1030,7 +1259,15 @@ function LotStageBody({
   onChanged,
 }: {
   session: LiveSession;
+  eventTitle?: string | null;
+  venue?: AuctionVenue | null;
   lot: Auction;
+  lotPosition?: number;
+  totalLots?: number;
+  nextUpLot?: Auction | null;
+  vehicleBundle?: VehicleBundle | null;
+  qualificationState?: QualificationFloorState;
+  display?: LiveEventDisplay | null;
   eventLotStatus?: string | null;
   canBid: boolean;
   bids: Bid[];
@@ -1041,52 +1278,284 @@ function LotStageBody({
   const { t } = useI18n();
   const itemLink = useLinkProps(`#/item/${lot.id}`);
   const v = toAuctionView(lot);
-  const img = v.imageList[0];
+  const [photoSelection, setPhotoSelection] = useState<{ lotId: number; index: number }>({
+    lotId: lot.id,
+    index: 0,
+  });
+  const [specsOpen, setSpecsOpen] = useState(false);
+
+  const rawIndex = photoSelection.lotId === lot.id ? photoSelection.index : 0;
+  const activePhotoIndex =
+    rawIndex >= 0 && rawIndex < v.imageList.length ? rawIndex : 0;
+  const img = v.imageList[activePhotoIndex];
+
   const isSeller = !!user && user.username === lot.seller_username;
   const activeBid = bids.find((b) => b.status === "active") ?? null;
   const min = minNextBid(lot.current_price, lot.bid_count);
+  const standing = computeBidderStanding(user, isSeller, bids);
+
+  const vehicle = vehicleBundle?.vehicle ?? null;
+  const inspection = vehicleBundle?.inspection ?? null;
+  const findings = vehicleBundle?.findings ?? [];
+  const documents = vehicleBundle?.documents ?? [];
+  const verifiedDocsCount = documents.filter((d) => d.status === "VERIFIED").length;
+  const criticalFindingsCount = findings.filter(
+    (f) => f.severity === "CRITICAL" || f.severity === "MAJOR" || f.safety_critical === 1,
+  ).length;
+  const vehicleHeading = vehicle
+    ? `${vehicle.model_year} ${vehicle.make} ${vehicle.model}${vehicle.variant ? ` ${vehicle.variant}` : ""}`
+    : lot.title;
+  const lotCounterLabel =
+    totalLots > 0 && lotPosition > 0
+      ? fill(t("live.board.lotOf"), { n: lotPosition, total: totalLots })
+      : `Lot #${lot.id}`;
 
   return (
     <>
+      {/* 1–3: Event / Venue / Host + Authoritative Status + Lot Counter + Bidder Standing */}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-background/50 px-4 py-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          {display ? (
+            <LiveEventStatusBadge display={display} showOnAir={display.isAuthoritativeLive} />
+          ) : null}
+          <StatusPill tone="muted" size="xs">
+            {lotCounterLabel}
+          </StatusPill>
+          <span className="truncate text-caption font-semibold text-foreground">
+            {eventTitle ?? session.title}
+          </span>
+          {venue ? (
+            <span className="inline-flex items-center gap-1 text-caption text-muted-foreground">
+              <MapPin className="size-3.5 shrink-0" aria-hidden="true" />
+              {venue.name}
+            </span>
+          ) : null}
+        </div>
+        <span
+          data-testid="bidder-standing-badge"
+          data-bidder-standing={standing.code}
+          className={cn(
+            "inline-flex min-h-7 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-caption font-bold",
+            standing.tone === "good" && "border-teal/40 bg-teal-tint/70 text-teal-deep dark:text-teal",
+            standing.tone === "danger" && "border-danger/40 bg-danger/10 text-danger",
+            standing.tone === "warn" && "border-warn/40 bg-warn/15 text-warn-foreground",
+            standing.tone === "muted" && "border-border bg-muted/60 text-muted-foreground",
+          )}
+        >
+          {standing.label}
+        </span>
+      </div>
+
+      {/* 4–8: Photo Gallery + Vehicle Identity + Key Specs + Authoritative Price */}
       <div className="flex flex-col gap-4 p-4 sm:flex-row">
-        <div className="relative aspect-square w-full shrink-0 overflow-hidden rounded-control bg-muted sm:w-52">
-          {img ? (
-            <img src={img} alt={lot.title} className="h-full w-full object-cover" loading="lazy" />
-          ) : (
-            <div
-              className="flex h-full w-full items-center justify-center bg-gradient-to-br from-teal/10 to-gold/20 text-4xl"
-              aria-hidden="true"
-            >
-              🧭
+        <div className="w-full shrink-0 space-y-2 sm:w-64">
+          <div className="relative aspect-[4/3] w-full overflow-hidden rounded-control bg-muted">
+            {img ? (
+              <img src={img} alt={vehicleHeading} className="h-full w-full object-cover" loading="eager" />
+            ) : (
+              <div
+                className="flex h-full w-full items-center justify-center bg-gradient-to-br from-teal/10 to-gold/20 text-muted-foreground"
+                aria-hidden="true"
+              >
+                <CarFront className="size-10 opacity-70" />
+              </div>
+            )}
+          </div>
+          {v.imageList.length > 1 && (
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Vehicle photos">
+              {v.imageList.slice(0, 5).map((src, idx) => (
+                <button
+                  key={`${src}-${idx}`}
+                  type="button"
+                  onClick={() => setPhotoSelection({ lotId: lot.id, index: idx })}
+                  aria-label={`View photo ${idx + 1}`}
+                  aria-pressed={activePhotoIndex === idx}
+                  className={cn(
+                    "size-11 overflow-hidden rounded-control border transition focus-visible:outline-2 focus-visible:outline-ring",
+                    activePhotoIndex === idx
+                      ? "border-teal ring-2 ring-teal/40"
+                      : "border-border opacity-75 hover:opacity-100",
+                  )}
+                >
+                  <img src={src} alt="" className="h-full w-full object-cover" />
+                </button>
+              ))}
             </div>
           )}
         </div>
-        <div className="min-w-0 flex-1 space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <StatusPill tone="good" size="xs">
-              <span className="size-1.5 rounded-full bg-teal motion-safe:animate-pulse" aria-hidden="true" />
-              {t("room.status.current")}
-            </StatusPill>
-            <a
-              {...itemLink}
-              className="min-w-0 truncate text-label font-semibold text-teal underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
-            >
-              {lot.title}
-            </a>
+
+        <div className="min-w-0 flex-1 space-y-3">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="min-w-0 space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusPill tone="good" size="xs">
+                  <span className="size-1.5 rounded-full bg-teal motion-safe:animate-pulse" aria-hidden="true" />
+                  {t("room.status.current")}
+                </StatusPill>
+                {vehicle?.tengasell_grade ? (
+                  <StatusPill tone="gold" size="xs">
+                    Grade {vehicle.tengasell_grade}
+                  </StatusPill>
+                ) : null}
+                <StatusPill tone="muted" size="xs">
+                  {formatReserveDisclosure(lot)}
+                </StatusPill>
+              </div>
+              <h2 className="text-lg font-bold leading-snug text-foreground">{vehicleHeading}</h2>
+              <a
+                {...itemLink}
+                className="block max-w-full break-words text-caption font-semibold text-teal underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+              >
+                {lot.title} · View vehicle dossier
+              </a>
+            </div>
           </div>
+
+          {vehicle ? (
+            <div className="grid grid-cols-2 gap-2 rounded-control border border-border bg-background p-2.5 text-caption sm:grid-cols-3">
+              <div>
+                <p className="text-muted-foreground">Odometer</p>
+                <p className="font-semibold text-foreground ts-numeric">
+                  {vehicle.odometer_km.toLocaleString()} km
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Transmission</p>
+                <p className="font-semibold text-foreground">{vehicle.transmission}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Fuel / Drive</p>
+                <p className="font-semibold text-foreground">
+                  {vehicle.fuel_type} · {vehicle.drivetrain}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Engine</p>
+                <p className="font-semibold text-foreground">
+                  {vehicle.engine_displacement_cc ? `${vehicle.engine_displacement_cc.toLocaleString()} cc` : "—"}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Condition / Inspection</p>
+                <p className="font-semibold text-foreground">
+                  {inspection
+                    ? `${inspection.roadworthy ? "Roadworthy" : "Non-roadworthy"}${criticalFindingsCount > 0 ? ` · ${criticalFindingsCount} major/critical` : " · Inspected"}`
+                    : lot.condition}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Location</p>
+                <p className="font-semibold text-foreground">{vehicle.location_city}</p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2 text-caption text-muted-foreground">
+              <span>Condition: <strong className="text-foreground">{lot.condition}</strong></span>
+              <span>· City: <strong className="text-foreground">{lot.city || "Harare"}</strong></span>
+            </div>
+          )}
+
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <PriceTag amount={lot.current_price} size="xl" />
             <span className="ts-numeric text-caption font-semibold text-muted-foreground">
               {lot.bid_count} {t("bid.bids")}
             </span>
+            {activeBid ? (
+              <span className="text-caption text-muted-foreground">
+                · Leading: <strong className="text-foreground">{maskUser(activeBid.bidder_username)}</strong>
+              </span>
+            ) : null}
           </div>
           <p className="text-caption text-muted-foreground">
             {activeBid
               ? `${fill(t("room.bidsOnLot"), { n: lot.bid_count })} · ${t("room.bid.min")}: ${formatUSD(min)}`
-              : t("room.clock.opens")}
+              : `${t("room.clock.opens")} · ${t("room.bid.min")}: ${formatUSD(min)}`}
           </p>
         </div>
       </div>
+
+      {/* Collapsible Vehicle Specs, Inspection Findings & Documents (compact on 390px mobile) */}
+      <Collapsible
+        open={specsOpen}
+        onOpenChange={setSpecsOpen}
+        data-testid="live-vehicle-details-collapsible"
+        className="border-t border-border bg-background/40"
+      >
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="flex min-h-11 w-full items-center justify-between gap-2 px-4 py-2.5 text-left text-caption font-bold text-foreground transition hover:bg-accent/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+          >
+            <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+              <Gauge className="size-4 shrink-0 text-teal" aria-hidden="true" />
+              Vehicle Specifications, Inspection & Disclosure Summary
+              {findings.length > 0 ? (
+                <StatusPill size="xs" tone={criticalFindingsCount > 0 ? "warn" : "muted"}>
+                  {findings.length} {findings.length === 1 ? "finding" : "findings"}
+                </StatusPill>
+              ) : null}
+            </span>
+            <ChevronDown
+              className={cn("size-4 shrink-0 transition-transform", specsOpen && "rotate-180")}
+              aria-hidden="true"
+            />
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="border-t border-border px-4 py-3 text-caption space-y-3">
+          {vehicle ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <p className="font-bold text-foreground">Vehicle Dossier</p>
+                <p className="text-muted-foreground">
+                  Lifecycle: <strong className="text-foreground">{vehicle.lifecycle}</strong> ·
+                  Ownership: <strong className="text-foreground">{vehicle.ownership_status}</strong> ·
+                  Customs: <strong className="text-foreground">{vehicle.customs_status}</strong>
+                </p>
+                <p className="text-muted-foreground">
+                  Documents verified: <strong className="text-foreground">{verifiedDocsCount}/{documents.length}</strong> ·
+                  Owner bid disclosure:{" "}
+                  <strong className="text-foreground">
+                    {lot.owner_bid_right_disclosure === "DISCLOSED" ? "Owner bidding disclosed" : "Not permitted"}
+                  </strong>
+                </p>
+              </div>
+              <div className="space-y-1">
+                <p className="font-bold text-foreground flex items-center gap-1.5">
+                  <FileCheck2 className="size-4 text-teal" aria-hidden="true" />
+                  Inspection & Condition Report
+                </p>
+                {inspection ? (
+                  <p className="text-muted-foreground">
+                    Inspector: <strong className="text-foreground">{inspection.inspector_name}</strong> ·
+                    Status: <strong className="text-foreground">{inspection.lifecycle}</strong> ·
+                    {inspection.grade_score != null ? ` Score: ${inspection.grade_score}/100` : ""}
+                  </p>
+                ) : (
+                  <p className="text-muted-foreground">Seller condition: {lot.condition}</p>
+                )}
+                {findings.length > 0 ? (
+                  <ul className="space-y-1 text-muted-foreground">
+                    {findings.slice(0, 4).map((f) => (
+                      <li key={f.id}>
+                        <span className="font-semibold text-foreground">[{f.severity}] {f.component}:</span>{" "}
+                        {f.description}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-muted-foreground">{lot.description}</p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-1 text-muted-foreground">
+              <p className="font-bold text-foreground">Lot Disclosure</p>
+              <p>{lot.description}</p>
+              <p>Reserve policy: {formatReserveDisclosure(lot)}</p>
+            </div>
+          )}
+        </CollapsibleContent>
+      </Collapsible>
 
       <HammerClock
         closeAt={session.close_at}
@@ -1095,7 +1564,36 @@ function LotStageBody({
         onTimerElapsed={onChanged}
       />
 
-      <LotBidPanel lot={lot} isSeller={isSeller} signedIn={!!user} canBid={canBid} onChanged={onChanged} />
+      <LotBidPanel
+        session={session}
+        lot={lot}
+        isSeller={isSeller}
+        signedIn={!!user}
+        canBid={canBid}
+        qualificationState={qualificationState}
+        onChanged={onChanged}
+      />
+
+      {nextUpLot ? (
+        <div
+          data-testid="next-vehicle-preview"
+          className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-background/60 px-4 py-3 text-caption"
+        >
+          <div className="min-w-0">
+            <span className="font-bold uppercase tracking-wide text-teal">Next Vehicle Preview · </span>
+            <span className="font-semibold text-foreground">{nextUpLot.title}</span>
+            <span className="ms-2 text-muted-foreground">
+              · Opens at <strong className="ts-numeric text-foreground">{formatUSD(nextUpLot.current_price)}</strong>
+            </span>
+          </div>
+          <a
+            href={`#/item/${nextUpLot.id}`}
+            className="inline-flex items-center gap-1 font-bold text-teal underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+          >
+            Preview lot <ArrowRight className="size-3.5" aria-hidden="true" />
+          </a>
+        </div>
+      ) : null}
 
       <LotFeed bids={bids} loading={bidsLoading} />
     </>
@@ -1211,20 +1709,34 @@ function HammerClock({
 // ── bid panel ──────────────────────────────────────────────────────────
 
 function LotBidPanel({
+  session,
   lot,
   isSeller,
   signedIn,
   canBid,
+  qualificationState,
   onChanged,
 }: {
+  session: LiveSession;
   lot: Auction;
   isSeller: boolean;
   signedIn: boolean;
   canBid: boolean;
+  qualificationState: QualificationFloorState;
   onChanged: () => void;
 }) {
   const { t } = useI18n();
   const signinLink = useLinkProps("/signin");
+
+  const qualRecord = qualificationState.bundle?.qualification ?? null;
+  const qualStatus = qualRecord?.status ?? null;
+  const qualificationBlocked = Boolean(
+    session.event_id != null &&
+      lot.asset_kind === "vehicle" &&
+      qualificationState.loaded &&
+      qualStatus !== "QUALIFIED",
+  );
+  const availableCapacity = Number(qualificationState.bundle?.capacity?.available ?? 0);
 
   let body: React.ReactNode;
   if (!canBid || lot.status !== "live") {
@@ -1254,30 +1766,96 @@ function LotBidPanel({
       </div>
     );
   } else {
-    body = <LotBidForm lot={lot} onChanged={onChanged} />;
+    body = (
+      <div className="space-y-3">
+        {session.event_id != null && qualificationState.loaded ? (
+          qualStatus === "QUALIFIED" ? (
+            <div
+              data-testid="live-qualification-status"
+              className="flex flex-wrap items-center justify-between gap-2 rounded-control border border-teal/30 bg-teal-tint/50 px-3 py-2 text-caption"
+            >
+              <span className="inline-flex items-center gap-1.5 font-semibold text-teal-deep dark:text-teal">
+                <CheckCircle2 className="size-4 shrink-0" aria-hidden="true" />
+                Qualified bidder
+              </span>
+              <span className="ts-numeric font-bold text-foreground">
+                Capacity: {formatUSD(availableCapacity)}
+              </span>
+            </div>
+          ) : (
+            <div
+              data-testid="qualification-gate-warning"
+              role="alert"
+              className="flex flex-wrap items-center justify-between gap-2 rounded-control border border-warn/50 bg-warn/15 p-3 text-caption"
+            >
+              <div className="space-y-0.5">
+                <p className="font-bold text-foreground">
+                  Bidder qualification required ({qualStatus ?? "NOT QUALIFIED"})
+                </p>
+                <p className="text-muted-foreground">
+                  {qualRecord?.reason_code
+                    ? `Action required: ${qualRecord.reason_code}`
+                    : "Complete event qualification and deposit verification before placing live vehicle bids."}
+                </p>
+              </div>
+              <Button asChild variant="outline" size="sm" className="min-h-10">
+                <a href={`#/events/${session.event_id}`}>View event qualification</a>
+              </Button>
+            </div>
+          )
+        ) : null}
+        <LotBidForm
+          lot={lot}
+          qualificationBlocked={qualificationBlocked}
+          onChanged={onChanged}
+        />
+      </div>
+    );
   }
 
   return <div className="border-b border-border p-4">{body}</div>;
 }
 
-function LotBidForm({ lot, onChanged }: { lot: Auction; onChanged: () => void }) {
+function LotBidForm({
+  lot,
+  qualificationBlocked = false,
+  onChanged,
+}: {
+  lot: Auction;
+  qualificationBlocked?: boolean;
+  onChanged: () => void;
+}) {
   const { t } = useI18n();
-  const [value, setValue] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
   const min = minNextBid(lot.current_price, lot.bid_count);
+  const draftKey = `${lot.id}:${min}`;
+  const defaultDraft = min % 1 === 0 ? String(min) : min.toFixed(2);
+  const [draft, setDraft] = useState<{ key: string; value: string }>(() => ({
+    key: draftKey,
+    value: defaultDraft,
+  }));
+  const [errorState, setErrorState] = useState<{ key: string; message: string | null }>({
+    key: draftKey,
+    message: null,
+  });
+  const [busy, setBusy] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
-  // prefill with the minimum next bid; resyncs when the price moves
-  useEffect(() => {
-    setValue(min % 1 === 0 ? String(min) : min.toFixed(2));
-    setError(null);
-  }, [min, lot.id]);
+  const value = draft.key === draftKey ? draft.value : defaultDraft;
+  const error = errorState.key === draftKey ? errorState.message : null;
+  const setValue = (nextVal: string) => setDraft({ key: draftKey, value: nextVal });
+  const setError = (nextErr: string | null) =>
+    setErrorState({ key: draftKey, message: nextErr });
 
   const parsed = Number(value.replace(/[^0-9.]/g, ""));
+  const quickIncrements = [
+    { label: `Min (${formatUSD(min)})`, amount: round2(min) },
+    { label: "+$100", amount: round2(min + 100) },
+    { label: "+$250", amount: round2(min + 250) },
+    { label: "+$500", amount: round2(min + 500) },
+  ];
 
-  const submit = async () => {
-    if (busy) return;
+  const requestConfirmation = () => {
+    if (busy || qualificationBlocked) return;
     if (!Number.isFinite(parsed) || parsed <= 0) {
       setError(t("room.bid.invalid"));
       return;
@@ -1286,6 +1864,21 @@ function LotBidForm({ lot, onChanged }: { lot: Auction; onChanged: () => void })
       setError(fill(t("room.bid.belowMin"), { min: formatUSD(min) }));
       return;
     }
+    setError(null);
+    setConfirmOpen(true);
+  };
+
+  const submit = async () => {
+    if (busy || qualificationBlocked) return;
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setError(t("room.bid.invalid"));
+      return;
+    }
+    if (parsed < min) {
+      setError(fill(t("room.bid.belowMin"), { min: formatUSD(min) }));
+      return;
+    }
+    setConfirmOpen(false);
     setBusy(true);
     setError(null);
     try {
@@ -1313,6 +1906,25 @@ function LotBidForm({ lot, onChanged }: { lot: Auction; onChanged: () => void })
 
   return (
     <div className="space-y-3">
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Quick bid increments">
+        {quickIncrements.map((step) => (
+          <Button
+            key={step.label}
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={busy || qualificationBlocked}
+            onClick={() => {
+              setValue(step.amount % 1 === 0 ? String(step.amount) : step.amount.toFixed(2));
+              if (error) setError(null);
+            }}
+            className="min-h-10 ts-numeric font-semibold"
+          >
+            {step.label}
+          </Button>
+        ))}
+      </div>
+
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-40 flex-1 space-y-1.5">
           <label htmlFor="ts-room-max-bid" className="text-label text-foreground">
@@ -1334,7 +1946,7 @@ function LotBidForm({ lot, onChanged }: { lot: Auction; onChanged: () => void })
                 setValue(e.target.value);
                 if (error) setError(null);
               }}
-              disabled={busy}
+              disabled={busy || qualificationBlocked}
               aria-invalid={!!error}
               aria-describedby="ts-room-max-bid-hint"
               placeholder={min % 1 === 0 ? String(min) : min.toFixed(2)}
@@ -1346,7 +1958,11 @@ function LotBidForm({ lot, onChanged }: { lot: Auction; onChanged: () => void })
             <span className="ts-numeric font-semibold text-foreground">{formatUSD(min)}</span>
           </p>
         </div>
-        <Button onClick={submit} disabled={busy} className="min-h-12 rounded-control px-6">
+        <Button
+          onClick={requestConfirmation}
+          disabled={busy || qualificationBlocked}
+          className="min-h-12 rounded-control px-6"
+        >
           {busy ? (
             <>
               <Loader2 className="size-4 animate-spin" aria-hidden="true" /> {t("room.bid.placing")}
@@ -1358,6 +1974,32 @@ function LotBidForm({ lot, onChanged }: { lot: Auction; onChanged: () => void })
           )}
         </Button>
       </div>
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent data-testid="live-bid-confirm-dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Live Floor Bid</AlertDialogTitle>
+            <AlertDialogDescription>
+              You are submitting a binding automatic maximum bid of{" "}
+              <strong className="ts-numeric text-foreground">{formatUSD(round2(parsed || min))}</strong> on{" "}
+              <strong className="text-foreground">{lot.title}</strong>. {t("room.bid.sla")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="min-h-11">Cancel</AlertDialogCancel>
+            <Button
+              type="button"
+              data-testid="live-bid-confirm-submit"
+              onClick={() => void submit()}
+              disabled={busy}
+              className="min-h-11"
+            >
+              <Zap className="size-4" aria-hidden="true" />
+              Confirm Live Bid ({formatUSD(round2(parsed || min))})
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* compact proxy-bid explainer (mirrors the item-page bid sheet) */}
       <div
@@ -1493,6 +2135,7 @@ function LotParade({
   removeError: string | null;
 }) {
   const { t } = useI18n();
+  const [mobileExpanded, setMobileExpanded] = useState(false);
   // presence line counts live rows (retracted bids drop out of the count)
   const bidCount = bids.filter((b) => b.status !== "retracted").length;
 
@@ -1506,51 +2149,71 @@ function LotParade({
   return (
     <section
       aria-label={t("room.parade")}
+      data-testid="live-run-list"
       className="overflow-hidden rounded-card border border-border bg-raised"
     >
-      <SectionHeader
-        icon={<ListPlus className="size-4 text-teal" aria-hidden="true" />}
-        title={t("room.parade")}
-        subtitle={t("room.paradeSub")}
-      />
-      {loading && lots.length === 0 ? (
-        <div className="space-y-2 p-4" aria-busy="true">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="h-11 rounded-control bg-muted motion-safe:animate-pulse" />
-          ))}
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <SectionHeader
+            icon={<ListPlus className="size-4 text-teal" aria-hidden="true" />}
+            title={t("room.parade")}
+            subtitle={t("room.paradeSub")}
+          />
         </div>
-      ) : lots.length === 0 ? (
-        <p className="p-4 text-caption text-muted-foreground">{t("live.emptyHint")}</p>
-      ) : (
-        <ul className="max-h-96 divide-y divide-border overflow-y-auto ts-scrollbar">
-          {lots.map((lot, i) => (
-            <ParadeRow
-              key={lot.id}
-              lot={lot}
-              index={i + 1}
-              pill={pillFor(lot)}
-              current={session.current_lot_id === lot.id}
-              removable={
-                isHost &&
-                session.current_lot_id !== lot.id &&
-                lot.status === "live" &&
-                session.status !== "closed"
-              }
-              removing={removing.has(lot.id)}
-              onRemove={onRemove}
-            />
-          ))}
-        </ul>
-      )}
-      {removeError && (
-        <div
-          role="alert"
-          className="flex items-start gap-2 border-t border-border px-3 py-2.5 text-caption text-danger"
+        <button
+          type="button"
+          onClick={() => setMobileExpanded((prev) => !prev)}
+          aria-expanded={mobileExpanded}
+          aria-controls="ts-live-run-list-body"
+          className="me-3 inline-flex min-h-11 items-center gap-1 rounded-control border border-border px-2.5 text-caption font-bold text-foreground lg:hidden focus-visible:outline-2 focus-visible:outline-ring"
         >
-          <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-          <span className="font-medium">{removeError}</span>
-        </div>
-      )}
+          <span>{mobileExpanded ? "Hide" : `Show (${lots.length})`}</span>
+          <ChevronDown
+            className={cn("size-4 transition-transform", mobileExpanded && "rotate-180")}
+            aria-hidden="true"
+          />
+        </button>
+      </div>
+      <div id="ts-live-run-list-body" className={cn(!mobileExpanded && "hidden lg:block")}>
+        {loading && lots.length === 0 ? (
+          <div className="space-y-2 p-4" aria-busy="true">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="h-11 rounded-control bg-muted motion-safe:animate-pulse" />
+            ))}
+          </div>
+        ) : lots.length === 0 ? (
+          <p className="p-4 text-caption text-muted-foreground">{t("live.emptyHint")}</p>
+        ) : (
+          <ul className="max-h-96 divide-y divide-border overflow-y-auto ts-scrollbar">
+            {lots.map((lot, i) => (
+              <ParadeRow
+                key={lot.id}
+                lot={lot}
+                index={i + 1}
+                pill={pillFor(lot)}
+                current={session.current_lot_id === lot.id}
+                removable={
+                  isHost &&
+                  session.current_lot_id !== lot.id &&
+                  lot.status === "live" &&
+                  session.status !== "closed"
+                }
+                removing={removing.has(lot.id)}
+                onRemove={onRemove}
+              />
+            ))}
+          </ul>
+        )}
+        {removeError && (
+          <div
+            role="alert"
+            className="flex items-start gap-2 border-t border-border px-3 py-2.5 text-caption text-danger"
+          >
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <span className="font-medium">{removeError}</span>
+          </div>
+        )}
+      </div>
       <p className="border-t border-border px-3 py-2 text-caption text-muted-foreground">
         {session.current_lot_id != null
           ? fill(t("room.bidsOnLot"), { n: bidCount })

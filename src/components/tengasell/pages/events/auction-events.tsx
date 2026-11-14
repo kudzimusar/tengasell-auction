@@ -62,6 +62,65 @@ export default function AuctionEventsPage({ eventId }: { eventId?: number }) {
   return eventId && Number.isFinite(eventId) ? <EventDetail eventId={eventId} /> : <AuctionHub />;
 }
 
+type HubSessionLite = {
+  id: number;
+  event_id?: number | null;
+  status: "scheduled" | "live" | "closed";
+  current_lot_id?: number | null;
+};
+
+type HubLotVerification = {
+  loaded: boolean;
+  status: string | null;
+  lotAuctionStatus?: string | null;
+  sessionExists?: boolean;
+  sessionStatus?: "scheduled" | "live" | "closed" | null;
+  sessionMatchesEvent?: boolean;
+  lotMatchesSession?: boolean;
+  dataError?: boolean;
+  venueName?: string | null;
+  venueCity?: string | null;
+  lotCount?: number | null;
+};
+
+function resolveHubEventDisplay(
+  event: AuctionEvent,
+  sessions: HubSessionLite[],
+  sessionsLoaded: boolean,
+  lotStatusByEvent: Record<number, HubLotVerification>,
+) {
+  const linkedSession = sessions.find(
+    (s) => Number(s.event_id) === Number(event.id) || (event.session_id != null && Number(s.id) === Number(event.session_id)),
+  );
+  const lotCheck = lotStatusByEvent[event.id];
+  const sessionExists = lotCheck?.loaded
+    ? lotCheck.sessionExists === true && Boolean(linkedSession)
+    : Boolean(linkedSession);
+  const effectiveSessionStatus = lotCheck?.loaded
+    ? (lotCheck.sessionStatus ?? linkedSession?.status ?? null)
+    : (linkedSession?.status ?? null);
+  return getLiveEventDisplay({
+    sessionStatus: effectiveSessionStatus,
+    sessionExists,
+    sessionLoaded: sessionsLoaded && (event.status !== "LIVE" || Boolean(lotCheck?.loaded)),
+    eventBacked: true,
+    eventStatus: event.status,
+    eventLoaded: true,
+    sessionMatchesEvent: lotCheck?.loaded
+      ? Boolean(lotCheck.sessionMatchesEvent && linkedSession && Number(linkedSession.event_id ?? event.id) === Number(event.id))
+      : Boolean(!linkedSession || Number(linkedSession.event_id ?? event.id) === Number(event.id)),
+    currentLotId: linkedSession?.current_lot_id ?? null,
+    eventCurrentLotId: event.current_lot_id ?? null,
+    lotMatchesSession: lotCheck?.loaded ? Boolean(lotCheck.lotMatchesSession) : true,
+    eventLotStatus: lotCheck?.status ?? null,
+    lotAuctionStatus: lotCheck?.lotAuctionStatus ?? null,
+    lotStatus: lotCheck?.status ?? null,
+    lotLoaded: Boolean(sessionsLoaded && lotCheck?.loaded),
+    dataError: Boolean(lotCheck?.dataError),
+    requireLotVerification: event.status === "LIVE" && effectiveSessionStatus === "live" && (linkedSession?.current_lot_id != null || event.current_lot_id != null),
+  });
+}
+
 function AuctionHub() {
   const { user } = useAuth();
   const navigate = useRouter().navigate;
@@ -78,7 +137,10 @@ function AuctionHub() {
 
   const live = useMemo(() => events.filter((event) => event.status === "LIVE"), [events]);
   const upcoming = useMemo(
-    () => events.filter((event) => event.status === "SCHEDULED" || event.status === "DRAFT"),
+    () =>
+      events
+        .filter((event) => event.status === "SCHEDULED" || event.status === "DRAFT")
+        .sort((a, b) => a.starts_at.localeCompare(b.starts_at)),
     [events],
   );
   const recent = useMemo(
@@ -96,24 +158,27 @@ function AuctionHub() {
         .join(","),
     [live],
   );
-  type HubLotVerification = {
-    loaded: boolean;
-    status: string | null;
-    lotAuctionStatus: string | null;
-    sessionExists: boolean;
-    sessionStatus: "scheduled" | "live" | "closed" | null;
-    sessionMatchesEvent: boolean;
-    lotMatchesSession: boolean;
-    dataError: boolean;
-  };
   const bundleCacheRef = useRef<Map<number, { sig: string; result: HubLotVerification }>>(new Map());
   const reqSeqRef = useRef(0);
   const [lotStatusState, setLotStatusState] = useState<{
     key: string;
     map: Record<number, HubLotVerification>;
   }>({ key: "", map: {} });
-  const lotStatusByEvent =
-    liveEventsKey && lotStatusState.key === liveEventsKey ? lotStatusState.map : {};
+  const lotStatusByEvent = useMemo(
+    () => (liveEventsKey && lotStatusState.key === liveEventsKey ? lotStatusState.map : {}),
+    [liveEventsKey, lotStatusState],
+  );
+
+  const { authoritativeLive, awaitingRoomEvents } = useMemo(() => {
+    const auth: AuctionEvent[] = [];
+    const awaiting: AuctionEvent[] = [];
+    for (const event of live) {
+      const display = resolveHubEventDisplay(event, sessions, !sessionsRes.loading, lotStatusByEvent);
+      if (display.isAuthoritativeLive) auth.push(event);
+      else awaiting.push(event);
+    }
+    return { authoritativeLive: auth, awaitingRoomEvents: awaiting };
+  }, [live, sessions, sessionsRes.loading, lotStatusByEvent]);
 
   useEffect(() => {
     if (!liveEventsKey) return;
@@ -171,6 +236,9 @@ function AuctionHub() {
                 sessionMatchesEvent,
                 lotMatchesSession,
                 dataError: false,
+                venueName: bundle.venue?.name ?? null,
+                venueCity: bundle.venue?.city ?? null,
+                lotCount: Array.isArray(bundle.lots) ? bundle.lots.length : null,
               };
               cache.set(eventId, { sig, result });
               resultMap[eventId] = result;
@@ -370,12 +438,22 @@ function AuctionHub() {
         <div className="space-y-6">
           <EventGroup
             title="Live now"
-            events={live}
+            events={authoritativeLive}
             empty="No event is live right now."
             sessions={sessions}
             sessionsLoaded={!sessionsRes.loading}
             lotStatusByEvent={lotStatusByEvent}
           />
+          {awaitingRoomEvents.length > 0 ? (
+            <EventGroup
+              title="Room Open — Awaiting Next Lot"
+              events={awaitingRoomEvents}
+              empty=""
+              sessions={sessions}
+              sessionsLoaded={!sessionsRes.loading}
+              lotStatusByEvent={lotStatusByEvent}
+            />
+          ) : null}
           <EventGroup
             title="Upcoming"
             events={upcoming}
@@ -435,17 +513,6 @@ function AuctionHub() {
   );
 }
 
-type HubLotStatusEntry = {
-  loaded: boolean;
-  status: string | null;
-  lotAuctionStatus?: string | null;
-  sessionExists?: boolean;
-  sessionStatus?: "scheduled" | "live" | "closed" | null;
-  sessionMatchesEvent?: boolean;
-  lotMatchesSession?: boolean;
-  dataError?: boolean;
-};
-
 function EventStatusBadges({
   event,
   sessions,
@@ -453,40 +520,11 @@ function EventStatusBadges({
   lotStatusByEvent,
 }: {
   event: AuctionEvent;
-  sessions: Array<{ id: number; event_id?: number | null; status: "scheduled" | "live" | "closed"; current_lot_id?: number | null }>;
+  sessions: HubSessionLite[];
   sessionsLoaded: boolean;
-  lotStatusByEvent: Record<number, HubLotStatusEntry>;
+  lotStatusByEvent: Record<number, HubLotVerification>;
 }) {
-  const linkedSession = sessions.find(
-    (s) => Number(s.event_id) === Number(event.id) || (event.session_id != null && Number(s.id) === Number(event.session_id)),
-  );
-  const lotCheck = lotStatusByEvent[event.id];
-  const sessionExists = lotCheck?.loaded
-    ? lotCheck.sessionExists === true && Boolean(linkedSession)
-    : Boolean(linkedSession);
-  const effectiveSessionStatus = lotCheck?.loaded
-    ? (lotCheck.sessionStatus ?? linkedSession?.status ?? null)
-    : (linkedSession?.status ?? null);
-  const display = getLiveEventDisplay({
-    sessionStatus: effectiveSessionStatus,
-    sessionExists,
-    sessionLoaded: sessionsLoaded && (event.status !== "LIVE" || Boolean(lotCheck?.loaded)),
-    eventBacked: true,
-    eventStatus: event.status,
-    eventLoaded: true,
-    sessionMatchesEvent: lotCheck?.loaded
-      ? Boolean(lotCheck.sessionMatchesEvent && linkedSession && Number(linkedSession.event_id ?? event.id) === Number(event.id))
-      : Boolean(!linkedSession || Number(linkedSession.event_id ?? event.id) === Number(event.id)),
-    currentLotId: linkedSession?.current_lot_id ?? null,
-    eventCurrentLotId: event.current_lot_id ?? null,
-    lotMatchesSession: lotCheck?.loaded ? Boolean(lotCheck.lotMatchesSession) : true,
-    eventLotStatus: lotCheck?.status ?? null,
-    lotAuctionStatus: lotCheck?.lotAuctionStatus ?? null,
-    lotStatus: lotCheck?.status ?? null,
-    lotLoaded: Boolean(sessionsLoaded && lotCheck?.loaded),
-    dataError: Boolean(lotCheck?.dataError),
-    requireLotVerification: event.status === "LIVE" && effectiveSessionStatus === "live" && (linkedSession?.current_lot_id != null || event.current_lot_id != null),
-  });
+  const display = resolveHubEventDisplay(event, sessions, sessionsLoaded, lotStatusByEvent);
   return (
     <>
       <LiveEventStatusBadge display={display} showOnAir={display.isAuthoritativeLive} />
@@ -506,43 +544,62 @@ function EventGroup({
   title: string;
   events: AuctionEvent[];
   empty: string;
-  sessions?: Array<{ id: number; event_id?: number | null; status: "scheduled" | "live" | "closed"; current_lot_id?: number | null }>;
+  sessions?: HubSessionLite[];
   sessionsLoaded?: boolean;
-  lotStatusByEvent?: Record<number, HubLotStatusEntry>;
+  lotStatusByEvent?: Record<number, HubLotVerification>;
 }) {
   return (
     <section aria-label={title} className="rounded-card border border-border bg-raised p-4">
-      <h2 className="text-lg font-bold text-foreground">{title}</h2>
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-lg font-bold text-foreground">{title}</h2>
+        <span className="text-caption font-semibold text-muted-foreground">{events.length}</span>
+      </div>
       {events.length === 0 ? (
         <p className="mt-3 text-body text-muted-foreground">{empty}</p>
       ) : (
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          {events.map((event) => (
-            <a
-              key={event.id}
-              href={`#/events/${event.id}`}
-              className="rounded-card border border-border bg-background p-4 transition hover:border-teal/40 hover:shadow-sm focus-visible:outline-2 focus-visible:outline-ring"
-            >
-              <div className="flex flex-wrap items-center gap-2">
-                <EventStatusBadges
-                  event={event}
-                  sessions={sessions}
-                  sessionsLoaded={sessionsLoaded}
-                  lotStatusByEvent={lotStatusByEvent}
-                />
-                <span className="ms-auto text-caption text-muted-foreground">v{event.run_list_version}</span>
-              </div>
-              <h3 className="mt-2 font-bold text-foreground">{event.title}</h3>
-              <p className="mt-2 flex items-center gap-1.5 text-caption text-muted-foreground">
-                <Clock3 className="size-3.5" aria-hidden="true" />
-                {formatWhen(event.starts_at)}
-              </p>
-              <p className="mt-1 text-caption text-muted-foreground">Host: {event.host_username}</p>
-              <span className="mt-3 inline-flex min-h-11 items-center gap-1 text-label font-bold text-teal">
-                Open event <ArrowRight className="size-4" aria-hidden="true" />
-              </span>
-            </a>
-          ))}
+          {events.map((event) => {
+            const verification = lotStatusByEvent[event.id];
+            const display = resolveHubEventDisplay(event, sessions, sessionsLoaded, lotStatusByEvent);
+            const venueLabel = verification?.venueName
+              ? `${verification.venueName}${verification.venueCity ? ` · ${verification.venueCity}` : ""}`
+              : null;
+            return (
+              <a
+                key={event.id}
+                href={`#/events/${event.id}`}
+                className="rounded-card border border-border bg-background p-4 transition hover:border-teal/40 hover:shadow-sm focus-visible:outline-2 focus-visible:outline-ring"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <EventStatusBadges
+                    event={event}
+                    sessions={sessions}
+                    sessionsLoaded={sessionsLoaded}
+                    lotStatusByEvent={lotStatusByEvent}
+                  />
+                  <span className="ms-auto text-caption text-muted-foreground">
+                    {verification?.lotCount != null ? `${verification.lotCount} lots · ` : ""}v{event.run_list_version}
+                  </span>
+                </div>
+                <h3 className="mt-2 font-bold text-foreground">{event.title}</h3>
+                <p className="mt-2 flex items-center gap-1.5 text-caption text-muted-foreground">
+                  <Clock3 className="size-3.5 shrink-0" aria-hidden="true" />
+                  {formatWhen(event.starts_at)}
+                </p>
+                {venueLabel ? (
+                  <p className="mt-1 flex items-center gap-1.5 text-caption text-muted-foreground">
+                    <MapPin className="size-3.5 shrink-0" aria-hidden="true" />
+                    {venueLabel}
+                  </p>
+                ) : null}
+                <p className="mt-1 text-caption text-muted-foreground">Host: {event.host_username}</p>
+                <span className="mt-3 inline-flex min-h-11 items-center gap-1 text-label font-bold text-teal">
+                  {display.isAuthoritativeLive ? "Enter live floor & run list" : "Open event & run list"}{" "}
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </span>
+              </a>
+            );
+          })}
         </div>
       )}
     </section>

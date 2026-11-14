@@ -24,6 +24,7 @@
     "test:auction-policy": "python3 tests/zimbabwe-policy-production-gates.py",
     "test:commercial-ui": "node tests/commercial-ui-contract.mjs",
     "test:live-comms-ux01-r1": "node tests/live-comms-ux01-r1-contract.mjs",
+    "test:live-comms-ux01-r2": "npx playwright test tests/live-comms-ux01-r2-runtime-uat.spec.mjs --reporter=line",
     "test:cert01-prep": "python3 tests/cert01-prep-e2e.py",
     "test:trailbase-migrations": "python3 tests/trailbase-migration-chain.py"
   },
