@@ -133,17 +133,26 @@ export function createStrictTrailBaseStore(options: TrailBaseAdapterOptions): Ve
 
   async function createRecord(table: string, row: unknown): Promise<number | null> {
     const res = await rawRequest("POST", `/api/records/v1/${table}`, row);
+    if (!res.ok) {
+      console.error(`[strictTrailBaseStore:createRecord] POST /api/records/v1/${table} failed (${res.status}):`, JSON.stringify(res.data));
+    }
     const id = res.ok ? res.data?.ids?.[0] : null;
     return id != null ? Number(id) : null;
   }
 
   async function updateRecord(table: string, id: number | string, patch: unknown): Promise<boolean> {
     const res = await rawRequest("PATCH", `/api/records/v1/${table}/${id}`, patch);
+    if (!res.ok) {
+      console.error(`[strictTrailBaseStore:updateRecord] PATCH /api/records/v1/${table}/${id} failed (${res.status}):`, JSON.stringify(res.data));
+    }
     return Boolean(res.ok);
   }
 
   async function deleteRecord(table: string, id: number | string): Promise<boolean> {
     const res = await rawRequest("DELETE", `/api/records/v1/${table}/${id}`);
+    if (!res.ok) {
+      console.error(`[strictTrailBaseStore:deleteRecord] DELETE /api/records/v1/${table}/${id} failed (${res.status}):`, JSON.stringify(res.data));
+    }
     return Boolean(res.ok);
   }
 

@@ -538,8 +538,21 @@ async function refreshAuctionFacets(
   for (const [key, val] of Object.entries(facetMap)) {
     const def = definitions.find((d: any) => String(d.attribute_key).toUpperCase() === key);
     if (!def) continue;
+
+    // Strict privacy and searchability boundaries:
+    // Only public, searchable attributes with an active filter class can be projected into product_search_facet_values.
+    if (def.searchable === 0 || def.searchable === false) continue;
+    if (
+      def.privacy_policy_key === "VEHICLE_IDENTIFIER_CLASSIFIED" ||
+      def.privacy_policy_key === "PRODUCT_INTERNAL" ||
+      def.privacy_policy_key === "PRODUCT_RESTRICTED"
+    ) {
+      continue;
+    }
+
     const bind = bindings.find((b: any) => Number(b.attribute_id) === Number(def.id));
     const filterClass = bind?.filter_class ?? def.filter_class ?? "NONE";
+    if (filterClass === "NONE") continue;
 
     const hasVal =
       (val.text != null && String(val.text).trim() !== "") ||
@@ -571,9 +584,26 @@ async function refreshAuctionFacets(
         );
       }
     } else {
-      const created = await store.create("product_search_facet_values", row);
+      let created: number | null = null;
+      try {
+        created = await store.create("product_search_facet_values", row);
+      } catch (err) {
+        console.error(`[refreshAuctionFacets] Error creating facet ${key} for auction ${psi.auction_id}:`, err);
+      }
       if (created == null) {
-        throw new Error(`Failed to create facet ${key} for auction ${psi.auction_id}`);
+        // Fallback: check if the row already exists (e.g. concurrent creation or unique race)
+        const check = (await store.list(
+          "product_search_facet_values",
+          params({ "filter[auction_id][$eq]": psi.auction_id, "filter[attribute_key][$eq]": key, limit: 1 }),
+        ))[0];
+        if (check?.id != null) {
+          const ok = await store.update("product_search_facet_values", check.id, row);
+          if (!ok) {
+            throw new Error(`Failed to update facet ${key} after conflict for auction ${psi.auction_id}`);
+          }
+        } else {
+          throw new Error(`Failed to create facet ${key} for auction ${psi.auction_id}`);
+        }
       }
     }
   }
