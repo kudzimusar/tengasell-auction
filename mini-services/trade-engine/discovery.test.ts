@@ -481,7 +481,7 @@ test("P0-A search outbox failure handling, deletion unsuppression, 503 resilienc
     if (table === "product_search_index" && failIndexDelete) {
       return false; // simulate deletion failure
     }
-    return origRemove(table, id);
+    return origRemove ? origRemove(table, id) : true;
   };
 
   const drainFail = await consumeSearchProjectionOutbox(store);
