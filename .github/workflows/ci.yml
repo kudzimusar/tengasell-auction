@@ -250,6 +250,23 @@ jobs:
           npx playwright test tests/commercial-browser-uat.spec.mjs --reporter=line
           echo "desktop/mobile commercial browser UAT satisfied"
 
+      - name: PI-01D dedicated browser UAT (when present)
+        if: hashFiles('tests/pi-01d-browser-uat.spec.mjs') != ''
+        run: node tests/pi-01d-browser-uat.spec.mjs
+
+      - name: PI-01E structured discovery browser UAT (when present)
+        if: hashFiles('tests/pi-browser-uat.spec.mjs') != ''
+        run: node tests/pi-browser-uat.spec.mjs
+
+      - name: Upload Product Intelligence browser UAT evidence archive
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pi-uat-evidence-${{ github.event.pull_request.head.sha || github.sha }}
+          path: .artifacts/pi-uat/
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Upload build log on failure
         if: failure()
         uses: actions/upload-artifact@v4
