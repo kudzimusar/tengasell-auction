@@ -19,6 +19,7 @@ import { registerMeRoutes } from "./routes/me";
 import { registerEventRoutes } from "./routes/events";
 import { registerAdminRoutes } from "./routes/admin";
 import { registerHookRoutes } from "./routes/hooks";
+import { R3A_EXTERNAL_LOCK } from "./subscriptions";
 
 // ── Boot ───────────────────────────────────────────────────────────────────────
 
@@ -71,11 +72,14 @@ function healthPayload() {
     `SELECT COUNT(*) AS n FROM outbound_queue WHERE status = 'sent' AND datetime(COALESCE(sent_at, created_at)) >= datetime('now', '-24 hours')`,
   );
   const failed = scalar(`SELECT COUNT(*) AS n FROM outbound_queue WHERE status IN('failed','dead')`);
+  const activeSubs = scalar(`SELECT COUNT(*) AS n FROM auction_subscriptions WHERE status = 'active'`);
   return {
     status: "ok",
     service: "comms",
     port: PORT,
     providers: providerLabels(),
+    externalLocked: R3A_EXTERNAL_LOCK,
+    subscriptions: { active: activeSubs },
     queue: { depth, sent24h, failed },
     db: "ok",
   };

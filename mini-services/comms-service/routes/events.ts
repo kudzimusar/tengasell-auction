@@ -4,6 +4,7 @@
 import { HttpError, bodyStr, bodyObj, bodyOptStr, type AddRoute } from "../http";
 import { emitEvent } from "../emit";
 import { moderateAndLog } from "../relay";
+import { evaluateDueReminders, type ReminderTargetState } from "../subscriptions";
 import { EVENT_KEYS } from "../taxonomy";
 import { snippetOf } from "../util";
 
@@ -70,5 +71,16 @@ export function registerEventRoutes(on: AddRoute): void {
     const moderation: Record<string, unknown> = { status: mod.status, flags: mod.flags };
     if (mod.maskedContent !== content) moderation.maskedContent = mod.maskedContent;
     return { moderation, queued, relayed, relayLogId: mod.logId };
+  });
+
+  // POST /reminders/evaluate {nowIso?, userId?, targets?} → idempotent first-party evaluation
+  on("POST", "/reminders/evaluate", (ctx) => {
+    const nowIsoParam = bodyOptStr(ctx, "nowIso") ?? undefined;
+    const userId = bodyOptStr(ctx, "userId") ?? undefined;
+    const locale = bodyOptStr(ctx, "locale") ?? "en";
+    const targets = Array.isArray(ctx.body?.targets)
+      ? (ctx.body.targets as ReminderTargetState[])
+      : undefined;
+    return evaluateDueReminders({ nowIso: nowIsoParam, userId, locale, targets });
   });
 }

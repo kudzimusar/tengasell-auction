@@ -64,6 +64,20 @@ export function defaultDeepLink(
     case "booking.confirmed":
     case "booking.reminder":
       return `${APP_URL}/#/my/bookings`;
+    case "auction.event.FollowConfirmed":
+    case "auction.event.Starting24h":
+    case "auction.event.Starting1h":
+      return params.eventId != null ? `${APP_URL}/#/events/${params.eventId}` : `${APP_URL}/#/events`;
+    case "auction.event.LiveNow":
+    case "auction.lot.UpNext":
+    case "auction.lot.OpenNow":
+    case "auction.live.Outbid":
+    case "auction.live.Result":
+      return params.sessionId != null
+        ? `${APP_URL}/#/live/${params.sessionId}`
+        : params.eventId != null
+          ? `${APP_URL}/#/events/${params.eventId}`
+          : auctionItem ?? `${APP_URL}/#/live`;
     case "account.security":
       return `${APP_URL}/#/my/settings`;
     default:

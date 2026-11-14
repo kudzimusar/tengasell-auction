@@ -27,6 +27,8 @@ import {
   type TimedDisplayState,
 } from "@/lib/tengasell/auction-display"
 import { useLinkProps } from "@/lib/tengasell/router"
+import { useAuctionSubscription, type SubscriptionTargetType } from "@/lib/tengasell/subscriptions"
+import { toast } from "@/hooks/use-toast"
 
 export {
   getItemAuctionModePresentation,
@@ -499,7 +501,6 @@ export function AuctionCard({ auction, showSeller = true }: { auction: Auction; 
     >
       <div className="relative aspect-square overflow-hidden bg-muted">
         {img ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img src={img} alt={auction.title} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" loading="lazy" />
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-teal/10 to-gold/20 text-3xl" aria-hidden>🧭</div>
@@ -653,5 +654,103 @@ export function BidRules({ auction }: { auction: Auction }) {
         Enter your maximum — Tengasell bids automatically in {formatUSD(inc)} steps, never more than needed. Anti-sniping: bids inside the last 5 minutes extend the auction.
       </p>
     </div>
+  )
+}
+
+export interface AuctionFollowButtonProps {
+  targetType: SubscriptionTargetType
+  targetId: string | number
+  eventId?: number | null
+  lotId?: number | null
+  sessionId?: number | null
+  auctionId?: number | null
+  title?: string | null
+  startsAt?: string | null
+  className?: string
+  size?: "default" | "sm" | "lg" | "icon"
+  variant?: "default" | "outline" | "secondary" | "ghost" | "link"
+  testId?: string
+  compact?: boolean
+}
+
+export function AuctionFollowButton({
+  targetType,
+  targetId,
+  eventId,
+  lotId,
+  sessionId,
+  auctionId,
+  title,
+  startsAt,
+  className,
+  size = "sm",
+  variant,
+  testId,
+  compact = false,
+}: AuctionFollowButtonProps) {
+  const { subscribed, loading, toggle } = useAuctionSubscription(targetType, targetId, {
+    title,
+    eventId,
+    lotId,
+    sessionId,
+    auctionId,
+    startsAt,
+  })
+
+  const handleClick = async (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const res = await toggle()
+    if (!res.ok) {
+      toast({
+        title: "Reminder update failed",
+        description: res.error || "Please try again.",
+        variant: "destructive",
+      })
+      return
+    }
+    if (res.guest) {
+      toast({
+        title: "Reminder saved locally",
+        description: "Sign in to synchronize reminders with your account notifications.",
+      })
+    } else if (res.subscribed) {
+      toast({
+        title: "Reminders active",
+        description: "First-party in-app reminders are active in your notification tray.",
+      })
+    } else {
+      toast({
+        title: "Reminders removed",
+        description: "You will no longer receive alerts for this item.",
+      })
+    }
+  }
+
+  const effectiveVariant = variant ?? (subscribed ? "secondary" : "outline")
+
+  return (
+    <Button
+      type="button"
+      size={size}
+      variant={effectiveVariant}
+      data-testid={testId}
+      data-subscribed={subscribed ? "true" : "false"}
+      disabled={loading}
+      onClick={handleClick}
+      className={cn(
+        "gap-1.5 min-h-9 transition-colors",
+        subscribed && "border-teal/50 bg-teal-tint text-teal-deep font-semibold dark:bg-teal/20 dark:text-teal",
+        className,
+      )}
+      aria-label={subscribed ? `Reminders active for ${title || targetId}` : `Get reminders for ${title || targetId}`}
+    >
+      <Bell className={cn("size-3.5 shrink-0", subscribed && "fill-current text-teal-deep dark:text-teal")} aria-hidden="true" />
+      {compact ? (
+        <span>{subscribed ? "Reminded" : "Remind"}</span>
+      ) : (
+        <span>{subscribed ? "Reminders Active" : "Remind Me"}</span>
+      )}
+    </Button>
   )
 }
