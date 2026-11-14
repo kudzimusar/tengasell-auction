@@ -3,7 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 
 const BASE = "http://127.0.0.1:3100";
-const SCREENSHOT_DIR = process.env.UX01_SCREENSHOT_DIR || "";
+const SCREENSHOT_DIR =
+  process.env.UX01_SCREENSHOT_DIR ||
+  path.join(process.cwd(), "test-artifacts/screenshots");
 
 const VIEWPORTS = [
   { name: "mobile-390", width: 390, height: 844 },
