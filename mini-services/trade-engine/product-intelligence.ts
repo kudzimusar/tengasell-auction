@@ -716,7 +716,7 @@ export async function publicProductBundle(store: VehicleStore, auctionId: number
     store.list("pi_effective_facts", params({ "filter[product_type][$eq]": "VEHICLE", "filter[product_id][$eq]": product.vehicle_id as number, limit: 300 })),
     store.list("pi_attribute_definitions", params({ "filter[active][$eq]": 1, limit: 300 })),
     resolvePublicVehicleDocuments(store, Number(product.vehicle_id)),
-    store.list("vehicle_history_events", params({ "filter[vehicle_id][$eq]": product.vehicle_id as number, order: "-occurred_at", limit: 100 })),
+    store.list("vehicle_history_events", params({ "filter[vehicle_id][$eq]": product.vehicle_id as number, order: "-occurred_on", limit: 100 })),
     store.list("vehicle_modifications", params({ "filter[vehicle_id][$eq]": product.vehicle_id as number, order: "id", limit: 100 })),
     store.list("vehicle_equipment", params({ "filter[vehicle_id][$eq]": product.vehicle_id as number, order: "id", limit: 200 })),
     resolveVehicleInspectionProjection(store, Number(product.vehicle_id), auctionId),

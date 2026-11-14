@@ -247,32 +247,36 @@ async function listAllPages(
   return out;
 }
 
-export async function removeAuctionFromSearch(store: VehicleStore, auctionId: number): Promise<void> {
+export async function removeAuctionFromSearch(store: VehicleStore, auctionId: number): Promise<boolean> {
   const existingFacets = await listAllPages(store, "product_search_facet_values", {
     "filter[auction_id][$eq]": auctionId,
   });
   for (const facet of existingFacets) {
     if (store.remove && facet?.id != null) {
-      await store.remove("product_search_facet_values", facet.id).catch(() => false);
+      const ok = await store.remove("product_search_facet_values", facet.id);
+      if (!ok) return false;
     }
   }
 
-  if (store.remove) {
-    await store.remove("product_search_index", auctionId).catch(() => false);
-  } else {
-    const existing = (
-      await store.list("product_search_index", params({ "filter[auction_id][$eq]": auctionId, limit: 1 }))
-    )[0];
-    if (existing) {
-      await store
-        .update("product_search_index", auctionId, {
-          auction_status: "deleted",
-          updated_at: nowIso(),
-          indexed_at: nowIso(),
-        })
-        .catch(() => false);
+  const existing = (
+    await store.list("product_search_index", params({ "filter[auction_id][$eq]": auctionId, limit: 1 }))
+  )[0];
+
+  if (existing) {
+    if (store.remove) {
+      const ok = await store.remove("product_search_index", existing.id ?? auctionId);
+      if (!ok) return false;
+    } else {
+      const ok = await store.update("product_search_index", auctionId, {
+        auction_status: "deleted",
+        updated_at: nowIso(),
+        indexed_at: nowIso(),
+      });
+      if (!ok) return false;
     }
   }
+
+  return true;
 }
 
 export async function refreshAuctionSearch(store: VehicleStore, auctionId: number): Promise<boolean> {
@@ -284,7 +288,10 @@ export async function refreshAuctionSearch(store: VehicleStore, auctionId: numbe
     : [];
 
   if (!auction || !isPubliclyVisibleAuction(auction, intakeSessions)) {
-    await removeAuctionFromSearch(store, auctionId);
+    const removed = await removeAuctionFromSearch(store, auctionId);
+    if (!removed) {
+      throw new Error(`Failed to remove hidden/deleted auction ${auctionId} from search index`);
+    }
     return false;
   }
 
@@ -542,16 +549,18 @@ export async function consumeSearchProjectionOutbox(
     ],
   );
 
-  // Query pending rows (`published_at IS NULL`) and guard against stores lacking `$is=NULL` support.
-  const rawPending = await store
-    .list("pi_projection_outbox", params({ "filter[published_at][$is]": "NULL", order: "id", limit }))
-    .catch(() => []);
+  // Query pending rows (`published_at IS NULL`) without hiding store outages.
+  const rawPending = await store.list(
+    "pi_projection_outbox",
+    params({ "filter[published_at][$is]": "NULL", order: "id", limit }),
+  );
   const pending = rawPending.filter(
     (evt: any) => evt && (evt.published_at == null || evt.published_at === "") && allowedTypes.has(String(evt.event_type ?? "")),
   );
 
   const auctionEvents = new Map<number, any[]>();
-  const nonRefreshEvents: any[] = [];
+  const orphanedOrUnretryableEvents: any[] = [];
+  let transientLookupFailures = 0;
 
   for (const evt of pending) {
     let payloadObj: Record<string, any> = {};
@@ -570,8 +579,21 @@ export async function consumeSearchProjectionOutbox(
       if (evt.product_type === "AUCTION") {
         auctionId = Number(evt.product_id ?? 0);
       } else if (evt.product_type === "VEHICLE" && Number(evt.product_id) > 0) {
-        const veh = await store.get("vehicles", Number(evt.product_id)).catch(() => null);
-        auctionId = Number(veh?.auction_id ?? 0);
+        try {
+          const veh = await store.get("vehicles", Number(evt.product_id));
+          if (veh) {
+            auctionId = Number(veh.auction_id ?? 0);
+          } else {
+            // Vehicle genuinely does not exist (e.g. 404 deleted)
+            orphanedOrUnretryableEvents.push(evt);
+            continue;
+          }
+        } catch (err) {
+          // Transient DB/network error: DO NOT acknowledge! Leave pending for retry.
+          console.error(`[consumeSearchProjectionOutbox] Transient failure looking up vehicle ${evt.product_id}:`, err);
+          transientLookupFailures += 1;
+          continue;
+        }
       }
     }
 
@@ -580,14 +602,14 @@ export async function consumeSearchProjectionOutbox(
       list.push(evt);
       auctionEvents.set(auctionId, list);
     } else {
-      nonRefreshEvents.push(evt);
+      orphanedOrUnretryableEvents.push(evt);
     }
   }
 
   let processed = 0;
   let refreshed = 0;
   let removed = 0;
-  let failed = 0;
+  let failed = transientLookupFailures;
   const refreshedAuctionIds: number[] = [];
 
   for (const [auctionId, evts] of auctionEvents.entries()) {
@@ -610,7 +632,7 @@ export async function consumeSearchProjectionOutbox(
     }
   }
 
-  for (const evt of nonRefreshEvents) {
+  for (const evt of orphanedOrUnretryableEvents) {
     const acked = await store.update("pi_projection_outbox", evt.id, { published_at: nowIso() }).catch(() => false);
     if (acked) processed += 1;
     else failed += 1;

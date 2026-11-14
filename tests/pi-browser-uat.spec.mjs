@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { execSync, spawn } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
 import net from "node:net";
@@ -17,10 +18,10 @@ const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "Tengasell#2025";
 const USER_PASSWORD = "TestUser#2025";
 
-const ARTIFACT_SCREENSHOT_DIR =
-  process.env.ARTIFACT_DIR ||
-  "/Users/shadreckmusarurwa/.gemini/antigravity/brain/922c37cd-effc-42fd-b278-229abfb212b8";
-const LOCAL_UAT_DIR = path.join(ROOT, ".artifacts/pi-uat");
+const LOCAL_UAT_DIR = path.join(ROOT, ".artifacts/pi-uat/pi-01e");
+const ARTIFACT_SCREENSHOT_DIR = process.env.ARTIFACT_DIR
+  ? path.join(process.env.ARTIFACT_DIR, "pi-01e")
+  : LOCAL_UAT_DIR;
 
 const SENSITIVE_IDENTIFIERS = [
   "JTEBU29J105991111",
@@ -421,21 +422,34 @@ function attachPageMonitors(page, bucket) {
   });
 }
 
-async function saveShot(page, name) {
+async function saveShot(page, name, manifestEntries = null) {
   fs.mkdirSync(LOCAL_UAT_DIR, { recursive: true });
   const localPath = path.join(LOCAL_UAT_DIR, name);
   await page.screenshot({ path: localPath, fullPage: false });
-  try {
-    fs.mkdirSync(ARTIFACT_SCREENSHOT_DIR, { recursive: true });
-    fs.copyFileSync(localPath, path.join(ARTIFACT_SCREENSHOT_DIR, name));
-  } catch {
-    /* ignore external artifact copy failures in CI environments */
+  if (ARTIFACT_SCREENSHOT_DIR !== LOCAL_UAT_DIR) {
+    try {
+      fs.mkdirSync(ARTIFACT_SCREENSHOT_DIR, { recursive: true });
+      fs.copyFileSync(localPath, path.join(ARTIFACT_SCREENSHOT_DIR, name));
+    } catch {
+      /* ignore external artifact copy failures in CI environments */
+    }
+  }
+  const buf = fs.readFileSync(localPath);
+  const hash = crypto.createHash("sha256").update(buf).digest("hex");
+  if (manifestEntries) {
+    manifestEntries.push({
+      file: name,
+      bytes: buf.length,
+      sha256: hash,
+    });
   }
 }
 
 async function main() {
   assert.ok(fs.existsSync(TRAIL_BIN), `Missing TrailBase binary at ${TRAIL_BIN}`);
   assert.ok(fs.existsSync(STANDALONE_SERVER), `Missing standalone server at ${STANDALONE_SERVER}; run npm run build first`);
+
+  const manifestEntries = [];
 
   if (fs.existsSync(path.join(ROOT, ".next/static"))) {
     fs.cpSync(path.join(ROOT, ".next/static"), path.join(ROOT, ".next/standalone/.next/static"), { recursive: true });
@@ -711,7 +725,7 @@ async function main() {
     await sellerPage.locator("#vehicle-owner-doc").fill("OWN-UAT-999");
     await sellerPage.locator("#vehicle-intake-heading").scrollIntoViewIfNeeded();
     await sleep(150);
-    await saveShot(sellerPage, "01-seller-wizard.png");
+    await saveShot(sellerPage, "01-seller-wizard.png", manifestEntries);
 
     await sellerPage.locator("#description").fill(
       "One-owner Toyota Land Cruiser Prado VX-L maintained at official dealer with complete service records.",
@@ -788,7 +802,7 @@ async function main() {
       const asideText = await page.locator("aside").innerText();
       return asideText.includes("Brand") && asideText.includes("Storage") && !asideText.includes("Mileage (km)") && !asideText.includes("Drivetrain");
     }, 15000);
-    await saveShot(page, "02-category-filters-phones.png");
+    await saveShot(page, "02-category-filters-phones.png", manifestEntries);
     console.log("UAT Flow 2 (Live Structured Filtering & Zero Category Filter Bleed): PASS");
 
     // Flow 3: Multi-Listing Comparison Modal (KNOWN, UNKNOWN, CONFLICTED, REDACTED, NOT_APPLICABLE)
@@ -827,7 +841,7 @@ async function main() {
     }
 
     await sleep(300);
-    await saveShot(page, "03-comparison-modal.png");
+    await saveShot(page, "03-comparison-modal.png", manifestEntries);
     await page.keyboard.press("Escape");
     await dialog.waitFor({ state: "hidden", timeout: 5000 });
     console.log("UAT Flow 3 (Product Comparison Modal — All 5 States & Zero Privacy Leaks): PASS");
@@ -857,7 +871,7 @@ async function main() {
     await page.getByText("Hilux 2020-2022 UAT").waitFor({ state: "visible", timeout: 15000 });
     await page.getByText("Model: Hilux").waitFor({ state: "visible", timeout: 10000 });
     await page.getByText("Year: 2020–2022").waitFor({ state: "visible", timeout: 10000 });
-    await saveShot(page, "04-saved-searches.png");
+    await saveShot(page, "04-saved-searches.png", manifestEntries);
 
     await page.locator('a[aria-label*="Hilux 2020-2022 UAT"]').click();
     await waitUntil("Deep-link from Saved Searches restores Hilux results", async () => {
@@ -899,7 +913,7 @@ async function main() {
         overflow.scrollWidth <= overflow.innerWidth + 1,
         `${vp.name} (${vp.width}x${vp.height}) horizontal overflow: scrollWidth=${overflow.scrollWidth} > innerWidth=${overflow.innerWidth}; culprits=${JSON.stringify(overflow.culprits)}`,
       );
-      await saveShot(page, vp.shot);
+      await saveShot(page, vp.shot, manifestEntries);
     }
     console.log("UAT Flow 5 (Responsive Viewports 1280/768/390 Zero Overflow): PASS");
 
@@ -909,6 +923,35 @@ async function main() {
     assert.equal(buyerMonitors.server5xx.length, 0, `Buyer HTTP 5xx: ${buyerMonitors.server5xx.join("; ")}`);
 
     await buyerCtx.close();
+
+    // ────────────────────────────────────────────────────────────────
+    // Generate SHA-256 Manifest
+    // ────────────────────────────────────────────────────────────────
+    let headSha = "unknown";
+    try {
+      headSha = execSync("git rev-parse HEAD", { cwd: ROOT, encoding: "utf8" }).trim();
+    } catch {
+      headSha = "local-dev";
+    }
+
+    const manifest = {
+      testSuite: "PI-01E Dedicated Chromium Browser UAT - Structured Discovery, Filters, Comparison & Saved Searches",
+      candidateSha: headSha,
+      ciRunId: process.env.GITHUB_RUN_ID || "local",
+      generatedAt: new Date().toISOString(),
+      files: manifestEntries,
+    };
+
+    const manifestPath = path.join(LOCAL_UAT_DIR, "manifest.json");
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
+    if (ARTIFACT_SCREENSHOT_DIR !== LOCAL_UAT_DIR) {
+      try {
+        fs.writeFileSync(path.join(ARTIFACT_SCREENSHOT_DIR, "manifest.json"), JSON.stringify(manifest, null, 2), "utf8");
+      } catch {
+        /* ignore external artifact sync in CI */
+      }
+    }
+    console.log(`Saved UAT evidence manifest (${manifestEntries.length} files) to ${manifestPath}`);
     console.log("PI-01E REAL-BROWSER CHROMIUM UAT: ALL 5 FLOWS PASS (0 console errors, 0 page errors, 0 HTTP 5xx, 0 privacy leaks)");
   } catch (err) {
     console.error("PI-01E UAT FAILED:", err);

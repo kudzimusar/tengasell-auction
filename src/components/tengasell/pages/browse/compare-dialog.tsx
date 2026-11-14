@@ -5,7 +5,7 @@
 // KNOWN, UNKNOWN, CONFLICTED, REDACTED, NOT_APPLICABLE.
 // Respects PI privacy (no VIN/chassis/reg/engine numbers) and category scoping.
 
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import { AlertCircle, Check, HelpCircle, Lock, Minus, ShieldAlert, X } from "lucide-react";
 import {
   Dialog,
@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/tengasell/api";
+import { useResource } from "@/lib/tengasell/hooks";
 import type { ComparisonValueState, ProductComparisonResponse } from "@/lib/tengasell/types";
 import { cn } from "@/lib/utils";
 
@@ -31,38 +32,14 @@ export function CompareDialog({
   auctionIds: number[];
   onRemoveItem: (id: number) => void;
 }) {
-  const [loading, setLoading] = useState(false);
-  const [data, setData] = useState<ProductComparisonResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!open || auctionIds.length === 0) {
-      setData(null);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    api
-      .compareProducts(auctionIds)
-      .then((res) => {
-        if (!cancelled) {
-          setData(res);
-          setLoading(false);
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setError(err?.message || "Could not load comparison.");
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [open, auctionIds]);
+  const idsKey = useMemo(() => auctionIds.slice().sort().join(","), [auctionIds]);
+  const res = useResource<ProductComparisonResponse | null>(
+    () => (open && auctionIds.length > 0 ? api.compareProducts(auctionIds) : Promise.resolve(null)),
+    [open, idsKey],
+  );
+  const data = res.data;
+  const loading = open && auctionIds.length > 0 && res.loading;
+  const error = res.error;
 
   const renderCellStatus = (state: ComparisonValueState, displayVal: string) => {
     switch (state) {
@@ -188,7 +165,6 @@ export function CompareDialog({
                   </button>
                   <div className="aspect-video w-full rounded-input overflow-hidden bg-muted">
                     {img ? (
-                      // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={img}
                         alt={item.title}

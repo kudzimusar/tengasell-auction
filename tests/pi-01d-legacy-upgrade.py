@@ -296,7 +296,12 @@ def main() -> int:
 
         # Step 4: Apply U17..U23 migrations and upgraded config.textproto to depot
         print("4. Copying migrations U17..U23 and upgraded config.textproto into TrailBase depot...")
-        shutil.copy2(TEMPLATE_DEPOT / "config.textproto", depot_dir / "config.textproto")
+        config_text = (TEMPLATE_DEPOT / "config.textproto").read_text(encoding="utf-8")
+        if "# ── PI-01E (U24–U25)" in config_text:
+            config_text = config_text.split("# ── PI-01E (U24–U25)")[0].rstrip()
+            if not config_text.endswith("]"):
+                config_text = config_text.rstrip().rstrip(",") + "\n]\n"
+        (depot_dir / "config.textproto").write_text(config_text, encoding="utf-8")
         u17_to_u23 = sorted(MIGRATIONS_DIR.glob("U*.sql"))[16:23]
         if len(u17_to_u23) != 7:
             raise RuntimeError(f"Expected 7 PI-01D migrations (U17..U23), found {len(u17_to_u23)}")

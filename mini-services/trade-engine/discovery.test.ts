@@ -455,3 +455,94 @@ test("P1-04 search validation, full-candidate pagination, deterministic ordering
   await expect(queryProductSearch(store, { order: "bogus" as any })).rejects.toThrow(SearchValidationError);
   await expect(queryProductSearch(store, { search: "x".repeat(201) })).rejects.toThrow(SearchValidationError);
 });
+
+test("P0-A search outbox failure handling, deletion unsuppression, 503 resilience, and replay idempotency", async () => {
+  const store = createInMemoryStore();
+  await rebuildProductSearchIndex(store, 250);
+
+  // 1. Index deletion failure prevents outbox acknowledgement
+  // Transition auction 101 to withdrawn
+  store.data.auctions[0].status = "withdrawn";
+  store.data.pi_projection_outbox.push({
+    id: 901,
+    event_key: "search:auction:101:withdrawn-fail",
+    product_type: "AUCTION",
+    product_id: 101,
+    event_type: "SEARCH_INDEX_REFRESH",
+    payload: JSON.stringify({ auctionId: 101 }),
+    occurred_at: "2026-01-04T00:00:00Z",
+    published_at: null,
+  });
+
+  // Inject failure into store.remove for product_search_index
+  const origRemove = store.remove;
+  let failIndexDelete = true;
+  store.remove = async (table: string, id: number | string) => {
+    if (table === "product_search_index" && failIndexDelete) {
+      return false; // simulate deletion failure
+    }
+    return origRemove(table, id);
+  };
+
+  const drainFail = await consumeSearchProjectionOutbox(store);
+  expect(drainFail.failed).toBe(1);
+  const outboxEvt1 = store.data.pi_projection_outbox.find((e) => e.id === 901);
+  expect(outboxEvt1?.published_at).toBeNull(); // Event MUST NOT be acknowledged on failed deletion!
+
+  // Now restore store.remove and retry — outbox consumer must succeed and acknowledge
+  failIndexDelete = false;
+  const drainRetry = await consumeSearchProjectionOutbox(store);
+  expect(drainRetry.removed).toBe(1);
+  const ackedEvt1 = store.data.pi_projection_outbox.find((e) => e.id === 901);
+  expect(typeof ackedEvt1?.published_at).toBe("string");
+
+  // 2. Pending outbox read failure (outage / 503) propagates error instead of treating queue as empty
+  const origList = store.list;
+  store.list = async (table: string, queryStr: string) => {
+    if (table === "pi_projection_outbox") {
+      throw new Error("TrailBase 503 Service Unavailable");
+    }
+    return origList(table, queryStr);
+  };
+  await expect(consumeSearchProjectionOutbox(store)).rejects.toThrow("TrailBase 503 Service Unavailable");
+  store.list = origList;
+
+  // 3. Transient 503 error during vehicle lookup preserves outbox event for retry
+  store.data.pi_projection_outbox.push({
+    id: 902,
+    event_key: "fact:assertion:501:transient",
+    product_type: "VEHICLE",
+    product_id: 501,
+    event_type: "FACT_ASSERTED",
+    payload: JSON.stringify({ assertionId: 1 }),
+    occurred_at: "2026-01-04T01:00:00Z",
+    published_at: null,
+  });
+
+  const origGet = store.get;
+  let transientVehFail = true;
+  store.get = async (table: string, id: number | string) => {
+    if (table === "vehicles" && id === 501 && transientVehFail) {
+      throw new Error("TrailBase 503 Connection Timeout");
+    }
+    return origGet(table, id);
+  };
+
+  const drainTransient = await consumeSearchProjectionOutbox(store);
+  expect(drainTransient.failed).toBe(1);
+  const outboxEvt2 = store.data.pi_projection_outbox.find((e) => e.id === 902);
+  expect(outboxEvt2?.published_at).toBeNull(); // Must remain pending!
+
+  // Retry when vehicle service recovers
+  transientVehFail = false;
+  const drainRecovered = await consumeSearchProjectionOutbox(store);
+  expect(drainRecovered.processed).toBe(1);
+  const ackedEvt2 = store.data.pi_projection_outbox.find((e) => e.id === 902);
+  expect(typeof ackedEvt2?.published_at).toBe("string");
+  store.get = origGet;
+
+  // 4. Repeated delivery / idempotent replay of already published event
+  const replayDrain = await consumeSearchProjectionOutbox(store);
+  expect(replayDrain.processed).toBe(0);
+  expect(replayDrain.failed).toBe(0);
+});
