@@ -26,6 +26,7 @@ import { runGuardedBid } from "../../bids/bid-completion";
 import { reconcileBidOutcome } from "../../bids/bid-reconcile";
 import { AuctionCard } from "../../components/AuctionCard";
 import { BottomNav } from "../../components/BottomNav";
+import { VehicleProductIntelligenceCard } from "../../components/VehicleProductIntelligenceCard";
 import { presentBidOutcome } from "../../lib/bid-copy";
 import {
   deriveListingState,
@@ -529,6 +530,8 @@ export default function ItemScreen() {
                   })}
                 </Text>
               )}
+
+              <VehicleProductIntelligenceCard item={item} />
             </View>
 
             <View style={styles.block}>
