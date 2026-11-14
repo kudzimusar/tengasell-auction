@@ -46,7 +46,7 @@ import {
   type MyCounts,
   type MySection,
 } from "./my-sections";
-import { Avatar, EmptyState } from "@/components/tengasell/ui";
+import { AuctionCommsRoadmapCard, Avatar, EmptyState } from "@/components/tengasell/ui";
 import { useAuth } from "@/lib/tengasell/auth";
 import { useI18n } from "@/lib/tengasell/i18n";
 import { useLinkProps } from "@/lib/tengasell/router";
@@ -84,7 +84,8 @@ export default function MyPage({ section }: { section: MySection }) {
   // ── signed out → sign-in prompt ──────────────────────────────────
   if (!user) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-12 sm:py-16">
+      <div className="mx-auto max-w-3xl px-4 py-12 sm:py-16 space-y-6">
+        {active === "communications" && <AuctionCommsRoadmapCard />}
         <EmptyState
           icon={<UserX className="size-10" />}
           title="Sign in to view My Tengasell"

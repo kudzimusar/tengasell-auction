@@ -168,8 +168,8 @@ export default function BrowsePage({
         : catParam && category
           ? category.name
           : parseEnding(ending) != null
-            ? "Closing soon"
-            : "All live auctions";
+            ? "Closing Soon"
+            : "Timed Auctions";
 
   const activeCount = countActiveFilters(filters);
   const routeKey = `${mode}:${categorySlug ?? ""}:${q ?? ""}:${ending ?? ""}`;
@@ -188,7 +188,7 @@ export default function BrowsePage({
     setFilters(initialFilters(null));
     toast({
       title: "Filters cleared",
-      description: "Showing all live auctions in this view.",
+      description: "Showing all timed auctions open for bids in this view.",
     });
   }, []);
 
@@ -361,17 +361,25 @@ export default function BrowsePage({
             {category.blurb}
           </p>
         )}
-        <p className="text-caption text-muted-foreground mt-1">
-          Live auctions across Zimbabwe · USD
-          {resultCount != null && (
-            <>
-              {" · "}
-              <span className="ts-numeric text-teal font-semibold">
-                {resultCount}
-              </span>{" "}
-              {resultCount === 1 ? "auction" : "auctions"}
-            </>
-          )}
+        <p className="text-caption text-muted-foreground mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span>
+            Timed auctions open for bids across Zimbabwe · USD
+            {resultCount != null && (
+              <>
+                {" · "}
+                <span className="ts-numeric text-teal font-semibold">
+                  {resultCount}
+                </span>{" "}
+                {resultCount === 1 ? "timed auction" : "timed auctions"}
+              </>
+            )}
+          </span>
+          <a
+            href="#/events"
+            className="font-semibold text-teal-deep hover:underline focus-visible:outline-2 focus-visible:outline-ring rounded-sm"
+          >
+            Explore Live Auction Events →
+          </a>
         </p>
 
         {chips.length > 0 && (
@@ -535,8 +543,8 @@ export default function BrowsePage({
           <DrawerHeader className="pb-0">
             <DrawerTitle className="text-left">Filters</DrawerTitle>
             <DrawerDescription className="text-left">
-              {resultCount != null ? `${resultCount} live auctions` : "Live auctions"}{" "}
-              · Zimbabwe · USD
+              {resultCount != null ? `${resultCount} timed auctions` : "Timed auctions"}{" "}
+              · Open for Bids · Zimbabwe · USD
             </DrawerDescription>
           </DrawerHeader>
           <div className="flex-1 overflow-y-auto ts-scrollbar px-4 py-3">

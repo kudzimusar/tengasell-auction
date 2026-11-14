@@ -6,7 +6,7 @@
 
 import { motion, useReducedMotion } from "framer-motion";
 import { Truck } from "lucide-react";
-import { Avatar, Countdown, PriceTag } from "@/components/tengasell/ui";
+import { Avatar, Countdown, PriceTag, TimedAuctionBadge } from "@/components/tengasell/ui";
 import { conditionLabel, formatUSD } from "@/lib/tengasell/format";
 import { useLinkProps } from "@/lib/tengasell/router";
 import { toAuctionView, type Auction } from "@/lib/tengasell/types";
@@ -35,8 +35,8 @@ export function ListRow({ auction: raw }: { auction: Auction }) {
         />
         <div className="absolute top-1 start-1 flex flex-col gap-1">
           {a.endingSoon && a.status === "live" && (
-            <span className="rounded-full bg-urgent text-white text-[10px] font-bold px-1.5 py-0.5 uppercase tracking-wide">
-              Ending
+            <span className="rounded-full bg-warn text-warn-foreground text-[10px] font-bold px-1.5 py-0.5 uppercase tracking-wide">
+              Closing
             </span>
           )}
           {a.extension_count > 0 && (
@@ -79,12 +79,9 @@ export function ListRow({ auction: raw }: { auction: Auction }) {
                 Reserve not met
               </span>
             )}
-            {a.status === "live" ? (
+            <TimedAuctionBadge auction={a} />
+            {a.status === "live" && (
               <Countdown endsAt={a.ends_at} className="text-caption" />
-            ) : (
-              <span className="text-caption text-muted-foreground uppercase">
-                {a.status}
-              </span>
             )}
           </span>
         </div>

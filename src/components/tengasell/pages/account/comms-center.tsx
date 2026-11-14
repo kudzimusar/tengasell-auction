@@ -46,7 +46,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
-import { EmptyState, ErrorState, SectionHeader } from "@/components/tengasell/ui";
+import { AuctionCommsRoadmapCard, EmptyState, ErrorState, SectionHeader } from "@/components/tengasell/ui";
 import { toast } from "@/hooks/use-toast";
 import { useI18n } from "@/lib/tengasell/i18n";
 import { useResource } from "@/lib/tengasell/hooks";
@@ -235,6 +235,8 @@ export function CommsSection({ user }: { user: CurrentUser }) {
         title={<span id="comms-heading">{t("nav.communications")}</span>}
         subtitle={t("comms.sectionSub")}
       />
+
+      <AuctionCommsRoadmapCard />
 
       {/* ── 1. linked channels ─────────────────────────────────────── */}
       <div className="min-w-0 space-y-3">

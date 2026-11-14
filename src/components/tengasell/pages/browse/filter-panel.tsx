@@ -347,7 +347,7 @@ export function FilterPanel({
       </FilterSection>
 
       <p className="text-caption text-muted-foreground">
-        Showing live listings only — ended and sold auctions are hidden.
+        Showing timed auctions (Open for Bids) — ended and sold listings are hidden.
       </p>
     </div>
   );

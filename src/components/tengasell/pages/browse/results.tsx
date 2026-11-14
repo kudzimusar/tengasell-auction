@@ -121,7 +121,7 @@ export function ResultsSection({
     <div>
       <div className="flex items-center justify-between gap-2 mb-3">
         <p className="text-caption text-muted-foreground ts-numeric" aria-live="polite">
-          {countText} · live listings
+          {countText} · Timed Auctions · Open for Bids
         </p>
         {refreshing && (
           <span className="inline-flex items-center gap-1 text-caption text-teal font-semibold">
@@ -138,8 +138,8 @@ export function ResultsSection({
             title="No auctions match"
             body={
               hasActiveFilters
-                ? "No live auctions match these filters — try clearing them, or explore a popular category below."
-                : "Nothing live here right now — try a different search, or explore a popular category below."
+                ? "No timed auctions match these filters — try clearing them, or explore a popular category below."
+                : "No timed auctions are open for bids here right now — try a different search, or explore a popular category below."
             }
             action={
               hasActiveFilters ? (

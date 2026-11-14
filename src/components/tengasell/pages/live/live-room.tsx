@@ -89,14 +89,18 @@ import {
 } from "@/lib/tengasell/types";
 import { cn } from "@/lib/utils";
 import {
+  AuctionCommsNotice,
   Avatar,
   EmptyState,
   ErrorState,
+  getLiveEventDisplay,
+  LiveEventStatusBadge,
   LoadingGrid,
   PriceTag,
   SectionHeader,
   StatusPill,
   useNow,
+  type LiveEventDisplay,
 } from "@/components/tengasell/ui";
 
 // ── local helpers ───────────────────────────────────────────────────────
@@ -146,18 +150,17 @@ function LiveBoard() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useRouter().navigate;
   const res = useResource(() => api.liveSessions(), []);
+  const eventsRes = useResource(() => api.auctionEvents(), []);
 
   const [hostOpen, setHostOpen] = useState(false);
 
   const sessions = res.data ?? [];
-  const liveNow = sessions.filter((s) => s.status === "live");
-  const upcoming = sessions.filter((s) => s.status === "scheduled");
-  const closed = sessions
-    .filter((s) => s.status === "closed")
-    .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+  const events = eventsRes.data ?? [];
 
-  // lot totals per room (one small fetch per session; few sessions exist)
-  const [totals, setTotals] = useState<Record<number, number>>({});
+  // lot metadata per room (one small fetch per session; few sessions exist)
+  const [lotMeta, setLotMeta] = useState<
+    Record<number, { total: number; currentLotStatus: string | null; loaded: boolean; error?: boolean }>
+  >({});
   const sessionData = res.data;
   useEffect(() => {
     if (!sessionData || sessionData.length === 0) return;
@@ -166,18 +169,69 @@ function LiveBoard() {
       sessionData.map(async (s) => {
         try {
           const lots = await api.roomLots(s.id);
-          return [s.id, lots.length] as const;
+          const current =
+            s.current_lot_id != null ? (lots.find((l) => l.id === s.current_lot_id) ?? null) : null;
+          return [
+            s.id,
+            { total: lots.length, currentLotStatus: current?.status ?? null, loaded: true, error: false },
+          ] as const;
         } catch {
-          return [s.id, 0] as const;
+          return [s.id, { total: 0, currentLotStatus: null, loaded: true, error: true }] as const;
         }
       }),
     ).then((pairs) => {
-      if (alive) setTotals(Object.fromEntries(pairs));
+      if (alive) setLotMeta(Object.fromEntries(pairs));
     });
     return () => {
       alive = false;
     };
   }, [sessionData]);
+
+  const sessionEntries = useMemo(() => {
+    return sessions.map((s) => {
+      const linkedEvent =
+        s.event_id != null ? (events.find((e) => Number(e.id) === Number(s.event_id)) ?? null) : null;
+      const meta = lotMeta[s.id];
+      const eventLoaded = s.event_id == null || (!eventsRes.loading && (Boolean(eventsRes.data) || Boolean(eventsRes.error)));
+      const eventStatus = s.event_id != null ? (linkedEvent?.status ?? (eventLoaded ? "CLOSED" : null)) : null;
+      const lotMatchesSession =
+        s.event_id == null ||
+        s.current_lot_id == null ||
+        Boolean(linkedEvent?.current_lot_id != null);
+      const display = getLiveEventDisplay({
+        sessionStatus: s.status,
+        sessionExists: true,
+        sessionLoaded: !res.loading,
+        eventBacked: s.event_id != null,
+        eventStatus,
+        eventLoaded,
+        sessionMatchesEvent:
+          s.event_id == null ||
+          !linkedEvent ||
+          (linkedEvent.session_id == null || Number(linkedEvent.session_id) === Number(s.id)),
+        currentLotId: s.current_lot_id,
+        eventCurrentLotId: s.event_id != null ? (linkedEvent?.current_lot_id ?? null) : undefined,
+        lotMatchesSession,
+        lotAuctionStatus: meta?.currentLotStatus ?? null,
+        lotStatus: meta?.currentLotStatus ?? null,
+        lotLoaded: Boolean(meta?.loaded && eventLoaded),
+        dataError: Boolean(meta?.error || res.error || (s.event_id != null && eventsRes.error)),
+        requireLotVerification: s.current_lot_id != null,
+      });
+      return { session: s, display, total: meta?.total ?? 0 };
+    });
+  }, [sessions, events, eventsRes.loading, eventsRes.data, eventsRes.error, res.loading, res.error, lotMeta]);
+
+  const liveNow = sessionEntries.filter((e) => e.display.isAuthoritativeLive);
+  const awaitingRoom = sessionEntries.filter(
+    (e) =>
+      !e.display.isAuthoritativeLive &&
+      (e.display.state === "awaiting_lot" || e.display.state === "checking" || e.display.state === "sync_mismatch"),
+  );
+  const upcoming = sessionEntries.filter((e) => e.display.state === "upcoming");
+  const closed = sessionEntries
+    .filter((e) => e.display.state === "completed" || e.display.state === "cancelled")
+    .sort((a, b) => b.session.updated_at.localeCompare(a.session.updated_at));
 
   const openHostDialog = () => {
     if (!user && !authLoading) {
@@ -196,6 +250,12 @@ function LiveBoard() {
           subtitle={t("live.subtitle")}
           action={
             <div className="flex flex-wrap gap-2">
+              <Button asChild variant="outline" className="min-h-11">
+                <a href="#/search">
+                  <Gavel className="size-4" aria-hidden="true" />
+                  Timed Auctions
+                </a>
+              </Button>
               <Button asChild variant="outline" className="min-h-11">
                 <a href="#/events">
                   <CalendarClock className="size-4" aria-hidden="true" />
@@ -236,28 +296,37 @@ function LiveBoard() {
           <div className="space-y-6 p-4">
             {liveNow.length > 0 && (
               <BoardGroup title={t("live.board.liveNow")} accent="text-urgent" dot pulse>
-                {liveNow.map((s) => (
-                  <SessionCard key={s.id} session={s} total={totals[s.id] ?? 0} live />
+                {liveNow.map(({ session, display, total }) => (
+                  <SessionCard key={session.id} session={session} total={total} display={display} />
+                ))}
+              </BoardGroup>
+            )}
+            {awaitingRoom.length > 0 && (
+              <BoardGroup title="Room Open — Awaiting Next Lot" accent="text-warn-foreground">
+                {awaitingRoom.map(({ session, display, total }) => (
+                  <SessionCard key={session.id} session={session} total={total} display={display} />
                 ))}
               </BoardGroup>
             )}
             {upcoming.length > 0 && (
               <BoardGroup title={t("live.board.upcoming")} accent="text-teal">
-                {upcoming.map((s) => (
-                  <SessionCard key={s.id} session={s} total={totals[s.id] ?? 0} />
+                {upcoming.map(({ session, display, total }) => (
+                  <SessionCard key={session.id} session={session} total={total} display={display} />
                 ))}
               </BoardGroup>
             )}
             {closed.length > 0 && (
               <BoardGroup title={t("live.board.closed")} accent="text-muted-foreground">
-                {closed.slice(0, 6).map((s) => (
-                  <SessionCard key={s.id} session={s} total={totals[s.id] ?? 0} muted />
+                {closed.slice(0, 6).map(({ session, display, total }) => (
+                  <SessionCard key={session.id} session={session} total={total} display={display} muted />
                 ))}
               </BoardGroup>
             )}
           </div>
         )}
       </section>
+
+      <AuctionCommsNotice context="live" testId="live-board-comms-banner" />
 
       <HostRoomDialog open={hostOpen} onOpenChange={setHostOpen} locale={locale} />
     </div>
@@ -282,7 +351,7 @@ function BoardGroup({
       <h3 className={cn("mb-2 flex items-center gap-2 text-label font-bold tracking-tight", accent)}>
         {dot && (
           <span
-            className={cn("size-2 rounded-full bg-urgent", pulse && "animate-pulse")}
+            className={cn("size-2 rounded-full bg-urgent", pulse && "motion-safe:animate-pulse")}
             aria-hidden="true"
           />
         )}
@@ -296,16 +365,17 @@ function BoardGroup({
 function SessionCard({
   session,
   total,
-  live = false,
+  display,
   muted = false,
 }: {
   session: LiveSession;
   total: number;
-  live?: boolean;
+  display: LiveEventDisplay;
   muted?: boolean;
 }) {
   const { t, locale } = useI18n();
   const link = useLinkProps(`#/live/${session.id}`);
+  const live = display.isAuthoritativeLive;
 
   const lotLine =
     session.lot_index > 0
@@ -327,19 +397,8 @@ function SessionCard({
             : "hover:border-teal/40 hover:shadow-sm",
       )}
     >
-      <div className="flex items-center gap-2">
-        {live ? (
-          <span className="inline-flex items-center gap-1.5 rounded-pill bg-danger/10 px-2 py-0.5 text-[11px] font-bold text-urgent">
-            <span className="size-1.5 rounded-full bg-urgent animate-pulse" aria-hidden="true" />
-            {t("state.live")}
-          </span>
-        ) : (
-          <StatusPill size="xs" tone={session.status === "scheduled" ? "warn" : "muted"}>
-            {session.status === "scheduled"
-              ? t("room.status.scheduled")
-              : t("room.status.closed")}
-          </StatusPill>
-        )}
+      <div className="flex flex-wrap items-center gap-2">
+        <LiveEventStatusBadge display={display} showOnAir={display.isAuthoritativeLive} />
         <span className="ms-auto inline-flex min-w-0 items-center gap-1 truncate text-caption text-muted-foreground">
           {session.status === "scheduled" ? (
             <>
@@ -368,7 +427,7 @@ function SessionCard({
             : "border border-border text-foreground group-hover:bg-accent/60",
         )}
       >
-        {live ? t("live.board.enter") : t("live.board.view")}
+        {display.ctaLabel}
         <ArrowRight className="size-4" aria-hidden="true" />
       </span>
     </a>
@@ -535,6 +594,13 @@ function LiveRoom({ sessionId }: { sessionId: number }) {
 
   const session = sessionRes.data ?? null;
   const eventBacked = session?.event_id != null;
+  const eventBundleRes = useResource(
+    () =>
+      session?.event_id != null
+        ? api.auctionEventBundle(Number(session.event_id))
+        : Promise.resolve(null),
+    [session?.event_id, tick, lotTick],
+  );
   const lots = useMemo(
     () => eventBacked
       ? [...(lotsRes.data ?? [])]
@@ -543,6 +609,70 @@ function LiveRoom({ sessionId }: { sessionId: number }) {
   );
   const currentLotId = session?.current_lot_id ?? null;
   const currentLot = currentLotId != null ? lots.find((l) => l.id === currentLotId) ?? null : null;
+
+  const [socketReconnecting, setSocketReconnecting] = useState(false);
+  const wasSocketConnectedRef = useRef(false);
+  useEffect(() => {
+    return bus.on("connection:changed", ({ connected }) => {
+      if (connected) {
+        wasSocketConnectedRef.current = true;
+        setSocketReconnecting(false);
+        bump();
+        bumpLots();
+      } else if (wasSocketConnectedRef.current) {
+        setSocketReconnecting(true);
+      }
+    });
+  }, [bump, bumpLots]);
+
+  const associatedEvent = eventBacked ? (eventBundleRes.data?.event ?? null) : null;
+  const associatedLotRecord =
+    eventBacked && associatedEvent?.current_lot_id != null
+      ? (eventBundleRes.data?.lots.find((l) => l.id === associatedEvent.current_lot_id) ?? null)
+      : null;
+  const eventLoaded =
+    !eventBacked || Boolean((eventBundleRes.data || eventBundleRes.error) && !eventBundleRes.loading);
+  const dataStaleOrErrored = Boolean(
+    sessionRes.error || lotsRes.error || (eventBacked && eventBundleRes.error),
+  );
+  const sessionMatchesEvent = Boolean(
+    !eventBacked ||
+      !associatedEvent ||
+      ((session?.event_id == null || Number(session.event_id) === Number(associatedEvent.id)) &&
+        (associatedEvent.session_id == null ||
+          Number(associatedEvent.session_id) === Number(session?.id))),
+  );
+  const lotMatchesSession = Boolean(
+    currentLot != null &&
+      session?.current_lot_id != null &&
+      Number(currentLot.id) === Number(session.current_lot_id) &&
+      (!eventBacked ||
+        (associatedLotRecord != null &&
+          Number(associatedLotRecord.auction_id) === Number(session.current_lot_id))),
+  );
+  const lotsAndEventLoaded = Boolean(!lotsRes.loading && !lotsRes.error && eventLoaded);
+  const roomDisplay = session
+    ? getLiveEventDisplay({
+        sessionStatus: session.status,
+        sessionExists: true,
+        sessionLoaded: !sessionRes.loading,
+        eventBacked,
+        eventStatus: eventBacked ? (associatedEvent?.status ?? (eventLoaded ? "CLOSED" : null)) : null,
+        eventLoaded,
+        sessionMatchesEvent,
+        currentLotId: session.current_lot_id,
+        eventCurrentLotId: eventBacked ? (associatedEvent?.current_lot_id ?? null) : undefined,
+        lotMatchesSession: session.current_lot_id == null ? true : lotMatchesSession,
+        eventLotStatus: associatedLotRecord?.status ?? null,
+        lotAuctionStatus: currentLot?.status ?? null,
+        lotStatus: currentLot?.status ?? null,
+        lotLoaded: lotsAndEventLoaded,
+        reconnecting: socketReconnecting,
+        stale: dataStaleOrErrored,
+        dataError: dataStaleOrErrored,
+        requireLotVerification: session.current_lot_id != null,
+      })
+    : null;
 
   const bidsRes = useResource(
     () => (currentLotId != null ? api.bids(currentLotId) : Promise.resolve<Bid[]>([])),
@@ -664,7 +794,9 @@ function LiveRoom({ sessionId }: { sessionId: number }) {
           <ArrowLeft className="size-4" aria-hidden="true" />
           {t("room.backBoard")}
         </a>
-        <RoomStatusPill session={session} />
+        {roomDisplay ? (
+          <LiveEventStatusBadge display={roomDisplay} showOnAir={roomDisplay.isAuthoritativeLive} />
+        ) : null}
         {session.event_id != null ? (
           <Button asChild variant="outline" size="sm" className="min-h-10">
             <a href={`#/events/${session.event_id}`}>
@@ -673,12 +805,6 @@ function LiveRoom({ sessionId }: { sessionId: number }) {
             </a>
           </Button>
         ) : null}
-        {session.status === "live" && (
-          <span className="inline-flex items-center gap-1.5 text-caption font-bold text-urgent">
-            <span className="size-2 rounded-full bg-urgent animate-pulse" aria-hidden="true" />
-            ON AIR
-          </span>
-        )}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -687,7 +813,12 @@ function LiveRoom({ sessionId }: { sessionId: number }) {
           <LotStage
             session={session}
             lot={currentLot}
+            display={roomDisplay}
+            eventLotStatus={associatedLotRecord?.status ?? null}
+            lotLoaded={lotsAndEventLoaded}
             sessionLoading={sessionRes.loading && !sessionRes.data}
+            reconnecting={socketReconnecting}
+            dataStale={dataStaleOrErrored}
             bids={bids}
             bidsLoading={bidsRes.loading && !bidsRes.data}
             user={user}
@@ -707,7 +838,7 @@ function LiveRoom({ sessionId }: { sessionId: number }) {
               </span>
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <RoomStatusPill session={session} />
+              {roomDisplay ? <LiveEventStatusBadge display={roomDisplay} /> : null}
               <span className="ts-numeric text-caption text-muted-foreground">
                 {session.lot_index > 0
                   ? fill(t("live.board.lotOf"), { n: session.lot_index, total: lots.length })
@@ -721,6 +852,8 @@ function LiveRoom({ sessionId }: { sessionId: number }) {
               </p>
             )}
           </section>
+
+          <AuctionCommsNotice context="live" compact testId="live-room-comms-banner" />
 
           <LotParade
             session={session}
@@ -750,34 +883,17 @@ function LiveRoom({ sessionId }: { sessionId: number }) {
   );
 }
 
-function RoomStatusPill({ session }: { session: LiveSession }) {
-  const { t } = useI18n();
-  if (session.status === "live")
-    return (
-      <StatusPill tone="good" size="sm">
-        <span className="size-1.5 rounded-full bg-teal animate-pulse" aria-hidden="true" />
-        {t("state.live")}
-      </StatusPill>
-    );
-  if (session.status === "scheduled")
-    return (
-      <StatusPill tone="warn" size="sm">
-        {t("room.status.scheduled")}
-      </StatusPill>
-    );
-  return (
-    <StatusPill tone="muted" size="sm">
-      {t("room.status.closed")}
-    </StatusPill>
-  );
-}
-
 // ── current-lot stage ──────────────────────────────────────────────────
 
 function LotStage({
   session,
   lot,
+  display,
+  eventLotStatus = null,
+  lotLoaded,
   sessionLoading,
+  reconnecting = false,
+  dataStale = false,
   bids,
   bidsLoading,
   user,
@@ -785,7 +901,12 @@ function LotStage({
 }: {
   session: LiveSession;
   lot: Auction | null;
+  display: LiveEventDisplay | null;
+  eventLotStatus?: string | null;
+  lotLoaded: boolean;
   sessionLoading: boolean;
+  reconnecting?: boolean;
+  dataStale?: boolean;
   bids: Bid[];
   bidsLoading: boolean;
   user: CurrentUser | null;
@@ -793,17 +914,36 @@ function LotStage({
 }) {
   const { t } = useI18n();
 
+  const canBidAuthoritatively = Boolean(
+    display?.isAuthoritativeLive === true &&
+      display?.state === "live_bidding" &&
+      session.status === "live" &&
+      lot != null &&
+      lot.status === "live" &&
+      !reconnecting &&
+      !dataStale,
+  );
+
   const body = (() => {
     if (sessionLoading) {
       return (
         <div className="space-y-4 p-4" aria-busy="true">
-          <div className="h-44 rounded-control bg-muted animate-pulse" />
-          <div className="h-8 w-2/3 rounded bg-muted animate-pulse" />
-          <div className="h-12 rounded bg-muted animate-pulse" />
+          <div className="h-44 rounded-control bg-muted motion-safe:animate-pulse" />
+          <div className="h-8 w-2/3 rounded bg-muted motion-safe:animate-pulse" />
+          <div className="h-12 rounded bg-muted motion-safe:animate-pulse" />
         </div>
       );
     }
-    if (session.status === "closed") {
+    if (display?.state === "cancelled") {
+      return (
+        <EmptyState
+          icon={<XCircle className="size-10 text-danger" aria-hidden="true" />}
+          title="Event Cancelled"
+          body="This live auction event has been cancelled. Bidding is closed."
+        />
+      );
+    }
+    if (session.status === "closed" || display?.state === "completed") {
       return (
         <EmptyState
           icon={<Gavel className="size-10" aria-hidden="true" />}
@@ -811,7 +951,7 @@ function LotStage({
         />
       );
     }
-    if (session.status === "scheduled") {
+    if (session.status === "scheduled" || display?.state === "upcoming") {
       return (
         <EmptyState
           icon={<CalendarClock className="size-10" aria-hidden="true" />}
@@ -819,20 +959,39 @@ function LotStage({
         />
       );
     }
-    if (session.current_lot_id != null && !lot) {
-      // session arrived, lot list still loading
-      return (
-        <div className="space-y-4 p-4" aria-busy="true">
-          <div className="h-44 rounded-control bg-muted animate-pulse" />
-          <div className="h-8 w-2/3 rounded bg-muted animate-pulse" />
-        </div>
-      );
-    }
-    if (!lot) {
+    if (reconnecting || dataStale) {
       return (
         <EmptyState
-          icon={<Hammer className="size-10" aria-hidden="true" />}
-          title={t("room.waiting")}
+          icon={<AlertTriangle className="size-10 text-warn" aria-hidden="true" />}
+          title="Reconnecting to live bidding floor"
+          body="Official state is being synchronized before live bidding can proceed."
+        />
+      );
+    }
+    if (display?.state === "sync_mismatch") {
+      return (
+        <EmptyState
+          icon={<AlertTriangle className="size-10 text-warn" aria-hidden="true" />}
+          title="Status temporarily unavailable"
+          body="This live room is waiting for synchronized event, session, and lot status before bidding opens."
+        />
+      );
+    }
+    if (display?.state === "checking" || (session.current_lot_id != null && (!lot || !lotLoaded))) {
+      return (
+        <EmptyState
+          icon={<Clock className="size-10 text-teal" aria-hidden="true" />}
+          title="Verifying live floor state"
+          body="Checking the official session, event, and current lot state before enabling bidding."
+        />
+      );
+    }
+    if (!lot || display?.state === "awaiting_lot") {
+      return (
+        <EmptyState
+          icon={<Hammer className="size-10 text-warn" aria-hidden="true" />}
+          title="Room Open — Awaiting Next Lot"
+          body={t("room.waiting")}
         />
       );
     }
@@ -840,6 +999,8 @@ function LotStage({
       <LotStageBody
         session={session}
         lot={lot}
+        eventLotStatus={eventLotStatus}
+        canBid={canBidAuthoritatively}
         bids={bids}
         bidsLoading={bidsLoading}
         user={user}
@@ -861,6 +1022,8 @@ function LotStage({
 function LotStageBody({
   session,
   lot,
+  eventLotStatus = null,
+  canBid,
   bids,
   bidsLoading,
   user,
@@ -868,6 +1031,8 @@ function LotStageBody({
 }: {
   session: LiveSession;
   lot: Auction;
+  eventLotStatus?: string | null;
+  canBid: boolean;
   bids: Bid[];
   bidsLoading: boolean;
   user: CurrentUser | null;
@@ -899,7 +1064,7 @@ function LotStageBody({
         <div className="min-w-0 flex-1 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <StatusPill tone="good" size="xs">
-              <span className="size-1.5 rounded-full bg-teal animate-pulse" aria-hidden="true" />
+              <span className="size-1.5 rounded-full bg-teal motion-safe:animate-pulse" aria-hidden="true" />
               {t("room.status.current")}
             </StatusPill>
             <a
@@ -923,9 +1088,14 @@ function LotStageBody({
         </div>
       </div>
 
-      <HammerClock closeAt={session.close_at} hasBids={lot.bid_count > 0} />
+      <HammerClock
+        closeAt={session.close_at}
+        lotStatus={lot.status}
+        eventLotStatus={eventLotStatus}
+        onTimerElapsed={onChanged}
+      />
 
-      <LotBidPanel lot={lot} isSeller={isSeller} signedIn={!!user} onChanged={onChanged} />
+      <LotBidPanel lot={lot} isSeller={isSeller} signedIn={!!user} canBid={canBid} onChanged={onChanged} />
 
       <LotFeed bids={bids} loading={bidsLoading} />
     </>
@@ -934,14 +1104,54 @@ function LotStageBody({
 
 // ── going-going-sold hammer clock ──────────────────────────────────────
 
-function HammerClock({ closeAt, hasBids }: { closeAt: string | null; hasBids: boolean }) {
+function HammerClock({
+  closeAt,
+  lotStatus,
+  eventLotStatus = null,
+  onTimerElapsed,
+}: {
+  closeAt: string | null;
+  lotStatus?: Auction["status"];
+  eventLotStatus?: string | null;
+  onTimerElapsed?: () => void;
+}) {
   const { t } = useI18n();
   const now = useNow(500);
   const suffix = t("room.clock.secSuffix");
+  const reconciledCloseAtRef = useRef<string | null>(null);
+
+  const msLeft = closeAt != null ? Date.parse(closeAt) - now : null;
+  const elapsed = closeAt != null && msLeft != null && Number.isFinite(msLeft) && msLeft <= 0;
+
+  useEffect(() => {
+    if (!elapsed || !closeAt || !onTimerElapsed) return;
+    if (reconciledCloseAtRef.current === closeAt) return;
+    reconciledCloseAtRef.current = closeAt;
+    onTimerElapsed();
+  }, [elapsed, closeAt, onTimerElapsed]);
+
+  const normalizedEventLotStatus = String(eventLotStatus ?? "").toUpperCase();
+  const isSoldAuthoritatively = lotStatus === "sold" || normalizedEventLotStatus === "SOLD";
+  const isPassedAuthoritatively =
+    lotStatus === "ended" || normalizedEventLotStatus === "PASSED" || normalizedEventLotStatus === "UNSOLD";
 
   let inner: React.ReactNode;
   let tone = "";
-  if (closeAt == null) {
+  if (isSoldAuthoritatively) {
+    inner = (
+      <p className="ts-numeric text-3xl font-extrabold leading-none text-gold-deep sm:text-4xl">
+        {t("room.clock.sold")}
+      </p>
+    );
+    tone = "bg-gold-soft/70";
+  } else if (isPassedAuthoritatively) {
+    inner = (
+      <p className="text-bodyStrong font-bold text-muted-foreground">
+        Passed / Unsold
+      </p>
+    );
+    tone = "bg-muted/60";
+  } else if (closeAt == null) {
     inner = (
       <p className="flex items-center justify-center gap-2 text-caption font-semibold text-muted-foreground">
         <Clock className="size-4" aria-hidden="true" />
@@ -950,31 +1160,21 @@ function HammerClock({ closeAt, hasBids }: { closeAt: string | null; hasBids: bo
     );
     tone = "bg-muted/40";
   } else {
-    const msLeft = Date.parse(closeAt) - now;
-    const secs = Math.max(0, Math.ceil(msLeft / 1000));
-    if (msLeft <= 0) {
-      if (hasBids) {
-        inner = (
-          <p className="ts-numeric text-3xl font-extrabold leading-none text-gold-deep sm:text-4xl">
-            {t("room.clock.sold")}
-          </p>
-        );
-        tone = "bg-gold-soft/70";
-      } else {
-        inner = (
-          <p className="text-caption font-bold text-muted-foreground animate-pulse">
-            {t("room.clock.settling")}
-          </p>
-        );
-        tone = "bg-muted/40";
-      }
+    const secs = Math.max(0, Math.ceil((msLeft ?? 0) / 1000));
+    if (elapsed) {
+      inner = (
+        <p data-testid="hammer-clock-pending" className="text-caption font-bold text-muted-foreground">
+          Countdown elapsed · Awaiting official auctioneer decision
+        </p>
+      );
+      tone = "bg-muted/40";
     } else if (secs <= 10) {
       inner = (
         <div className="flex flex-col items-center gap-0.5">
-          <p className="text-label font-extrabold uppercase tracking-wide text-urgent animate-pulse">
+          <p className="text-label font-extrabold uppercase tracking-wide text-urgent motion-safe:animate-pulse">
             {t("room.clock.twice")}
           </p>
-          <p className="ts-numeric text-4xl font-extrabold leading-none text-urgent animate-pulse sm:text-5xl">
+          <p className="ts-numeric text-4xl font-extrabold leading-none text-urgent motion-safe:animate-pulse sm:text-5xl">
             {secs}
             <span className="text-xl">{suffix}</span>
           </p>
@@ -1014,18 +1214,27 @@ function LotBidPanel({
   lot,
   isSeller,
   signedIn,
+  canBid,
   onChanged,
 }: {
   lot: Auction;
   isSeller: boolean;
   signedIn: boolean;
+  canBid: boolean;
   onChanged: () => void;
 }) {
   const { t } = useI18n();
   const signinLink = useLinkProps("/signin");
 
   let body: React.ReactNode;
-  if (isSeller) {
+  if (!canBid || lot.status !== "live") {
+    body = (
+      <p className="flex items-center gap-2 rounded-control bg-muted/60 p-3 text-caption font-semibold text-muted-foreground">
+        <Info className="size-4 shrink-0" aria-hidden="true" />
+        Live bidding is currently closed until the lot is authoritatively open on the floor.
+      </p>
+    );
+  } else if (isSeller) {
     body = (
       <p className="flex items-center gap-2 rounded-control bg-gold-soft/60 p-3 text-caption font-semibold text-gold-deep">
         <UserRound className="size-4 shrink-0" aria-hidden="true" />
@@ -1200,7 +1409,7 @@ function LotFeed({ bids, loading }: { bids: Bid[]; loading: boolean }) {
       {loading && bids.length === 0 ? (
         <div className="space-y-2" aria-busy="true">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="h-11 rounded-control bg-muted animate-pulse" />
+            <div key={i} className="h-11 rounded-control bg-muted motion-safe:animate-pulse" />
           ))}
         </div>
       ) : bids.length === 0 ? (
@@ -1307,7 +1516,7 @@ function LotParade({
       {loading && lots.length === 0 ? (
         <div className="space-y-2 p-4" aria-busy="true">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="h-11 rounded-control bg-muted animate-pulse" />
+            <div key={i} className="h-11 rounded-control bg-muted motion-safe:animate-pulse" />
           ))}
         </div>
       ) : lots.length === 0 ? (

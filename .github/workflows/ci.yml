@@ -12,11 +12,18 @@ on:
       - fix/tengasell-auction-imp-lr01-r1-rbac-preview
       - feat/tengasell-auction-imp-lr02-commercial-operations
       - cert/tengasell-auction-cert-01-stg01
+      - feat/tengasell-live-comms-ux01-r1
+      - feat/tengasell-live-comms-ux01-r2-room-floor
+      - feat/tengasell-live-comms-ux01-r3a-first-party-reminders
   pull_request:
     branches:
       - main
+      - cert/tengasell-auction-cert-01-stg01
       - feat/tengasell-auction-imp01-authority-safety-barrier
       - feat/tengasell-auction-imp-lr01-core-vehicle-events
+      - feat/tengasell-live-comms-ux01-r1
+      - feat/tengasell-live-comms-ux01-r2-room-floor
+      - feat/tengasell-live-comms-ux01-r3a-first-party-reminders
   workflow_dispatch:
 
 concurrency:
@@ -30,7 +37,7 @@ permissions:
 jobs:
   build-and-smoke:
     name: Build and smoke test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
       DATABASE_URL: file:${{ github.workspace }}/ci.db
@@ -110,6 +117,9 @@ jobs:
       - name: LR01-R1 event RBAC and Auction Hub discoverability contract
         run: node tests/lr01-r1-rbac-navigation-contract.mjs
 
+      - name: TENGASELL-LIVE-COMMS-UX-01 R1 auction mode & comms discovery contract
+        run: npm run test:live-comms-ux01-r1
+
       - name: Setup Bun for canonical trade engine
         uses: oven-sh/setup-bun@v2
         with:
@@ -175,8 +185,19 @@ jobs:
           echo "$body" | grep -q '"ok":true'
           echo "smoke contract satisfied"
 
-          npx playwright test tests/commercial-browser-uat.spec.mjs --reporter=line
-          echo "desktop/mobile commercial browser UAT satisfied"
+          UX01_SCREENSHOT_DIR="${{ github.workspace }}/test-artifacts/screenshots" npx playwright test tests/commercial-browser-uat.spec.mjs tests/live-comms-ux01-r1-browser-uat.spec.mjs --reporter=line
+          echo "desktop/mobile commercial & R1 UX browser UAT satisfied"
+
+      - name: Upload test screenshots and UAT artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-artifacts
+          path: |
+            test-artifacts/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Upload build log on failure
         if: failure()
@@ -208,7 +229,7 @@ jobs:
 
   quality:
     name: Lint and typecheck (baseline debt — non-blocking)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     # The imported codebase carries pre-existing debt: 18 ESLint errors
     # (react-hooks/set-state-in-effect) and 312 TypeScript diagnostics that the

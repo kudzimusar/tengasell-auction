@@ -211,8 +211,8 @@ export default function ProfilePage({ username }: { username: string }) {
       {/* ── live auctions ─────────────────────────────────────────── */}
       <section aria-labelledby="profile-live">
         <SectionHeader
-          title={<span id="profile-live">Live auctions from @{p.username}</span>}
-          subtitle={`${liveItems.length} live listing${liveItems.length === 1 ? "" : "s"} · updated in realtime`}
+          title={<span id="profile-live">Timed auctions from @{p.username}</span>}
+          subtitle={`${liveItems.length} open for bids · updated in realtime`}
         />
         {live.loading && !live.data ? (
           <LoadingGrid count={4} />
@@ -221,8 +221,8 @@ export default function ProfilePage({ username }: { username: string }) {
         ) : liveItems.length === 0 ? (
           <EmptyState
             icon={<Store className="size-10" />}
-            title="No live auctions right now"
-            body={`@${p.username} has nothing on the block at the moment — check back soon.`}
+            title="No timed auctions open right now"
+            body={`@${p.username} has nothing open for bids at the moment — check back soon.`}
           />
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-4">
