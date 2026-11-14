@@ -250,6 +250,14 @@ jobs:
           npx playwright test tests/commercial-browser-uat.spec.mjs --reporter=line
           echo "desktop/mobile commercial browser UAT satisfied"
 
+      - name: Run PI structured discovery real-browser UAT
+        if: hashFiles('tests/pi-browser-uat.spec.mjs') != ''
+        env:
+          ADMIN_PASSWORD: "${{ vars.TENGASELL_CI_ADMIN_PASSWORD || 'Tengasell#2025' }}"
+        run: |
+          node tests/pi-browser-uat.spec.mjs
+          echo "PI_BROWSER_UAT=PASS"
+
       - name: Upload build log on failure
         if: failure()
         uses: actions/upload-artifact@v4

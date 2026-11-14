@@ -1,6 +1,6 @@
 // GET /api/pi/categories/[categoryKey]/filters — schema-driven filter metadata
 import { NextRequest, NextResponse } from "next/server";
-import { tbList, tbGet } from "@/lib/server/trailbase-admin";
+import { tbList, tbGet, TrailBaseError } from "@/lib/server/trailbase-admin";
 import { categoryFilterMetadata } from "../../../../../../../mini-services/trade-engine/product-intelligence";
 import type { VehicleStore } from "../../../../../../../mini-services/trade-engine/vehicle-authority";
 
@@ -29,6 +29,14 @@ export async function GET(
     const metadata = await categoryFilterMetadata(serverStore, categoryKey);
     return NextResponse.json({ ok: true, ...metadata });
   } catch (err: any) {
+    if (err instanceof TrailBaseError) {
+      const status = err.status === 429 ? 429 : 503;
+      const code = err.status === 429 ? "FILTERS_RATE_LIMITED" : "FILTERS_UNAVAILABLE";
+      return NextResponse.json(
+        { ok: false, code, error: "Category filters are temporarily unavailable." },
+        { status },
+      );
+    }
     console.error("[api/pi/categories/[categoryKey]/filters]", err);
     return NextResponse.json(
       { ok: false, error: err.message || "Failed to load category filters" },

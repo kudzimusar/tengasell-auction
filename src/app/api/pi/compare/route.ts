@@ -1,6 +1,6 @@
 // POST /api/pi/compare — category-aware product comparison with privacy & public visibility guarantees
 import { NextRequest, NextResponse } from "next/server";
-import { tbList, tbGet } from "@/lib/server/trailbase-admin";
+import { tbList, tbGet, TrailBaseError } from "@/lib/server/trailbase-admin";
 import {
   ProductIntelligenceError,
   productCompare,
@@ -67,6 +67,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { ok: false, code: err.code, error: err.message },
         { status: compareErrorStatus(err.code) },
+      );
+    }
+    if (err instanceof TrailBaseError) {
+      const status = err.status === 429 ? 429 : 503;
+      const code = err.status === 429 ? "COMPARE_RATE_LIMITED" : "COMPARE_UNAVAILABLE";
+      return NextResponse.json(
+        { ok: false, code, error: "Product comparison is temporarily unavailable." },
+        { status },
       );
     }
     console.error("[api/pi/compare]", err);

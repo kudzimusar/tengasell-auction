@@ -17,7 +17,9 @@ const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "Tengasell#2025";
 const USER_PASSWORD = "TestUser#2025";
 
-const ARTIFACT_SCREENSHOT_DIR = "/Users/shadreckmusarurwa/.gemini/antigravity/brain/922c37cd-effc-42fd-b278-229abfb212b8";
+const ARTIFACT_SCREENSHOT_DIR =
+  process.env.ARTIFACT_DIR ||
+  "/Users/shadreckmusarurwa/.gemini/antigravity/brain/922c37cd-effc-42fd-b278-229abfb212b8";
 const LOCAL_UAT_DIR = path.join(ROOT, ".artifacts/pi-uat");
 
 const SENSITIVE_IDENTIFIERS = [
@@ -421,10 +423,14 @@ function attachPageMonitors(page, bucket) {
 
 async function saveShot(page, name) {
   fs.mkdirSync(LOCAL_UAT_DIR, { recursive: true });
-  fs.mkdirSync(ARTIFACT_SCREENSHOT_DIR, { recursive: true });
   const localPath = path.join(LOCAL_UAT_DIR, name);
   await page.screenshot({ path: localPath, fullPage: false });
-  fs.copyFileSync(localPath, path.join(ARTIFACT_SCREENSHOT_DIR, name));
+  try {
+    fs.mkdirSync(ARTIFACT_SCREENSHOT_DIR, { recursive: true });
+    fs.copyFileSync(localPath, path.join(ARTIFACT_SCREENSHOT_DIR, name));
+  } catch {
+    /* ignore external artifact copy failures in CI environments */
+  }
 }
 
 async function main() {

@@ -1,6 +1,6 @@
 // GET /api/pi/search — structured discovery & facet search projection
 import { NextRequest, NextResponse } from "next/server";
-import { tbList, tbGet } from "@/lib/server/trailbase-admin";
+import { tbList, tbGet, TrailBaseError } from "@/lib/server/trailbase-admin";
 import {
   SearchValidationError,
   queryProductSearch,
@@ -88,6 +88,14 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(
         { ok: false, code: err.code, error: err.message },
         { status: err.statusCode },
+      );
+    }
+    if (err instanceof TrailBaseError) {
+      const status = err.status === 429 ? 429 : 503;
+      const code = err.status === 429 ? "SEARCH_RATE_LIMITED" : "SEARCH_UNAVAILABLE";
+      return NextResponse.json(
+        { ok: false, code, error: "Search is temporarily unavailable." },
+        { status },
       );
     }
     console.error("[api/pi/search]", err);

@@ -960,7 +960,7 @@ export async function queryProductSearch(
       filtered.some((item: any) => item[k.toLowerCase()] === undefined),
     );
     if (needsFacetTableLookup) {
-      const allFacetRows = await listAllPages(store, "product_search_facet_values", { order: "id" }, 500).catch(() => []);
+      const allFacetRows = await listAllPages(store, "product_search_facet_values", { order: "id" }, 500);
       for (const fr of allFacetRows) {
         const aid = Number(fr.auction_id);
         let map = facetRowsByAuction.get(aid);

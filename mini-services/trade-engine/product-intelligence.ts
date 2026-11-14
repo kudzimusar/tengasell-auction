@@ -1001,11 +1001,10 @@ export async function productCompare(
     parsedIds.map(async (id) => {
       const [auction, intakeSessions, psi] = await Promise.all([
         store.get("auctions", id),
-        store.list("product_intake_sessions", params({ "filter[auction_id][$eq]": id, limit: 20 })).catch(() => []),
+        store.list("product_intake_sessions", params({ "filter[auction_id][$eq]": id, limit: 20 })),
         store
           .list("product_search_index", params({ "filter[auction_id][$eq]": id, limit: 1 }))
-          .then((r) => r[0] ?? null)
-          .catch(() => null),
+          .then((r) => r[0] ?? null),
       ]);
 
       if (!auction) {
@@ -1019,9 +1018,9 @@ export async function productCompare(
       }
 
       const [bundle, category] = await Promise.all([
-        publicProductBundle(store, id).catch(() => null),
+        publicProductBundle(store, id),
         auction.product_category_id != null
-          ? store.get("categories", auction.product_category_id).catch(() => null)
+          ? store.get("categories", auction.product_category_id)
           : Promise.resolve(null),
       ]);
 
