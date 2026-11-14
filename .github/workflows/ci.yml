@@ -185,8 +185,19 @@ jobs:
           echo "$body" | grep -q '"ok":true'
           echo "smoke contract satisfied"
 
-          npx playwright test tests/commercial-browser-uat.spec.mjs tests/live-comms-ux01-r1-browser-uat.spec.mjs --reporter=line
+          UX01_SCREENSHOT_DIR="${{ github.workspace }}/test-artifacts/screenshots" npx playwright test tests/commercial-browser-uat.spec.mjs tests/live-comms-ux01-r1-browser-uat.spec.mjs --reporter=line
           echo "desktop/mobile commercial & R1 UX browser UAT satisfied"
+
+      - name: Upload test screenshots and UAT artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-artifacts
+          path: |
+            test-artifacts/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Upload build log on failure
         if: failure()
