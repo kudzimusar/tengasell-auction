@@ -170,7 +170,7 @@ function AuctionModeGateways({
           {/* Permanent Gateway 1: Timed Auctions */}
           <article
             data-testid="gateway-timed-auctions"
-            className="flex flex-col rounded-card border border-border bg-raised p-5 shadow-xs transition-colors hover:border-teal/40"
+            className="flex min-w-0 flex-col rounded-card border border-border bg-raised p-5 shadow-xs transition-colors hover:border-teal/40"
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-pill border border-teal/25 bg-teal/10 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-teal">
@@ -230,7 +230,7 @@ function AuctionModeGateways({
           {/* Permanent Gateway 2: Live Auction Events */}
           <article
             data-testid="gateway-live-events"
-            className="flex flex-col rounded-card border border-teal/35 bg-gradient-to-br from-raised to-teal-tint/35 p-5 shadow-xs transition-colors hover:border-teal"
+            className="flex min-w-0 flex-col rounded-card border border-teal/35 bg-gradient-to-br from-raised to-teal-tint/35 p-5 shadow-xs transition-colors hover:border-teal"
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-pill border border-teal/30 bg-teal-tint px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-teal-deep dark:text-teal-soft">

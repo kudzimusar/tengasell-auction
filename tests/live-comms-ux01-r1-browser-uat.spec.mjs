@@ -719,7 +719,7 @@ test("R1 scenarios 4, 6, 8, 9, 10: empty schedule, active room, awaiting lot, sy
   const bidInput = bidDialog.getByLabel(/Your maximum bid/i);
   await bidInput.fill("14600");
   await bidDialog.getByRole("button", { name: /Place bid/i }).click();
-  await expect(mismatchPage.getByText(/You're the highest bidder/i)).toBeVisible();
+  await expect(mismatchPage.getByText(/You're the highest bidder/i).first()).toBeVisible();
   await expect(mismatchPage.getByText("US$14,600").first()).toBeVisible();
   await captureShot(mismatchPage, "ux01-r1-item-page-1280.png");
   await mismatchCtx.close();

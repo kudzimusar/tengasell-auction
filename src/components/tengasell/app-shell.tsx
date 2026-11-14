@@ -627,7 +627,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileSearch, setMobileSearch] = useState(false);
 
   return (
-    <div className="min-h-screen flex flex-col bg-canvas">
+    <div className="min-h-screen flex flex-col bg-canvas overflow-x-hidden">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:z-[100] focus:top-2 focus:start-2 focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-control"
@@ -643,7 +643,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           >
             <TengaLogo size={34} wordmarkClassName="max-[440px]:hidden" />
           </a>
-          <div className="hidden sm:flex flex-1 justify-center">
+          <div className="hidden sm:flex flex-1 min-w-0 justify-center">
             <SearchBar />
           </div>
           <div className="flex-1 sm:hidden" />
