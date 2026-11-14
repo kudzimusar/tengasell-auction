@@ -721,26 +721,39 @@ async function main() {
     // ────────────────────────────────────────────────────────────────
     console.log("3. Testing Responsive Layouts (1280px, 768px, 390px)...");
 
+    async function verifyNoHorizontalOverflow(page, label, width, height, shotName) {
+      await page.setViewportSize({ width, height });
+      await sleep(250);
+      const res = await page.evaluate(() => {
+        const vw = window.innerWidth;
+        const culprits = [];
+        for (const el of document.querySelectorAll("*")) {
+          const r = el.getBoundingClientRect();
+          if (r.right > vw + 2) {
+            culprits.push(`${el.tagName.toLowerCase()}.${String(el.className).slice(0, 50)} (right=${Math.round(r.right)})`);
+          }
+        }
+        return {
+          scrollWidth: document.documentElement.scrollWidth,
+          innerWidth: vw,
+          culprits: culprits.slice(0, 5),
+        };
+      });
+      assert.ok(
+        res.scrollWidth <= res.innerWidth + 2,
+        `Horizontal overflow detected at ${label} (${width}x${height}): scrollWidth=${res.scrollWidth} > innerWidth=${res.innerWidth}; culprits=${JSON.stringify(res.culprits)}`
+      );
+      await saveShot(page, shotName, manifestEntries);
+    }
+
     // 1280px Desktop
-    await buyerPage.setViewportSize({ width: 1280, height: 900 });
-    await sleep(200);
-    let overflow1280 = await buyerPage.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
-    assert.strictEqual(overflow1280, false, "Horizontal overflow detected at 1280px viewport");
-    await saveShot(buyerPage, "03-desktop-1280.png", manifestEntries);
+    await verifyNoHorizontalOverflow(buyerPage, "1280px Desktop", 1280, 900, "03-desktop-1280.png");
 
     // 768px Tablet
-    await buyerPage.setViewportSize({ width: 768, height: 1024 });
-    await sleep(200);
-    let overflow768 = await buyerPage.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
-    assert.strictEqual(overflow768, false, "Horizontal overflow detected at 768px viewport");
-    await saveShot(buyerPage, "04-tablet-768.png", manifestEntries);
+    await verifyNoHorizontalOverflow(buyerPage, "768px Tablet", 768, 1024, "04-tablet-768.png");
 
     // 390px Mobile
-    await buyerPage.setViewportSize({ width: 390, height: 844 });
-    await sleep(200);
-    let overflow390 = await buyerPage.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
-    assert.strictEqual(overflow390, false, "Horizontal overflow detected at 390px viewport");
-    await saveShot(buyerPage, "05-mobile-390.png", manifestEntries);
+    await verifyNoHorizontalOverflow(buyerPage, "390px Mobile", 390, 844, "05-mobile-390.png");
     console.log("   Responsive viewports verified without horizontal overflow.");
 
     // ────────────────────────────────────────────────────────────────

@@ -33,11 +33,11 @@ function StatusBadge({ value }: { value: string }) {
 
 function Spec({ label, value, provenance }: { label: string; value: unknown; provenance?: string }) {
   return (
-    <div className="rounded-input border border-border bg-card p-3">
-      <dt className="text-caption text-muted-foreground">{label}</dt>
+    <div className="min-w-0 rounded-input border border-border bg-card p-3">
+      <dt className="text-caption text-muted-foreground truncate">{label}</dt>
       <dd className="mt-1 text-bodyStrong text-foreground break-words">{value == null || value === "" ? "—" : String(value)}</dd>
       {provenance && (
-        <span className="mt-1 inline-flex text-[10px] font-semibold uppercase tracking-wide text-teal">
+        <span className="mt-1 inline-flex text-[10px] font-semibold uppercase tracking-wide text-teal truncate">
           {provenance.replaceAll("_"," ")}
         </span>
       )}
@@ -228,7 +228,7 @@ export function VehicleDetails({ auctionId }: { auctionId: number }) {
               <p className="text-label font-bold">Inspection v{inspection.version}</p>
               <StatusBadge value={inspection.lifecycle} />
             </div>
-            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               <Spec label="Inspector" value={inspection.inspector_name} />
               <Spec label="Roadworthy" value={inspection.roadworthy ? "Yes" : "No"} />
               <Spec label="Inspection odometer" value={`${Number(inspection.odometer_km).toLocaleString()} km`} />

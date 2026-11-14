@@ -120,7 +120,7 @@ export function VehicleProductIntelligence({ auctionId, compact = false }: { auc
         <FactCard label="Body" value={product.body_type} />
         <FactCard label="Steering" value={product.steering_side} />
       </dl>
-      <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-2 md:grid-cols-4">
         <FactCard label="Current bid" value={product.current_price == null ? "NOT AVAILABLE" : `US$${Number(product.current_price).toLocaleString()}`} />
         <FactCard label="Time remaining" value={remaining(product.ends_at)} />
         <FactCard label="Reserve" value={product.reserve_disclosure} />
