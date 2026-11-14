@@ -33,11 +33,11 @@ function StatusBadge({ value }: { value: string }) {
 
 function Spec({ label, value, provenance }: { label: string; value: unknown; provenance?: string }) {
   return (
-    <div className="rounded-input border border-border bg-card p-3">
-      <dt className="text-caption text-muted-foreground">{label}</dt>
+    <div className="min-w-0 rounded-input border border-border bg-card p-3">
+      <dt className="text-caption text-muted-foreground truncate">{label}</dt>
       <dd className="mt-1 text-bodyStrong text-foreground break-words">{value == null || value === "" ? "—" : String(value)}</dd>
       {provenance && (
-        <span className="mt-1 inline-flex text-[10px] font-semibold uppercase tracking-wide text-teal">
+        <span className="mt-1 inline-flex text-[10px] font-semibold uppercase tracking-wide text-teal truncate">
           {provenance.replaceAll("_"," ")}
         </span>
       )}
@@ -48,7 +48,9 @@ function Spec({ label, value, provenance }: { label: string; value: unknown; pro
 export function VehicleDetails({ auctionId }: { auctionId: number }) {
   const { user } = useAuth();
   const res = useResource<VehicleBundle>(
-    () => api.vehicleForAuction(auctionId),
+    () => user
+      ? api.vehicleForAuction(auctionId)
+      : Promise.resolve({ vehicle: null, permissions: { inspect: false, review: false, administer: false } }),
     [auctionId, user?.username],
   );
   const bundle = res.data;
@@ -96,6 +98,7 @@ export function VehicleDetails({ auctionId }: { auctionId: number }) {
     return <div className="min-h-40 animate-pulse rounded-card bg-muted" aria-busy="true" />;
   }
   if (res.error) {
+    if (res.error.includes("authority") || res.error.includes("AUTH_REQUIRED")) return null;
     return (
       <div role="alert" className="rounded-card border border-danger/30 bg-danger/5 p-4 text-caption text-danger">
         Vehicle authority could not be loaded. {res.error}
@@ -225,7 +228,7 @@ export function VehicleDetails({ auctionId }: { auctionId: number }) {
               <p className="text-label font-bold">Inspection v{inspection.version}</p>
               <StatusBadge value={inspection.lifecycle} />
             </div>
-            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               <Spec label="Inspector" value={inspection.inspector_name} />
               <Spec label="Roadworthy" value={inspection.roadworthy ? "Yes" : "No"} />
               <Spec label="Inspection odometer" value={`${Number(inspection.odometer_km).toLocaleString()} km`} />

@@ -34,6 +34,10 @@
 //   offer:update {auctionId, offer} · room:update {session}      ← Gap-8
 
 import { createServer } from "node:http";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { Database } from "bun:sqlite";
 import { Server, type Socket } from "socket.io";
 import {
   flushAuctionOutbox,
@@ -45,7 +49,10 @@ import {
 } from "./auction-core";
 import {
   addVehicleDocument,
+  addVehicleEquipment,
   addVehicleFinding,
+  addVehicleHistoryEvent,
+  addVehicleModification,
   grantVehicleRole,
   reviewVehicleDocument,
   reviewVehicleInspection,
@@ -54,6 +61,14 @@ import {
   submitVehicleInspection,
   vehicleBundle,
 } from "./vehicle-authority";
+import {
+  intakeSession,
+  openProductIntake,
+  productSchema,
+  publicProductBundle,
+  publishIntake,
+  saveIntakeStep,
+} from "./product-intelligence";
 import {
   createAuctionEvent,
   eventBundle,
@@ -93,49 +108,83 @@ import {
   submitTransferCommand,
 } from "./commercial-authority";
 
-const PORT = 3002;
-const TRAILBASE = "http://localhost:3001";
+const ENGINE_DIR = path.dirname(fileURLToPath(import.meta.url));
+const PORT = Number(process.env.PORT || process.env.TRADE_ENGINE_PORT || 3002);
+const TRAILBASE = process.env.TRAILBASE_URL ?? "http://localhost:3001";
+const AUTH_CACHE_TTL_MS = Number(process.env.TRADE_AUTH_CACHE_TTL_MS ?? 2_000);
 
 // RPC acknowledgement callback shape (client → server events respond with
 // a single JSON payload, e.g. { ok: false, error: "..." } or { ok: true, ... }).
 type Ack = (response: unknown) => void;
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME ?? "admin";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "Tengasell#2025";
+
+function getAdminPassword(): string {
+  const password = (process.env.ADMIN_PASSWORD ?? "").trim();
+  if (!password) {
+    throw new Error("ADMIN_PASSWORD environment variable is required for privileged TrailBase operations");
+  }
+  return password;
+}
 
 // ── TrailBase REST helpers ───────────────────────────────────────────
 let adminToken: string | null = null;
+let adminTokenExpMs = 0;
+let adminLoginPromise: Promise<string> | null = null;
 
 async function tbLogin(): Promise<string> {
+  const password = getAdminPassword();
   const res = await fetch(`${TRAILBASE}/api/auth/v1/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username: ADMIN_USERNAME, password: ADMIN_PASSWORD }),
+    body: JSON.stringify({ username: ADMIN_USERNAME, password }),
+    signal: AbortSignal.timeout(8000),
   });
   if (!res.ok) throw new Error(`admin login failed: ${res.status}`);
-  const data = await res.json();
+  const data = (await res.json()) as { auth_token?: unknown };
+  if (typeof data?.auth_token !== "string" || !data.auth_token) {
+    throw new Error("admin login failed: missing auth_token");
+  }
+  const claims = parseStrictJwt(data.auth_token);
+  adminTokenExpMs = claims ? claims.exp * 1000 : Date.now() + 3600_000;
   return data.auth_token;
 }
 
-async function ensureAdminToken(): Promise<string> {
-  if (!adminToken) adminToken = await tbLogin();
-  return adminToken;
+async function ensureAdminToken(force = false): Promise<string> {
+  const expiringSoon = !adminToken || adminTokenExpMs - Date.now() <= 30_000;
+  if (!force && adminToken && !expiringSoon) return adminToken;
+  if (!adminLoginPromise || force) {
+    if (force) {
+      adminToken = null;
+      adminTokenExpMs = 0;
+    }
+    adminLoginPromise = tbLogin()
+      .then((tok) => {
+        adminToken = tok;
+        return tok;
+      })
+      .finally(() => {
+        adminLoginPromise = null;
+      });
+  }
+  return adminLoginPromise;
 }
 
-/** One TrailBase request, with a single 401 retry (admin sessions die when
- *  TrailBase restarts — re-login once instead of silently failing writes). */
+/** One TrailBase request, with a single 401/403 retry (TrailBase v0.35 returns 401/403
+ *  when an admin bearer session expires or restarts). */
 async function tb(
   method: string,
-  path: string,
+  pathStr: string,
   body?: unknown,
 ): Promise<{ ok: boolean; status: number; data: any }> {
   const call = async (token: string) => {
-    const res = await fetch(`${TRAILBASE}${path}`, {
+    const res = await fetch(`${TRAILBASE}${pathStr}`, {
       method,
       headers: {
         ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
         Authorization: `Bearer ${token}`,
       },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      signal: AbortSignal.timeout(8000),
     });
     let data: any = null;
     try {
@@ -146,9 +195,8 @@ async function tb(
     return { ok: res.ok, status: res.status, data };
   };
   let result = await call(await ensureAdminToken());
-  if (result.status === 401) {
-    adminToken = await tbLogin(); // session expired (TrailBase restarted)
-    result = await call(adminToken);
+  if (result.status === 401 || result.status === 403) {
+    result = await call(await ensureAdminToken(true));
   }
   return result;
 }
@@ -208,42 +256,175 @@ interface Identity {
   admin: boolean;
 }
 
-const identityCache = new Map<string, Identity>(); // token → identity
+interface StrictJwtClaims {
+  alg: string;
+  sub: string;
+  username: string;
+  admin: boolean;
+  exp: number;
+  nbf?: number;
+  iat?: number;
+}
 
-function decodeJwt(token: string): { username?: string; admin?: boolean; sub?: string } {
+function decodeBase64UrlJson(segment: string): Record<string, unknown> | null {
+  if (!segment || !/^[A-Za-z0-9_-]+$/.test(segment)) return null;
   try {
-    const part = token.split(".")[1] ?? "";
-    const b64 = part.replace(/-/g, "+").replace(/_/g, "/");
-    return JSON.parse(Buffer.from(b64, "base64").toString("utf8"));
+    const json = Buffer.from(segment, "base64url").toString("utf8");
+    const parsed = JSON.parse(json) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    return parsed as Record<string, unknown>;
   } catch {
-    return {};
+    return null;
   }
 }
 
+function parseStrictJwt(token: unknown): StrictJwtClaims | null {
+  if (typeof token !== "string" || !token || token.length > 4096 || token.trim() !== token) return null;
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  const [headerSeg, payloadSeg, sigSeg] = parts;
+  if (!headerSeg || !payloadSeg || !sigSeg || !/^[A-Za-z0-9_-]+$/.test(sigSeg)) return null;
+  const header = decodeBase64UrlJson(headerSeg);
+  const payload = decodeBase64UrlJson(payloadSeg);
+  if (!header || !payload) return null;
+  const alg = typeof header.alg === "string" ? header.alg.trim() : "";
+  if (!alg || alg.toLowerCase() === "none") return null;
+  const sub = typeof payload.sub === "string" ? payload.sub : "";
+  const username = typeof payload.username === "string" ? payload.username : "";
+  const exp = payload.exp;
+  if (!sub || !username || typeof exp !== "number" || !Number.isFinite(exp)) return null;
+  if (payload.nbf != null && (typeof payload.nbf !== "number" || !Number.isFinite(payload.nbf))) return null;
+  if (payload.iat != null && (typeof payload.iat !== "number" || !Number.isFinite(payload.iat))) return null;
+  return {
+    alg,
+    sub,
+    username,
+    admin: payload.admin === true,
+    exp,
+    ...(typeof payload.nbf === "number" ? { nbf: payload.nbf } : {}),
+    ...(typeof payload.iat === "number" ? { iat: payload.iat } : {}),
+  };
+}
+
+function resolveTrailBaseDataDir(): string | null {
+  const candidates = [
+    process.env.TRAILBASE_DATA_DIR,
+    process.env.TGS_DATA_DIR ? path.join(process.env.TGS_DATA_DIR, "traildepot", "data") : undefined,
+    "/data/traildepot/data",
+    path.resolve(ENGINE_DIR, "../trailbase-db/traildepot/data"),
+  ];
+  for (const dir of candidates) {
+    if (!dir) continue;
+    try {
+      if (fs.existsSync(path.join(dir, "main.db"))) return dir;
+    } catch {
+      /* ignore inaccessible candidate */
+    }
+  }
+  return null;
+}
+
+function checkCanonicalSqlIdentity(claims: StrictJwtClaims, nowMs: number): { valid: boolean; admin?: boolean } | null {
+  const dataDir = resolveTrailBaseDataDir();
+  if (!dataDir) return null;
+  try {
+    const uidBytes = new Uint8Array(Buffer.from(claims.sub, "base64"));
+    if (uidBytes.length !== 16) return { valid: false };
+    const mainDb = new Database(path.join(dataDir, "main.db"), { readonly: true });
+    let userRow: { username?: string | null; admin?: number | boolean } | null = null;
+    try {
+      mainDb.exec("PRAGMA busy_timeout = 2000;");
+      userRow = mainDb.query("SELECT username, admin FROM _user WHERE id = ? LIMIT 1").get(uidBytes) as {
+        username?: string | null;
+        admin?: number | boolean;
+      } | null;
+    } finally {
+      mainDb.close();
+    }
+    if (!userRow || userRow.username !== claims.username) return { valid: false };
+    const sessionPath = path.join(dataDir, "session.db");
+    if (fs.existsSync(sessionPath)) {
+      const sessDb = new Database(sessionPath, { readonly: true });
+      let sess: { ok?: number } | null = null;
+      try {
+        sessDb.exec("PRAGMA busy_timeout = 2000;");
+        const nowSec = Math.floor(nowMs / 1000);
+        const iatUpper = typeof claims.iat === "number" ? Math.floor(claims.iat) : nowSec;
+        sess = sessDb
+          .query("SELECT 1 AS ok FROM _session WHERE user = ? AND expires > ? AND created <= ? LIMIT 1")
+          .get(uidBytes, nowSec, iatUpper) as { ok?: number } | null;
+      } finally {
+        sessDb.close();
+      }
+      if (!sess) return { valid: false };
+    }
+    return { valid: true, admin: Boolean(userRow.admin) };
+  } catch {
+    return null;
+  }
+}
+
+const identityCache = new Map<string, { identity: Identity; claims: StrictJwtClaims; expiresAtMs: number }>();
+
 async function resolveIdentity(token: unknown): Promise<Identity | null> {
   if (typeof token !== "string" || !token) return null;
-  if (identityCache.has(token)) return identityCache.get(token)!;
+  const nowMs = Date.now();
+  const initialClaims = parseStrictJwt(token);
+  if (!initialClaims || initialClaims.exp * 1000 <= nowMs) {
+    identityCache.delete(token);
+    return null;
+  }
+  if (initialClaims.nbf != null && initialClaims.nbf * 1000 > nowMs) return null;
+
+  const cached = identityCache.get(token);
+  if (cached) {
+    if (cached.expiresAtMs > nowMs && cached.claims.exp * 1000 > nowMs) {
+      const canonical = checkCanonicalSqlIdentity(cached.claims, nowMs);
+      if (!canonical || canonical.valid) {
+        return {
+          ...cached.identity,
+          admin: canonical?.admin ?? cached.identity.admin,
+        };
+      }
+    }
+    identityCache.delete(token);
+  }
+
   try {
     const res = await fetch(`${TRAILBASE}/api/auth/v1/status`, {
       headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return null;
-    const data = await res.json();
-    const activeToken: string = data.auth_token ?? token;
-    const payload = decodeJwt(activeToken);
-    if (!payload.username) return null;
-    // profiles are world-readable → resolve the user id
+    const data = (await res.json()) as { auth_token?: unknown };
+    if (typeof data?.auth_token !== "string" || !data.auth_token) {
+      identityCache.delete(token);
+      return null;
+    }
+    const claims = parseStrictJwt(data.auth_token);
+    const verifyNow = Date.now();
+    if (!claims || claims.exp * 1000 <= verifyNow) return null;
+    if (claims.nbf != null && claims.nbf * 1000 > verifyNow) return null;
+    if (claims.sub !== initialClaims.sub || claims.username !== initialClaims.username) return null;
+
+    const canonical = checkCanonicalSqlIdentity(claims, verifyNow);
+    if (canonical && !canonical.valid) return null;
+
     const profiles = await getRecords(
       "profiles",
-      `filter[username][$eq]=${encodeURIComponent(payload.username)}&limit=1`,
+      `filter[username][$eq]=${encodeURIComponent(claims.username)}&limit=1`,
     );
+    const profileUser = String(profiles[0]?.user ?? "");
+    const resolvedId = profileUser || claims.sub;
+    if (!resolvedId || resolvedId !== claims.sub) return null;
+
     const identity: Identity = {
-      id: profiles[0]?.user ?? "",
-      username: payload.username,
-      admin: !!payload.admin,
+      id: resolvedId,
+      username: claims.username,
+      admin: canonical?.admin ?? Boolean(claims.admin),
     };
-    identityCache.set(token, identity);
-    if (activeToken !== token) identityCache.set(activeToken, identity);
+    const cacheUntil = Math.min(verifyNow + AUTH_CACHE_TTL_MS, claims.exp * 1000);
+    identityCache.set(token, { identity, claims, expiresAtMs: cacheUntil });
     return identity;
   } catch {
     return null;
@@ -955,7 +1136,6 @@ const httpServer = createServer((req, res) => {
 
 // ── dev-server supervisor (anchor-spawned children persist) ──────────
 import net from "node:net";
-import fs from "node:fs";
 import { spawn as cpSpawn } from "node:child_process";
 
 const PROJECT_ROOT = "/home/z/my-project";
@@ -1028,21 +1208,102 @@ io.on("connection", (socket: Socket) => {
 
   const requireAuth = async (): Promise<Identity | null> => {
     if (!token) return null;
-    if (!me) me = await identityPromise;
-    return me;
+    const prevId = me?.id;
+    const resolved = await resolveIdentity(token);
+    if (!resolved) {
+      if (prevId) void socket.leave(`user:${prevId}`);
+      me = null;
+      return null;
+    }
+    if (prevId && prevId !== resolved.id) void socket.leave(`user:${prevId}`);
+    if (resolved.id && prevId !== resolved.id) void socket.join(`user:${resolved.id}`);
+    me = resolved;
+    return resolved;
   };
 
   // ── IMP-04: Vehicle / Tengasell Inspection authority ───────────────
   socket.on("vehicle:get", async (data: any, ack?: Ack) => {
     try {
-      const viewer = await identityPromise;
+      const viewer = await requireAuth();
+      if (!viewer) return ack?.({ ok: false, code: "AUTH_REQUIRED", error: "Sign in to view internal vehicle records." });
       const auctionId = Number(data?.auctionId);
       if (!Number.isSafeInteger(auctionId) || auctionId <= 0)
         return ack?.({ ok: false, error: "Invalid auction id." });
-      ack?.({ ok: true, bundle: await vehicleBundle(auctionCoreStore, auctionId, viewer) });
+      const bundle = await vehicleBundle(auctionCoreStore, auctionId, viewer);
+      if ((bundle as any).errorCode) {
+        return ack?.({ ok: false, code: (bundle as any).errorCode, error: "This internal vehicle record requires seller or operational authority." });
+      }
+      ack?.({ ok: true, bundle });
     } catch (err) {
       console.error("[vehicle:get]", err);
       ack?.({ ok: false, error: "Vehicle details are temporarily unavailable." });
+    }
+  });
+
+  socket.on("product:public:get", async (data: any, ack?: Ack) => {
+    try {
+      const auctionId = Number(data?.auctionId);
+      if (!Number.isSafeInteger(auctionId) || auctionId <= 0)
+        return ack?.({ ok: false, error: "Invalid auction id." });
+      const bundle = await publicProductBundle(auctionCoreStore, auctionId);
+      if (!bundle.product) return ack?.({ ok: false, error: "Public product details are not available." });
+      ack?.({ ok: true, bundle });
+    } catch (err) {
+      console.error("[product:public:get]", err);
+      ack?.({ ok: false, error: "Public product details are temporarily unavailable." });
+    }
+  });
+
+  socket.on("product:schema:get", async (data: any, ack?: Ack) => {
+    try {
+      ack?.({ ok: true, schema: await productSchema(auctionCoreStore, data?.categoryKey) });
+    } catch (err) {
+      console.error("[product:schema:get]", err);
+      ack?.({ ok: false, error: "Product schema is temporarily unavailable." });
+    }
+  });
+
+  socket.on("product:intake:open", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, code: "AUTH_REQUIRED", error: "Sign in to start seller intake." });
+      ack?.(await openProductIntake(auctionCoreStore, user, data?.intake ?? {}));
+    } catch (err) {
+      console.error("[product:intake:open]", err);
+      ack?.({ ok: false, error: "Product intake could not be opened." });
+    }
+  });
+
+  socket.on("product:intake:get", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, code: "AUTH_REQUIRED", error: "Sign in to resume seller intake." });
+      ack?.(await intakeSession(auctionCoreStore, user, Number(data?.auctionId)));
+    } catch (err) {
+      console.error("[product:intake:get]", err);
+      ack?.({ ok: false, error: "Product intake could not be resumed." });
+    }
+  });
+
+  socket.on("product:intake:step", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, code: "AUTH_REQUIRED", error: "Sign in to save seller intake." });
+      ack?.(await saveIntakeStep(auctionCoreStore, user, data?.step ?? {}));
+    } catch (err) {
+      console.error("[product:intake:step]", err);
+      ack?.({ ok: false, error: "Product intake step could not be saved." });
+    }
+  });
+
+  socket.on("product:intake:publish", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, code: "AUTH_REQUIRED", error: "Sign in to publish seller intake." });
+      ack?.(await publishIntake(auctionCoreStore, user, data?.command ?? {}));
+    } catch (err) {
+      console.error("[product:intake:publish]", err);
+      ack?.({ ok: false, error: "Product publish readiness could not be checked." });
     }
   });
 
@@ -1068,13 +1329,46 @@ io.on("connection", (socket: Socket) => {
     }
   });
 
+  socket.on("vehicle:history:add", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      ack?.(await addVehicleHistoryEvent(auctionCoreStore, audit, user, Number(data?.vehicleId), data?.history ?? {}));
+    } catch (err) {
+      console.error("[vehicle:history:add]", err);
+      ack?.({ ok: false, error: "Vehicle history event could not be recorded." });
+    }
+  });
+
+  socket.on("vehicle:modification:add", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      ack?.(await addVehicleModification(auctionCoreStore, audit, user, Number(data?.vehicleId), data?.modification ?? {}));
+    } catch (err) {
+      console.error("[vehicle:modification:add]", err);
+      ack?.({ ok: false, error: "Vehicle modification could not be recorded." });
+    }
+  });
+
+  socket.on("vehicle:equipment:add", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, error: "Sign in first." });
+      ack?.(await addVehicleEquipment(auctionCoreStore, audit, user, Number(data?.vehicleId), data?.equipment ?? {}));
+    } catch (err) {
+      console.error("[vehicle:equipment:add]", err);
+      ack?.({ ok: false, error: "Vehicle equipment could not be recorded." });
+    }
+  });
+
   socket.on("vehicle:document:review", async (data: any, ack?: Ack) => {
     try {
       const user = await requireAuth();
       if (!user) return ack?.({ ok: false, error: "Sign in first." });
       ack?.(await reviewVehicleDocument(
         auctionCoreStore, audit, user, Number(data?.documentId),
-        data?.action === "REJECT" ? "REJECT" : "VERIFY", data?.reason,
+        data?.action === "REJECT" ? "REJECT" : "VERIFY", data?.reason, data?.derivedFact ?? null,
       ));
     } catch (err) {
       console.error("[vehicle:document:review]", err);
@@ -2809,8 +3103,8 @@ httpServer.listen(PORT, "0.0.0.0", () => {
   console.log(`[trade-engine] listening on :${PORT}`);
   void (async () => {
     try {
-      adminToken = await tbLogin();
-      console.log("[trade-engine] admin session established (TrailBase :3001)");
+      await ensureAdminToken(true);
+      console.log(`[trade-engine] admin session established (${TRAILBASE})`);
       if (process.env.TENGASELL_ALLOW_DEMO_REVIVE === "1") {
         console.warn("[trade-engine] explicit non-commercial demo revival enabled");
         await reviveExpiredAuctions();

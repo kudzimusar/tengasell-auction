@@ -24,7 +24,9 @@
     "test:auction-policy": "python3 tests/zimbabwe-policy-production-gates.py",
     "test:commercial-ui": "node tests/commercial-ui-contract.mjs",
     "test:cert01-prep": "python3 tests/cert01-prep-e2e.py",
-    "test:trailbase-migrations": "python3 tests/trailbase-migration-chain.py"
+    "test:trailbase-migrations": "python3 tests/trailbase-migration-chain.py",
+    "test:pi-01d-upgrade": "python3 tests/pi-01d-legacy-upgrade.py",
+    "test:pi-01d": "python3 tests/pi-01d-product-intelligence.py && python3 tests/pi-01d-legacy-upgrade.py && bun test mini-services/trade-engine/product-intelligence.test.ts mini-services/trade-engine/vehicle-authority.test.ts tests/pi-trailbase-errors.test.ts && node tests/pi-01d-ui-contract.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
