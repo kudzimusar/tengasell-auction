@@ -1,6 +1,7 @@
 // Build provenance and diagnostics metadata for TengaSell Mobile.
 // NEVER expose secrets, credentials, or session tokens here.
 
+import { Platform } from "react-native";
 import { getCanonicalBaseUrl } from "./trailbase";
 
 export interface BuildProvenance {
@@ -13,6 +14,13 @@ export interface BuildProvenance {
   buildTimestamp: string;
   runtime: string;
   gatewayUrl: string;
+  isPort8080Conflict: boolean;
+  platformTarget: string;
+  networkGuide: {
+    iosSimulator: string;
+    androidEmulator: string;
+    physicalDevice: string;
+  };
   environment: "development" | "staging" | "production";
   features: {
     key: string;
@@ -22,6 +30,8 @@ export interface BuildProvenance {
   }[];
 }
 
+const FALLBACK_GATEWAY = "http://127.0.0.1:19080";
+
 export const BUILD_PROVENANCE: BuildProvenance = {
   appName: "TengaSell",
   bundleId: "com.tengasell.app",
@@ -30,9 +40,23 @@ export const BUILD_PROVENANCE: BuildProvenance = {
   commitSha: "9bd369ad7000c7564195c1249d75759064706068",
   branch: "feat/tengasell-mobile-ux-parity-01-draft",
   buildTimestamp: "2026-11-14T05:01:00Z",
-  runtime: "Expo SDK 58 (Hermes / React Native 0.88)",
+  runtime: `Expo SDK 58 (Hermes / React Native 0.88 / ${Platform.OS})`,
   get gatewayUrl() {
-    return getCanonicalBaseUrl() ?? "http://127.0.0.1:19080";
+    return getCanonicalBaseUrl() ?? FALLBACK_GATEWAY;
+  },
+  get isPort8080Conflict() {
+    const url = getCanonicalBaseUrl() ?? "";
+    return url.includes(":8080");
+  },
+  platformTarget: Platform.select({
+    ios: "iOS Simulator / Device",
+    android: "Android Emulator / Device",
+    default: "Web / Universal",
+  }),
+  networkGuide: {
+    iosSimulator: "http://127.0.0.1:19080",
+    androidEmulator: "http://10.0.2.2:19080",
+    physicalDevice: "http://<LAN-IP>:19080",
   },
   environment: "development",
   features: [

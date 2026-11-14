@@ -13,6 +13,7 @@ export function AboutDiagnosticsCard() {
   const styles = createStyles(theme, writingDirection);
 
   const shortSha = BUILD_PROVENANCE.commitSha.slice(0, 10);
+  const isPort8080 = BUILD_PROVENANCE.isPort8080Conflict;
 
   return (
     <View style={styles.card} testID="about-diagnostics-card">
@@ -36,6 +37,13 @@ export function AboutDiagnosticsCard() {
           </Text>
         </Pressable>
       </View>
+
+      {/* Warning Banner if Gateway is on Docker-conflicted Port 8080 */}
+      {isPort8080 && (
+        <View style={styles.warningBanner}>
+          <Text style={styles.warningText}>{t("diagnostics.gatewayWarningDocker")}</Text>
+        </View>
+      )}
 
       {expanded && (
         <View style={styles.detailsGroup}>
@@ -62,6 +70,10 @@ export function AboutDiagnosticsCard() {
           <View style={styles.metaRow}>
             <Text style={styles.metaLabel}>{t("diagnostics.gateway")}</Text>
             <Text selectable style={styles.metaValue}>{BUILD_PROVENANCE.gatewayUrl}</Text>
+          </View>
+
+          <View style={styles.networkHintBox}>
+            <Text style={styles.networkHintText}>{t("diagnostics.networkHints")}</Text>
           </View>
 
           <View style={styles.divider} />
@@ -149,6 +161,19 @@ function createStyles(theme: NxsTheme, writingDirection: "ltr" | "rtl") {
       marginTop: 2,
       textAlign,
     },
+    warningBanner: {
+      padding: 8,
+      borderRadius: 8,
+      backgroundColor: theme.surface.canvas,
+      borderWidth: 1,
+      borderColor: theme.border.warning,
+    },
+    warningText: {
+      fontSize: 11,
+      fontWeight: "700",
+      color: theme.state.warning,
+      textAlign,
+    },
     expandBtn: {
       minHeight: nxsTokens.touch.minimum,
       paddingHorizontal: 12,
@@ -184,6 +209,20 @@ function createStyles(theme: NxsTheme, writingDirection: "ltr" | "rtl") {
     metaValue: {
       fontSize: 13,
       color: theme.text.primary,
+      textAlign,
+    },
+    networkHintBox: {
+      padding: 8,
+      borderRadius: 8,
+      backgroundColor: theme.surface.canvas,
+      borderWidth: 1,
+      borderColor: theme.border.subtle,
+      marginTop: 4,
+    },
+    networkHintText: {
+      fontSize: 11,
+      color: theme.text.secondary,
+      lineHeight: 15,
       textAlign,
     },
     divider: {

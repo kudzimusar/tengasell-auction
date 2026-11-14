@@ -1,5 +1,6 @@
 // Gated Preview Component: Vehicle Product Intelligence & Reserve Status (PR #14 / PI-01D).
 // Uncertified feature preview: clearly gated, fail-soft, and non-blocking.
+// Canonical authority: PR #14 publicProductBundle / pi_vehicle_public.
 
 import { StyleSheet, Text, View } from "react-native";
 
@@ -17,23 +18,27 @@ export function VehicleProductIntelligenceCard({ item }: VehicleProductIntellige
   const t = useNxsText();
   const styles = createStyles(theme, writingDirection);
 
-  const isVehicleCategory =
+  // Truthful category check: strictly schema-based, zero regex/title heuristics
+  const isVehicle =
     item.category?.toLowerCase() === "vehicles" ||
     item.category?.toLowerCase() === "cars" ||
-    item.category?.toLowerCase() === "motorcycles" ||
-    item.title?.toLowerCase().includes("toyota") ||
-    item.title?.toLowerCase().includes("honda") ||
-    item.title?.toLowerCase().includes("ford") ||
-    item.title?.toLowerCase().includes("nissan") ||
-    item.title?.toLowerCase().includes("bmw") ||
-    item.title?.toLowerCase().includes("mercedes");
+    item.asset_kind === "vehicle" ||
+    item.vehicle_projection != null;
 
-  // Determine reserve disclosure state (PR #14)
-  const hasReserve = item.reserve_price != null && item.reserve_price > 0;
-  const reserveMet = hasReserve ? item.current_price >= (item.reserve_price ?? 0) : true;
+  // Truthful reserve disclosure: strictly canonical public reserve_disclosure
+  // Never infer "No Reserve" merely because private reserve_price is absent.
+  // Never expose raw reserve amount.
+  const disclosure = item.reserve_disclosure ?? item.reserveDisclosure ?? "UNSPECIFIED";
+  const isNoReserve = disclosure === "NO_RESERVE";
+  const isReserveApplies = disclosure === "RESERVE_APPLIES";
+  const isUpsetApplies = disclosure === "UPSET_APPLIES";
+
+  const vp = item.vehicle_projection;
+  const isVerified = vp?.verification_state === "VERIFIED";
 
   return (
     <View style={styles.card} testID="product-intelligence-card">
+      {/* Header: Non-blocking Preview Notice */}
       <View style={styles.headerRow}>
         <View style={styles.pillPreview}>
           <Text style={styles.pillTextPreview}>{t("pi.previewBadge")}</Text>
@@ -41,71 +46,120 @@ export function VehicleProductIntelligenceCard({ item }: VehicleProductIntellige
         <Text style={styles.previewNotice}>{t("pi.nonBlocking")}</Text>
       </View>
 
-      {/* Reserve Disclosure (PR #14 requirement) */}
+      {/* Reserve Disclosure (PR #14 canonical requirement) */}
       <View style={styles.reserveRow}>
         <Text style={styles.reserveLabel}>{t("pi.reserveStatus")}:</Text>
         <View
           style={[
             styles.reserveBadge,
-            !hasReserve
+            isNoReserve
               ? styles.reserveBadgeNoReserve
-              : reserveMet
-                ? styles.reserveBadgeMet
-                : styles.reserveBadgeNotMet,
+              : isReserveApplies || isUpsetApplies
+                ? styles.reserveBadgeApplies
+                : styles.reserveBadgeUnspecified,
           ]}
         >
           <Text
             style={[
               styles.reserveBadgeText,
-              !hasReserve
+              isNoReserve
                 ? styles.reserveTextNoReserve
-                : reserveMet
-                  ? styles.reserveTextMet
-                  : styles.reserveTextNotMet,
+                : isReserveApplies || isUpsetApplies
+                  ? styles.reserveTextApplies
+                  : styles.reserveTextUnspecified,
             ]}
           >
-            {!hasReserve
+            {isNoReserve
               ? t("pi.noReserve")
-              : reserveMet
-                ? t("pi.reserveMet")
-                : t("pi.reserveNotMet")}
+              : isReserveApplies
+                ? t("pi.reserveApplies")
+                : isUpsetApplies
+                  ? t("pi.upsetApplies")
+                  : t("pi.notDisclosed")}
           </Text>
         </View>
       </View>
 
-      {/* Vehicle Specification Grid (if vehicle category) */}
-      {isVehicleCategory && (
+      {/* Vehicle Specification Grid: ONLY rendered for vehicle category */}
+      {isVehicle ? (
         <View style={styles.vehicleSection}>
           <Text style={styles.sectionTitle}>{t("pi.specsTitle")}</Text>
           <View style={styles.specGrid}>
             <View style={styles.specBox}>
+              <Text style={styles.specLabel}>{t("pi.makeModel")}</Text>
+              <Text style={styles.specValue}>
+                {[vp?.make, vp?.model].filter(Boolean).join(" ") || t("pi.notProvided")}
+              </Text>
+            </View>
+            <View style={styles.specBox}>
+              <Text style={styles.specLabel}>{t("pi.year")}</Text>
+              <Text style={styles.specValue}>
+                {vp?.year ? String(vp.year) : t("pi.notProvided")}
+              </Text>
+            </View>
+            <View style={styles.specBox}>
+              <Text style={styles.specLabel}>{t("pi.mileage")}</Text>
+              <Text style={styles.specValue}>
+                {vp?.mileage != null ? `${vp.mileage.toLocaleString()} km` : t("pi.notProvided")}
+              </Text>
+            </View>
+            <View style={styles.specBox}>
               <Text style={styles.specLabel}>{t("pi.transmission")}</Text>
-              <Text style={styles.specValue}>Automatic</Text>
+              <Text style={styles.specValue}>{vp?.transmission ?? t("pi.notProvided")}</Text>
             </View>
             <View style={styles.specBox}>
               <Text style={styles.specLabel}>{t("pi.fuelType")}</Text>
-              <Text style={styles.specValue}>Diesel / Petrol</Text>
+              <Text style={styles.specValue}>{vp?.fuel_type ?? t("pi.notProvided")}</Text>
             </View>
             <View style={styles.specBox}>
-              <Text style={styles.specLabel}>{t("pi.verification")}</Text>
-              <Text style={styles.specValue}>{t("pi.physicalInspection")}</Text>
+              <Text style={styles.specLabel}>{t("pi.bodyType")}</Text>
+              <Text style={styles.specValue}>{vp?.body_type ?? t("pi.notProvided")}</Text>
             </View>
             <View style={styles.specBox}>
-              <Text style={styles.specLabel}>{t("pi.origin")}</Text>
-              <Text style={styles.specValue}>{item.city || "Harare, ZW"}</Text>
+              <Text style={styles.specLabel}>{t("pi.source")}</Text>
+              <Text style={styles.specValue}>{vp?.odometer_source ?? "SELLER_DECLARED"}</Text>
+            </View>
+            <View style={styles.specBox}>
+              <Text style={styles.specLabel}>{t("pi.vinClassification")}</Text>
+              <Text style={styles.specValue}>
+                {vp?.vin_classification === "RECORDED"
+                  ? t("pi.vinRecorded")
+                  : t("pi.vinNotRecorded")}
+              </Text>
+            </View>
+          </View>
+
+          {/* Verification Status Pill */}
+          <View style={styles.verificationRow}>
+            <Text style={styles.verificationLabel}>{t("pi.verification")}:</Text>
+            <View
+              style={[
+                styles.verificationBadge,
+                isVerified ? styles.verificationBadgeVerified : styles.verificationBadgeUnverified,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.verificationBadgeText,
+                  isVerified ? styles.verificationTextVerified : styles.verificationTextUnverified,
+                ]}
+              >
+                {isVerified ? t("pi.verified") : t("pi.unverified")}
+              </Text>
             </View>
           </View>
         </View>
+      ) : (
+        <View style={styles.generalNoticeBox}>
+          <Text style={styles.generalNoticeText}>{t("pi.generalLotNotice")}</Text>
+        </View>
       )}
 
-      {/* Authenticity & Inspection Guarantee */}
-      <View style={styles.guaranteeRow}>
-        <Text style={styles.guaranteeIcon}>🛡</Text>
+      {/* Truthful Trust & Transparency Notice (no unproven authenticity claims) */}
+      <View style={styles.trustRow}>
         <View style={styles.flexOne}>
-          <Text style={styles.guaranteeTitle}>{t("pi.guaranteeTitle")}</Text>
-          <Text style={styles.guaranteeSubtitle}>
-            {t("pi.guaranteeSubtitle")}
-          </Text>
+          <Text style={styles.trustTitle}>{t("pi.trustTitle")}</Text>
+          <Text style={styles.trustSubtitle}>{t("pi.trustSubtitle")}</Text>
         </View>
       </View>
     </View>
@@ -174,30 +228,32 @@ function createStyles(theme: NxsTheme, writingDirection: "ltr" | "rtl") {
       backgroundColor: theme.surface.canvas,
       borderColor: theme.state.success,
     },
-    reserveBadgeMet: {
+    reserveBadgeApplies: {
       backgroundColor: theme.surface.canvas,
-      borderColor: theme.state.success,
+      borderColor: theme.border.warning,
     },
-    reserveBadgeNotMet: {
+    reserveBadgeUnspecified: {
       backgroundColor: theme.surface.canvas,
-      borderColor: theme.border.error,
+      borderColor: theme.border.subtle,
     },
     reserveBadgeText: {
-      fontSize: 12,
+      fontSize: 11,
       fontWeight: "800",
+      letterSpacing: 0.3,
     },
     reserveTextNoReserve: {
       color: theme.state.success,
     },
-    reserveTextMet: {
-      color: theme.state.success,
+    reserveTextApplies: {
+      color: theme.state.warning,
     },
-    reserveTextNotMet: {
-      color: theme.state.error,
+    reserveTextUnspecified: {
+      color: theme.text.secondary,
     },
     vehicleSection: {
-      gap: 6,
-      paddingTop: 6,
+      marginTop: 4,
+      gap: 8,
+      paddingTop: 8,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: theme.border.subtle,
     },
@@ -208,16 +264,17 @@ function createStyles(theme: NxsTheme, writingDirection: "ltr" | "rtl") {
       textAlign,
     },
     specGrid: {
-      flexDirection: rowDirection,
+      flexDirection: "row",
       flexWrap: "wrap",
       gap: 8,
     },
     specBox: {
-      flex: 1,
-      minWidth: "45%",
+      width: "48%",
       padding: 8,
       borderRadius: 8,
       backgroundColor: theme.surface.canvas,
+      borderWidth: 1,
+      borderColor: theme.border.subtle,
       gap: 2,
     },
     specLabel: {
@@ -225,6 +282,7 @@ function createStyles(theme: NxsTheme, writingDirection: "ltr" | "rtl") {
       fontWeight: "700",
       color: theme.text.secondary,
       textTransform: "uppercase",
+      letterSpacing: 0.5,
       textAlign,
     },
     specValue: {
@@ -233,26 +291,72 @@ function createStyles(theme: NxsTheme, writingDirection: "ltr" | "rtl") {
       color: theme.text.primary,
       textAlign,
     },
-    guaranteeRow: {
+    verificationRow: {
+      flexDirection: rowDirection,
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: 4,
+    },
+    verificationLabel: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: theme.text.primary,
+      textAlign,
+    },
+    verificationBadge: {
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: nxsTokens.radius.pill,
+      borderWidth: 1,
+    },
+    verificationBadgeVerified: {
+      backgroundColor: theme.surface.canvas,
+      borderColor: theme.state.success,
+    },
+    verificationBadgeUnverified: {
+      backgroundColor: theme.surface.canvas,
+      borderColor: theme.border.warning,
+    },
+    verificationBadgeText: {
+      fontSize: 10,
+      fontWeight: "700",
+    },
+    verificationTextVerified: {
+      color: theme.state.success,
+    },
+    verificationTextUnverified: {
+      color: theme.state.warning,
+    },
+    generalNoticeBox: {
+      padding: 10,
+      borderRadius: 8,
+      backgroundColor: theme.surface.canvas,
+      borderWidth: 1,
+      borderColor: theme.border.subtle,
+    },
+    generalNoticeText: {
+      fontSize: 12,
+      color: theme.text.secondary,
+      textAlign,
+    },
+    trustRow: {
+      paddingTop: 8,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: theme.border.subtle,
       flexDirection: rowDirection,
       alignItems: "center",
       gap: 8,
-      paddingTop: 6,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: theme.border.subtle,
     },
-    guaranteeIcon: {
-      fontSize: 20,
-    },
-    guaranteeTitle: {
+    trustTitle: {
       fontSize: 12,
       fontWeight: "800",
       color: theme.text.primary,
       textAlign,
     },
-    guaranteeSubtitle: {
+    trustSubtitle: {
       fontSize: 11,
       color: theme.text.secondary,
+      marginTop: 2,
       lineHeight: 15,
       textAlign,
     },
