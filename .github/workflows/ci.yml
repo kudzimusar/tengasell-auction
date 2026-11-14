@@ -110,6 +110,9 @@ jobs:
       - name: LR01-R1 event RBAC and Auction Hub discoverability contract
         run: node tests/lr01-r1-rbac-navigation-contract.mjs
 
+      - name: TENGASELL-LIVE-COMMS-UX-01 R1 auction mode & comms discovery contract
+        run: npm run test:live-comms-ux01-r1
+
       - name: Setup Bun for canonical trade engine
         uses: oven-sh/setup-bun@v2
         with:
@@ -175,8 +178,8 @@ jobs:
           echo "$body" | grep -q '"ok":true'
           echo "smoke contract satisfied"
 
-          npx playwright test tests/commercial-browser-uat.spec.mjs --reporter=line
-          echo "desktop/mobile commercial browser UAT satisfied"
+          npx playwright test tests/commercial-browser-uat.spec.mjs tests/live-comms-ux01-r1-browser-uat.spec.mjs --reporter=line
+          echo "desktop/mobile commercial & R1 UX browser UAT satisfied"
 
       - name: Upload build log on failure
         if: failure()

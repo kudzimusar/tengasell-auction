@@ -84,6 +84,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AuctionCommsNotice,
   Avatar,
   BidRules,
   Countdown,
@@ -92,6 +93,7 @@ import {
   PriceTag,
   RatingStars,
   StatusPill,
+  TimedAuctionBadge,
   VerifiedBadge,
 } from "@/components/tengasell/ui";
 import { cn } from "@/lib/utils";
@@ -504,6 +506,18 @@ export default function ItemPage({ id }: { id: number }) {
         {/* ── right: sticky bid panel ───────────────────────────────── */}
         <aside className="lg:sticky lg:top-28 space-y-4 min-w-0" aria-label="Auction summary">
           <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <TimedAuctionBadge auction={auction} />
+              <span className="text-caption text-muted-foreground">Timed Auction</span>
+              {auction.live_session_id != null && (
+                <a
+                  href={`#/live/${auction.live_session_id}`}
+                  className="text-caption font-semibold text-teal-deep hover:underline focus-visible:outline-2 focus-visible:outline-ring rounded-sm"
+                >
+                  Assigned Live Room →
+                </a>
+              )}
+            </div>
             <h1 className="text-headline text-foreground leading-snug">{auction.title}</h1>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-caption text-muted-foreground">
               <span className="inline-flex items-center gap-1.5">
@@ -661,6 +675,7 @@ export default function ItemPage({ id }: { id: number }) {
                 </a>
               </Button>
             </div>
+            <AuctionCommsNotice context="item" compact testId="item-comms-notice" />
           </div>
 
           {/* Gap-8 F2: offers block — public count, buyer's own rows,

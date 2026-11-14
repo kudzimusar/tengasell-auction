@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "framer-motion";
-import { ArrowLeft, ArrowRight, Zap } from "lucide-react";
+import { ArrowLeft, ArrowRight, Clock } from "lucide-react";
 import {
   AuctionCard,
   EmptyState,
@@ -94,14 +94,14 @@ export function ClosingSoon() {
     <section className="py-6" aria-label="Auctions closing soon">
       <div className="mx-auto max-w-7xl px-4">
         <SectionHeader
-          icon={<Zap className="size-5 text-urgent" aria-hidden="true" />}
-          title={<span className="text-urgent">Closing soon</span>}
-          subtitle="Live auctions ending within 90 minutes — countdowns tick live"
+          icon={<Clock className="size-5 text-warn" aria-hidden="true" />}
+          title={<span className="text-foreground">Closing Soon</span>}
+          subtitle="Timed auctions open for bids ending within 90 minutes"
           action={
             <div className="flex items-center gap-1.5">
-              <span className="hidden sm:inline-flex items-center gap-1.5 text-caption font-bold text-urgent me-1">
-                <span className="size-2 rounded-full bg-urgent animate-pulse" aria-hidden="true" />
-                LIVE
+              <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-warn/40 bg-warn/15 px-2.5 py-0.5 text-caption font-semibold text-warn-foreground me-1">
+                <Clock className="size-3.5 text-warn" aria-hidden="true" />
+                Closing Soon
               </span>
               <div className="hidden md:flex items-center gap-1">
                 <button
@@ -141,9 +141,9 @@ export function ClosingSoon() {
           <ErrorState message={res.error} onRetry={res.reload} />
         ) : items.length === 0 ? (
           <EmptyState
-            icon={<Zap className="size-8" aria-hidden="true" />}
-            title="No auctions closing soon"
-            body="Live auctions ending within the next 90 minutes will appear here — check back in a little while."
+            icon={<Clock className="size-8" aria-hidden="true" />}
+            title="No timed auctions closing soon"
+            body="Timed auctions open for bids and ending within the next 90 minutes will appear here — check back in a little while."
             action={
               <LinkButton to="/search?ending=90" variant="ghost">
                 Browse ending soon

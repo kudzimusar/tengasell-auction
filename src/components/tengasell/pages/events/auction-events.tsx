@@ -35,7 +35,7 @@ import type {
   RunListCommandInput,
 } from "@/lib/tengasell/types";
 import { cn } from "@/lib/utils";
-import { EmptyState, ErrorState, LoadingGrid, StatusPill } from "@/components/tengasell/ui";
+import { AuctionCommsNotice, EmptyState, ErrorState, getLiveEventDisplay, LiveEventStatusBadge, LoadingGrid, StatusPill } from "@/components/tengasell/ui";
 
 function formatWhen(iso: string | null | undefined) {
   if (!iso) return "—";
@@ -66,7 +66,9 @@ function AuctionHub() {
   const { user } = useAuth();
   const navigate = useRouter().navigate;
   const eventsRes = useResource(() => api.auctionEvents(), []);
+  const sessionsRes = useResource(() => api.liveSessions(), []);
   const events = eventsRes.data ?? [];
+  const sessions = sessionsRes.data ?? [];
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -79,6 +81,43 @@ function AuctionHub() {
   const recent = events
     .filter((event) => event.status === "CLOSED" || event.status === "CANCELLED")
     .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+
+  const liveEventsKey = live.map((e) => `${e.id}:${e.current_lot_id ?? ""}`).join(",");
+  const [lotStatusState, setLotStatusState] = useState<{
+    key: string;
+    map: Record<number, { loaded: boolean; status: string | null }>;
+  }>({ key: "", map: {} });
+  const lotStatusByEvent =
+    liveEventsKey && lotStatusState.key === liveEventsKey ? lotStatusState.map : {};
+  useEffect(() => {
+    if (!liveEventsKey) return;
+    let alive = true;
+    void Promise.all(
+      live.map(async (ev) => {
+        if (ev.current_lot_id == null) {
+          return [ev.id, { loaded: true, status: null }] as const;
+        }
+        try {
+          const bundle = await api.auctionEventBundle(ev.id);
+          const match = bundle.lots.find((l) => l.id === ev.current_lot_id);
+          const sessOk =
+            !bundle.session ||
+            (bundle.session.status === "live" &&
+              bundle.session.current_lot_id != null &&
+              match?.auction_id === bundle.session.current_lot_id);
+          const lotOk = Boolean(match && match.status === "LIVE" && sessOk);
+          return [ev.id, { loaded: true, status: lotOk ? "LIVE" : (match?.status ?? "MISMATCH") }] as const;
+        } catch {
+          return [ev.id, { loaded: true, status: "UNAVAILABLE" }] as const;
+        }
+      }),
+    ).then((entries) => {
+      if (alive) setLotStatusState({ key: liveEventsKey, map: Object.fromEntries(entries) });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [live, liveEventsKey]);
 
   const calendarDays = useMemo(() => {
     const today = new Date();
@@ -148,10 +187,16 @@ function AuctionHub() {
             </div>
             <h1 className="mt-2 text-2xl font-bold tracking-tight text-foreground">Auction Hub</h1>
             <p className="mt-1 max-w-2xl text-body text-muted-foreground">
-              Calendar, events, live sessions and production run lists share one TrailBase authority.
+              Calendar, scheduled live events, live bidding rooms and production run lists share one authoritative backend.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline" className="min-h-11">
+              <a href="#/search">
+                <Gavel className="size-4" aria-hidden="true" />
+                Timed Auctions
+              </a>
+            </Button>
             <Button asChild variant="outline" className="min-h-11">
               <a href="#/events/operations">
                 <ShieldCheck className="size-4" aria-hidden="true" />
@@ -167,6 +212,33 @@ function AuctionHub() {
           </div>
         </div>
       </header>
+
+      <AuctionCommsNotice context="events" testId="events-comms-banner" />
+
+      {!eventsRes.error && events.length === 0 ? (
+        <section
+          aria-label="Empty schedule guidance"
+          data-testid="events-empty-guidance"
+          className="rounded-card border border-border bg-raised p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="space-y-1">
+            <p className="text-bodyStrong font-bold text-foreground">
+              No scheduled Live Auction Events at this moment
+            </p>
+            <p className="text-caption text-muted-foreground">
+              Upcoming live floor auctions appear here as soon as they are scheduled. In the meantime, explore Timed Auctions or review notification preferences.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <a
+              href="#/search"
+              className="inline-flex min-h-11 items-center justify-center rounded-control bg-teal px-4 py-2 text-label font-semibold text-white hover:bg-teal-deep focus-visible:outline-2 focus-visible:outline-ring whitespace-nowrap"
+            >
+              Browse Timed Auctions →
+            </a>
+          </div>
+        </section>
+      ) : null}
 
       {eventsRes.error ? <ErrorState message={eventsRes.error} onRetry={eventsRes.reload} /> : null}
 
@@ -203,9 +275,32 @@ function AuctionHub() {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-6">
-          <EventGroup title="Live now" events={live} empty="No event is live right now." />
-          <EventGroup title="Upcoming" events={upcoming} empty="No scheduled auction events." />
-          {recent.length ? <EventGroup title="Recent" events={recent.slice(0, 8)} empty="" /> : null}
+          <EventGroup
+            title="Live now"
+            events={live}
+            empty="No event is live right now."
+            sessions={sessions}
+            sessionsLoaded={!sessionsRes.loading}
+            lotStatusByEvent={lotStatusByEvent}
+          />
+          <EventGroup
+            title="Upcoming"
+            events={upcoming}
+            empty="No scheduled auction events."
+            sessions={sessions}
+            sessionsLoaded={!sessionsRes.loading}
+            lotStatusByEvent={lotStatusByEvent}
+          />
+          {recent.length ? (
+            <EventGroup
+              title="Recent"
+              events={recent.slice(0, 8)}
+              empty=""
+              sessions={sessions}
+              sessionsLoaded={!sessionsRes.loading}
+              lotStatusByEvent={lotStatusByEvent}
+            />
+          ) : null}
         </div>
 
         <aside className="rounded-card border border-border bg-raised p-4 lg:sticky lg:top-4 lg:self-start">
@@ -247,7 +342,55 @@ function AuctionHub() {
   );
 }
 
-function EventGroup({ title, events, empty }: { title: string; events: AuctionEvent[]; empty: string }) {
+function EventStatusBadges({
+  event,
+  sessions,
+  sessionsLoaded,
+  lotStatusByEvent,
+}: {
+  event: AuctionEvent;
+  sessions: Array<{ id: number; event_id?: number | null; status: "scheduled" | "live" | "closed"; current_lot_id?: number | null }>;
+  sessionsLoaded: boolean;
+  lotStatusByEvent: Record<number, { loaded: boolean; status: string | null }>;
+}) {
+  const linkedSession = sessions.find((s) => Number(s.event_id) === Number(event.id));
+  const lotCheck = lotStatusByEvent[event.id];
+  const display = getLiveEventDisplay({
+    sessionStatus: linkedSession?.status ?? null,
+    eventStatus: event.status,
+    currentLotId: linkedSession
+      ? (event.current_lot_id != null ? linkedSession.current_lot_id : null)
+      : (event.current_lot_id ?? null),
+    lotStatus: lotCheck?.status ?? null,
+    lotLoaded: Boolean(sessionsLoaded && lotCheck?.loaded),
+    requireLotVerification:
+      event.status === "LIVE" &&
+      event.current_lot_id != null &&
+      (!linkedSession || (linkedSession.status === "live" && linkedSession.current_lot_id != null)),
+  });
+  return (
+    <>
+      <LiveEventStatusBadge display={display} showOnAir={display.isAuthoritativeLive} />
+      <StatusPill size="xs" tone="muted">{event.status}</StatusPill>
+    </>
+  );
+}
+
+function EventGroup({
+  title,
+  events,
+  empty,
+  sessions = [],
+  sessionsLoaded = true,
+  lotStatusByEvent = {},
+}: {
+  title: string;
+  events: AuctionEvent[];
+  empty: string;
+  sessions?: Array<{ id: number; event_id?: number | null; status: "scheduled" | "live" | "closed"; current_lot_id?: number | null }>;
+  sessionsLoaded?: boolean;
+  lotStatusByEvent?: Record<number, { loaded: boolean; status: string | null }>;
+}) {
   return (
     <section aria-label={title} className="rounded-card border border-border bg-raised p-4">
       <h2 className="text-lg font-bold text-foreground">{title}</h2>
@@ -261,8 +404,13 @@ function EventGroup({ title, events, empty }: { title: string; events: AuctionEv
               href={`#/events/${event.id}`}
               className="rounded-card border border-border bg-background p-4 transition hover:border-teal/40 hover:shadow-sm focus-visible:outline-2 focus-visible:outline-ring"
             >
-              <div className="flex items-center gap-2">
-                <StatusPill size="xs" tone={statusTone(event.status)}>{event.status}</StatusPill>
+              <div className="flex flex-wrap items-center gap-2">
+                <EventStatusBadges
+                  event={event}
+                  sessions={sessions}
+                  sessionsLoaded={sessionsLoaded}
+                  lotStatusByEvent={lotStatusByEvent}
+                />
                 <span className="ms-auto text-caption text-muted-foreground">v{event.run_list_version}</span>
               </div>
               <h3 className="mt-2 font-bold text-foreground">{event.title}</h3>
@@ -366,6 +514,18 @@ function EventDetail({ eventId }: { eventId: number }) {
   const current = lots.find((lot) => lot.id === event.current_lot_id) ?? null;
   const next = lots.find((lot) => lot.id === event.next_lot_id) ?? null;
   const locked = event.run_list_locked === 1;
+  const detailDisplay = getLiveEventDisplay({
+    sessionStatus: session.status,
+    eventStatus: event.status,
+    currentLotId: event.current_lot_id != null ? session.current_lot_id : null,
+    lotStatus: current ? (current.auction_id === session.current_lot_id ? current.status : "MISMATCH") : null,
+    lotLoaded: !res.loading,
+    requireLotVerification:
+      event.status === "LIVE" &&
+      event.current_lot_id != null &&
+      session.status === "live" &&
+      session.current_lot_id != null,
+  });
 
   const addAuction = async () => {
     const id = Number(auctionId);
@@ -398,7 +558,8 @@ function EventDetail({ eventId }: { eventId: number }) {
         <a href={backHref} className="inline-flex min-h-11 items-center gap-1.5 rounded-control px-3 text-label font-bold text-teal hover:bg-teal-tint">
           <ArrowLeft className="size-4" aria-hidden="true" /> Auction Hub
         </a>
-        <StatusPill size="xs" tone={statusTone(event.status)}>{event.status}</StatusPill>
+        <LiveEventStatusBadge display={detailDisplay} showOnAir={detailDisplay.isAuthoritativeLive} />
+        <StatusPill size="xs" tone="muted">{event.status}</StatusPill>
         <span className="rounded-pill border border-border px-2 py-1 text-caption font-semibold text-muted-foreground">
           Run list v{event.run_list_version}
         </span>
@@ -425,7 +586,10 @@ function EventDetail({ eventId }: { eventId: number }) {
         <div className="mt-4 flex flex-wrap gap-2">
           <Button asChild className="min-h-11">
             <a href={`#/live/${session.id}`}>
-              <Radio className="size-4" aria-hidden="true" /> Open Live Room
+              <Radio className="size-4" aria-hidden="true" />{" "}
+              {detailDisplay.state === "live_bidding" || detailDisplay.state === "awaiting_lot"
+                ? "Enter Live Room"
+                : "Open Live Room"}
             </a>
           </Button>
           {permissions.operate ? (
@@ -441,6 +605,8 @@ function EventDetail({ eventId }: { eventId: number }) {
           ) : null}
         </div>
       </header>
+
+      <AuctionCommsNotice context="events" testId="event-detail-comms-banner" />
 
       <section aria-labelledby="bidder-qualification" className="rounded-card border border-border bg-raised p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">

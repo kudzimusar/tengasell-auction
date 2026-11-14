@@ -9,12 +9,29 @@ import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
-import { AlertTriangle, RotateCw, Star } from "lucide-react"
+import { AlertTriangle, Bell, Calendar, CheckCircle2, Clock, Gavel, Radio, RotateCw, Star, XCircle } from "lucide-react"
 import {
   bidIncrement, formatRemaining, formatUSD, minNextBid, parseImages, remainingSeverity,
 } from "@/lib/tengasell/format"
 import { toAuctionView, type Auction } from "@/lib/tengasell/types"
+import {
+  getLiveEventDisplay,
+  getTimedAuctionDisplay,
+  type LiveEventDisplay,
+  type LiveEventDisplayState,
+  type TimedAuctionDisplay,
+  type TimedDisplayState,
+} from "@/lib/tengasell/auction-display"
 import { useLinkProps } from "@/lib/tengasell/router"
+
+export {
+  getLiveEventDisplay,
+  getTimedAuctionDisplay,
+  type LiveEventDisplay,
+  type LiveEventDisplayState,
+  type TimedAuctionDisplay,
+  type TimedDisplayState,
+}
 
 export function Price({ value, className, size = "md" }: { value: number; className?: string; size?: "sm" | "md" | "lg" }) {
   const fmt = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: value % 1 === 0 ? 0 : 2 })
@@ -185,16 +202,16 @@ export function PriceTag({ amount, size = "md", tone = "teal", className }: {
   )
 }
 
-/** Live remaining-time countdown with severity coloring. */
+/** Live remaining-time countdown with severity coloring (amber for closing soon; muted on ended). */
 export function Countdown({ endsAt, ended, className }: { endsAt: string; ended?: boolean; className?: string }) {
   const now = useNow(1000)
   const remainingMs = Date.parse(endsAt) - now
   if (ended || remainingMs <= 0) {
-    return <span className={cn("ts-numeric text-caption font-semibold text-danger", className)}>Ended</span>
+    return <span className={cn("ts-numeric text-caption font-semibold text-muted-foreground", className)}>Ended</span>
   }
   const sev = remainingSeverity(remainingMs)
   return (
-    <span className={cn("ts-numeric text-caption font-bold", sev === "urgent" ? "text-danger" : sev === "soon" ? "text-warn" : "text-muted-foreground", className)}>
+    <span className={cn("ts-numeric text-caption font-bold", sev === "urgent" || sev === "soon" ? "text-warn" : "text-muted-foreground", className)}>
       {formatRemaining(remainingMs)}
     </span>
   )
@@ -348,13 +365,124 @@ export function LoadingGrid({ count = 8 }: { count?: number }) {
   )
 }
 
+/** Accessible timed-auction status badge (icon + explicit label, never red ON AIR). */
+export function TimedAuctionBadge({
+  auction,
+  nowMs,
+  variant = "inline",
+  className,
+}: {
+  auction: Pick<Auction, "status" | "ends_at">
+  nowMs?: number
+  variant?: "inline" | "overlay"
+  className?: string
+}) {
+  const d = getTimedAuctionDisplay(auction, nowMs)
+  const Icon =
+    d.state === "closing_soon"
+      ? Clock
+      : d.state === "sold"
+        ? CheckCircle2
+        : d.state === "ended" || d.state === "cancelled"
+          ? XCircle
+          : Gavel
+
+  const toneCls =
+    variant === "overlay"
+      ? d.state === "closing_soon"
+        ? "border-warn/40 bg-warn text-warn-foreground shadow-sm"
+        : d.state === "sold"
+          ? "border-teal/40 bg-teal text-white shadow-sm"
+          : d.state === "ended" || d.state === "cancelled"
+            ? "border-border bg-foreground/85 text-background"
+            : "border-teal/25 bg-section/92 text-teal-deep dark:bg-section/90 dark:text-teal shadow-sm backdrop-blur-xs"
+      : d.state === "closing_soon"
+        ? "border-warn/40 bg-warn/15 text-warn-foreground dark:text-warn"
+        : d.state === "sold"
+          ? "border-teal/30 bg-teal-tint text-teal-deep dark:text-teal-soft"
+          : d.state === "ended" || d.state === "cancelled"
+            ? "border-border bg-muted text-muted-foreground"
+            : "border-teal/25 bg-teal/10 text-teal-deep dark:text-teal"
+
+  return (
+    <span
+      data-timed-state={d.state}
+      className={cn(
+        "inline-flex items-center gap-1 rounded-pill border px-2 py-0.5 text-[11px] font-bold whitespace-nowrap",
+        toneCls,
+        className,
+      )}
+    >
+      <Icon className="size-3 shrink-0" aria-hidden="true" />
+      {d.label}
+    </span>
+  )
+}
+
+/** Accessible live-event / room status badge (uses urgent/danger semantic tokens ONLY when authoritative live bidding is active). */
+export function LiveEventStatusBadge({
+  display,
+  showOnAir = false,
+  className,
+}: {
+  display: LiveEventDisplay
+  showOnAir?: boolean
+  className?: string
+}) {
+  if (display.isAuthoritativeLive) {
+    return (
+      <span
+        data-live-state={display.state}
+        className={cn(
+          "inline-flex items-center gap-1.5 rounded-pill border border-danger/30 bg-danger/10 px-2.5 py-0.5 text-[11px] font-bold text-urgent whitespace-nowrap",
+          className,
+        )}
+      >
+        <span className="size-1.5 rounded-full bg-urgent motion-safe:animate-pulse" aria-hidden="true" />
+        <Radio className="size-3 shrink-0" aria-hidden="true" />
+        <span>{showOnAir ? `${display.label} · ON AIR` : display.label}</span>
+      </span>
+    )
+  }
+
+  const Icon =
+    display.state === "awaiting_lot" || display.state === "checking"
+      ? Clock
+      : display.state === "upcoming"
+        ? Calendar
+        : display.state === "sync_mismatch"
+          ? AlertTriangle
+          : XCircle
+
+  const toneCls =
+    display.state === "awaiting_lot"
+      ? "border-warn/40 bg-warn/15 text-warn-foreground dark:text-warn"
+      : display.state === "upcoming"
+        ? "border-teal/30 bg-teal-tint text-teal-deep dark:text-teal-soft"
+        : "border-border bg-muted text-muted-foreground"
+
+  return (
+    <span
+      data-live-state={display.state}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-pill border px-2.5 py-0.5 text-[11px] font-bold whitespace-nowrap",
+        toneCls,
+        className,
+      )}
+    >
+      <Icon className="size-3 shrink-0" aria-hidden="true" />
+      <span>{display.label}</span>
+    </span>
+  )
+}
+
 /** Marketplace listing card (grid). */
 export function AuctionCard({ auction, showSeller = true }: { auction: Auction; showSeller?: boolean }) {
   const v = toAuctionView(auction)
   const link = useLinkProps(`#/item/${auction.id}`)
   const now = useNow(5000)
-  const remainingMs = Date.parse(auction.ends_at) - now
-  const sev = remainingMs <= 0 ? "ended" : remainingSeverity(remainingMs)
+  const display = getTimedAuctionDisplay(auction, now)
+  const sev = display.remainingMs <= 0 ? "ended" : remainingSeverity(display.remainingMs)
   const img = v.imageList[0]
   return (
     <a
@@ -368,14 +496,12 @@ export function AuctionCard({ auction, showSeller = true }: { auction: Auction; 
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-teal/10 to-gold/20 text-3xl" aria-hidden>🧭</div>
         )}
-        {auction.status !== "live" && (
-          <span className="absolute left-2 top-2 rounded-pill bg-foreground/80 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-background">
-            {auction.status === "sold" ? "Sold" : "Ended"}
-          </span>
-        )}
-        {v.endingSoon && auction.status === "live" && (
-          <span className="absolute right-2 top-2 rounded-pill bg-danger px-2 py-0.5 text-[11px] font-bold text-white">Ends soon</span>
-        )}
+        <TimedAuctionBadge
+          auction={auction}
+          nowMs={now}
+          variant="overlay"
+          className="absolute left-2 top-2"
+        />
       </div>
       <div className="space-y-1.5 p-3">
         <p className="line-clamp-2 min-h-9 text-label text-foreground">{auction.title}</p>
@@ -386,8 +512,8 @@ export function AuctionCard({ auction, showSeller = true }: { auction: Auction; 
           )}
         </div>
         <div className="flex items-center justify-between gap-2">
-          <span className={cn("ts-numeric text-caption font-semibold", sev === "urgent" ? "text-danger" : sev === "soon" ? "text-warn" : "text-muted-foreground")}>
-            {remainingMs <= 0 ? "Ended" : formatRemaining(remainingMs)}
+          <span className={cn("ts-numeric text-caption font-semibold", display.state === "ended" || display.state === "sold" ? "text-muted-foreground" : sev === "urgent" || sev === "soon" ? "text-warn" : "text-muted-foreground")}>
+            {display.remainingMs <= 0 ? "Ended" : formatRemaining(display.remainingMs)}
           </span>
           <span className="ts-numeric text-caption text-muted-foreground">{auction.bid_count} bids</span>
         </div>
@@ -403,6 +529,101 @@ export function AuctionCard({ auction, showSeller = true }: { auction: Auction; 
 }
 
 /** Yahoo Auctions-style bid rules box (increments + auto-bid note). */
+/** Honest Communications Centre discoverability banner shared across auction surfaces in R1.
+ *  Reuses #/my/communications and distinguishes active timed-auction alerts from planned Live Event notifications. */
+export function AuctionCommsNotice({
+  context = "events",
+  compact = false,
+  testId,
+  className,
+}: {
+  context?: "events" | "live" | "item"
+  compact?: boolean
+  testId?: string
+  className?: string
+}) {
+  const commsLink = useLinkProps("#/my/communications")
+  const title =
+    context === "item"
+      ? "Auction alerts & notification preferences"
+      : "Auction Communications & Notification Preferences"
+  const description =
+    context === "item"
+      ? "Outbid, ending-soon, and auction-result alerts are managed in your Communications Centre. Planned per-event and run-list channel notifications will appear there in future iterations."
+      : "Manage existing timed-auction alerts (outbid, ending soon, won) across email and supported messaging channels in your Communications Centre. Event-follow and live run-list reminders are planned for later phases — no live event alerts are active yet."
+
+  return (
+    <div
+      data-testid={testId}
+      className={cn(
+        "rounded-card border border-border bg-raised",
+        compact ? "p-3" : "p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between",
+        className,
+      )}
+    >
+      <div className="flex items-start gap-2.5">
+        <Bell className={cn("shrink-0 text-teal", compact ? "size-4 mt-0.5" : "size-5 mt-0.5")} aria-hidden="true" />
+        <div className="space-y-1">
+          <p className={cn("font-semibold text-foreground", compact ? "text-caption" : "text-label")}>
+            {title}
+          </p>
+          <p className="text-caption text-muted-foreground">{description}</p>
+        </div>
+      </div>
+      <a
+        {...commsLink}
+        className={cn(
+          "inline-flex min-h-11 items-center justify-center rounded-control border border-teal/40 bg-teal-tint px-3.5 py-2 text-label font-semibold text-teal-deep hover:bg-teal/15 focus-visible:outline-2 focus-visible:outline-ring whitespace-nowrap",
+          compact && "mt-2.5 w-full min-h-9 text-caption py-1.5",
+        )}
+      >
+        Manage notification preferences →
+      </a>
+    </div>
+  )
+}
+
+/** Honest Communications Centre explanation card rendered inside #/my/communications (signed-in or signed-out). */
+export function AuctionCommsRoadmapCard({ className }: { className?: string }) {
+  const searchLink = useLinkProps("#/search")
+  const eventsLink = useLinkProps("#/events")
+  return (
+    <div
+      data-testid="comms-auction-roadmap-card"
+      className={cn("rounded-card border border-border bg-raised p-4 space-y-3", className)}
+    >
+      <div className="flex items-start gap-2.5">
+        <Bell className="size-5 shrink-0 text-teal mt-0.5" aria-hidden="true" />
+        <div className="space-y-1.5">
+          <h3 className="text-bodyStrong font-bold text-foreground">
+            Timed Auction Alerts &amp; Planned Live Event Notifications
+          </h3>
+          <p className="text-body text-muted-foreground">
+            Currently configurable when signed in: <strong>Timed Auction</strong> alerts (outbid, closing soon, won, sold), saved search alerts, offers, messages, and order updates. In later authorized releases, buyers will also be able to subscribe by <strong>Live Auction Event</strong>, run-list change, and supported messaging channel.
+          </p>
+          <p className="text-caption text-muted-foreground">
+            Note: External channel delivery providers remain in sandbox/mock mode until formally enabled in subsequent phases.
+          </p>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2 pt-1">
+        <a
+          {...searchLink}
+          className="inline-flex min-h-11 items-center justify-center rounded-control border border-border bg-background px-3.5 py-2 text-label font-semibold text-foreground hover:bg-accent/50 focus-visible:outline-2 focus-visible:outline-ring"
+        >
+          Browse Timed Auctions →
+        </a>
+        <a
+          {...eventsLink}
+          className="inline-flex min-h-11 items-center justify-center rounded-control border border-teal/40 bg-teal-tint px-3.5 py-2 text-label font-semibold text-teal-deep hover:bg-teal/15 focus-visible:outline-2 focus-visible:outline-ring"
+        >
+          Explore Live Auction Events →
+        </a>
+      </div>
+    </div>
+  )
+}
+
 export function BidRules({ auction }: { auction: Auction }) {
   const inc = bidIncrement(auction.current_price)
   const minNext = minNextBid(auction.current_price, auction.bid_count)

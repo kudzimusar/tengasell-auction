@@ -207,6 +207,15 @@ function NotificationsBell() {
               <button
                 onClick={() => {
                   setOpen(false);
+                  window.location.hash = "#/my/communications";
+                }}
+                className="w-full px-4 py-2.5 text-label text-teal-deep font-semibold hover:bg-accent/50 transition-colors border-t border-border"
+              >
+                Communications Centre & alerts →
+              </button>
+              <button
+                onClick={() => {
+                  setOpen(false);
                   window.location.hash = "#/messages";
                 }}
                 className="w-full px-4 py-2.5 text-label text-teal font-semibold hover:bg-accent/50 transition-colors border-t border-border"
@@ -256,6 +265,7 @@ function AccountMenu() {
     { label: t("nav.selling"), to: "/my/selling", icon: <Tag className="size-4" /> },
     { label: t("nav.orders"), to: "/orders", icon: <Package className="size-4" /> },
     { label: t("nav.messages"), to: "/messages", icon: <Mail className="size-4" /> },
+    { label: "Communications Centre", to: "/my/communications", icon: <Radio className="size-4" /> },
   ];
 
   // admins get the Comms Console entry (TUCS admin area, task 11-c)
@@ -395,6 +405,16 @@ function CategoryBar() {
         >
           <Gavel className="size-4" aria-hidden /> Auction Hub
         </button>
+        <button
+          onClick={() => router.navigate("/search")}
+          aria-current={route.segments[0] === "search" ? "page" : undefined}
+          className={cn(
+            "shrink-0 min-h-11 px-3 rounded-control text-label font-semibold whitespace-nowrap hover:bg-teal-tint transition-colors flex items-center gap-1.5",
+            route.segments[0] === "search" ? "bg-teal-tint text-teal-deep" : "text-foreground",
+          )}
+        >
+          <Tag className="size-3.5" aria-hidden /> Timed Auctions
+        </button>
         {categories.slice(0, 8).map((c) => (
           <button
             key={c.slug}
@@ -423,7 +443,7 @@ function CategoryBar() {
           onClick={() => router.navigate("/live")}
           className="shrink-0 min-h-11 px-3 rounded-control text-label font-semibold text-teal-deep whitespace-nowrap hover:bg-teal-tint transition-colors flex items-center gap-1"
         >
-          <Radio className="size-3.5 animate-pulse" aria-hidden /> {t("nav.live")}
+          <Radio className="size-3.5 motion-safe:animate-pulse" aria-hidden /> {t("nav.live")}
         </button>
         <button
           onClick={() => router.navigate("/developers")}
@@ -490,10 +510,12 @@ function Footer() {
     {
       title: "Marketplace",
       links: [
+        { label: "Timed Auctions", to: "/search" },
         { label: "Browse categories", to: "/search" },
-        { label: "Ending soon", to: "/search?ending=60" },
+        { label: "Closing soon", to: "/search?ending=60" },
         { label: "Auction Hub & calendar", to: "/events" },
         { label: "Live auction room", to: "/live" },
+        { label: "Communications Centre", to: "/my/communications" },
         { label: "Sell an item", to: "/sell" },
         { label: "Tenga AI assistant", to: "/assistant" },
       ],
