@@ -137,6 +137,8 @@ test.beforeAll(async () => {
   });
   await waitForHttp(`${ENGINE_URL}/socket.io/?EIO=4&transport=polling`);
 
+  const UAT_INTERNAL_SECRET = "tgs_sec_uat_test_credential_32chars_long";
+
   spawnService("comms-service", "bun", ["run", "mini-services/comms-service/index.ts"], {
     COMMS_PORT: "3005",
     TRAILBASE_URL,
@@ -144,6 +146,7 @@ test.beforeAll(async () => {
     COMMS_DB_PATH,
     COMMS_ALLOW_EXTERNAL_R4: "0",
     APP_URL: BASE,
+    INTERNAL_COMMS_SECRET: UAT_INTERNAL_SECRET,
   });
   await waitForHttp("http://127.0.0.1:3005/health");
 
@@ -153,6 +156,7 @@ test.beforeAll(async () => {
     DATABASE_URL: `file:${dbPath}`,
     TRAILBASE_URL,
     COMMS_URL: "http://127.0.0.1:3005",
+    INTERNAL_COMMS_SECRET: UAT_INTERNAL_SECRET,
     NEXT_TELEMETRY_DISABLED: "1",
   });
   await waitForHttp("http://127.0.0.1:3000/api/public/status");

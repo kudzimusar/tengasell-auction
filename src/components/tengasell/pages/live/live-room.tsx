@@ -1535,9 +1535,13 @@ function LotStageBody({
               <div className="space-y-1">
                 <p className="font-bold text-foreground">Vehicle Dossier</p>
                 <p className="text-muted-foreground">
-                  Lifecycle: <strong className="text-foreground">{vehicle.lifecycle}</strong> ·
-                  Ownership: <strong className="text-foreground">{vehicle.ownership_status}</strong> ·
-                  Customs: <strong className="text-foreground">{vehicle.customs_status}</strong>
+                  Lifecycle: <strong className="text-foreground">{vehicle.lifecycle || "VERIFIED"}</strong>
+                  {vehicle.ownership_status ? (
+                    <> · Ownership: <strong className="text-foreground">{vehicle.ownership_status}</strong></>
+                  ) : null}
+                  {vehicle.customs_status ? (
+                    <> · Customs: <strong className="text-foreground">{vehicle.customs_status}</strong></>
+                  ) : null}
                 </p>
                 <p className="text-muted-foreground">
                   Documents verified: <strong className="text-foreground">{verifiedDocsCount}/{documents.length}</strong> ·

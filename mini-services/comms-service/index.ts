@@ -9,7 +9,7 @@
 // Auth model: the Next BFF sets `x-tgs-user: <username>` for user endpoints and
 // `x-tgs-admin: 1` for admin endpoints; /hooks/* are public webhooks.
 
-import { PORT, DB_PATH, INTERNAL_COMMS_SECRET } from "./config";
+import { PORT, DB_PATH, isInternalSecretConfigured, verifyInternalSecret } from "./config";
 import { db, scalar } from "./db"; // module load runs idempotent migrations
 import { seedTemplates } from "./templates";
 import { startSweeper } from "./queue";
@@ -109,10 +109,20 @@ export async function handleRequest(req: Request): Promise<Response> {
   }
 
   try {
-    const isPublic = url.pathname === "/health" || url.pathname.startsWith("/hooks/");
-    const internalSecret = req.headers.get("x-tgs-internal-token");
-    if (!isPublic && internalSecret !== INTERNAL_COMMS_SECRET) {
-      throw new HttpError(401, "unauthorized internal service caller", "internal_secret_required");
+    // Public route allowlist: read-only health, public one-click unsubscribe,
+    // and external platform webhooks with their own cryptographic verification.
+    // Mock simulators (/hooks/mock/*) and internal delivery (/hooks/delivery) require internal service credentials.
+    const isPublic =
+      url.pathname === "/health" ||
+      url.pathname === "/u/unsub" ||
+      url.pathname === "/hooks/whatsapp" ||
+      url.pathname === "/hooks/telegram";
+
+    if (!isPublic) {
+      const internalSecret = req.headers.get("x-tgs-internal-token");
+      if (!verifyInternalSecret(internalSecret)) {
+        throw new HttpError(401, "unauthorized internal service caller", "internal_secret_required");
+      }
     }
 
     const match = findRoute(req.method, url.pathname);

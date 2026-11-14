@@ -3,10 +3,59 @@
 
 import path from "node:path";
 import fs from "node:fs";
+import crypto from "node:crypto";
 
 export const PORT = 3005;
-export const INTERNAL_COMMS_SECRET =
-  process.env.INTERNAL_COMMS_SECRET || "tgs_sec_internal_comms_default_k9102";
+
+export const BANNED_LEGACY_SECRETS: ReadonlySet<string> = new Set([
+  "tgs_sec_internal_comms_default_k9102",
+  "secret",
+  "password",
+  "changeme",
+]);
+
+export const MIN_INTERNAL_SECRET_LENGTH = 16;
+
+/**
+ * Validates whether the environment has a cryptographically sound internal service secret configured.
+ * Strictly rejects unset, empty, short (<16 chars), and known legacy default credentials.
+ */
+export function isInternalSecretConfigured(): boolean {
+  const secret = process.env.INTERNAL_COMMS_SECRET;
+  if (!secret || typeof secret !== "string") return false;
+  const trimmed = secret.trim();
+  if (trimmed.length < MIN_INTERNAL_SECRET_LENGTH) return false;
+  if (BANNED_LEGACY_SECRETS.has(trimmed)) return false;
+  return true;
+}
+
+/**
+ * Returns the configured internal secret, or null if unconfigured/invalid.
+ */
+export function getInternalCommsSecret(): string | null {
+  if (!isInternalSecretConfigured()) return null;
+  return process.env.INTERNAL_COMMS_SECRET!.trim();
+}
+
+/**
+ * Constant-time comparison of the incoming header value against the configured internal secret.
+ * Fails closed if the secret is unconfigured, header is missing, or values do not match.
+ */
+export function verifyInternalSecret(candidate: string | null | undefined): boolean {
+  if (!isInternalSecretConfigured()) return false;
+  if (!candidate || typeof candidate !== "string") return false;
+  const expected = process.env.INTERNAL_COMMS_SECRET!.trim();
+  const actual = candidate.trim();
+  if (actual.length !== expected.length) return false;
+  try {
+    const expectedBuf = Buffer.from(expected, "utf8");
+    const actualBuf = Buffer.from(actual, "utf8");
+    return crypto.timingSafeEqual(expectedBuf, actualBuf);
+  } catch {
+    return false;
+  }
+}
+
 export const TRAILBASE_URL =
   process.env.TRAILBASE_URL || "http://127.0.0.1:3001";
 

@@ -310,8 +310,9 @@ export function registerMeRoutes(on: AddRoute): void {
 
   on("POST", "/me/reminders/evaluate", async (ctx) => {
     const user = requireUser(ctx);
-    const nowIsoParam = typeof ctx.body?.nowIso === "string" ? ctx.body.nowIso : undefined;
+    // P0-C: Customer endpoint uses authoritative server clock ONLY.
+    // Callers cannot supply or manipulate evaluation time.
     const locale = typeof ctx.body?.locale === "string" ? ctx.body.locale : "en";
-    return await evaluateDueReminders({ nowIso: nowIsoParam, userId: user, locale });
+    return await evaluateDueReminders({ userId: user, locale });
   });
 }

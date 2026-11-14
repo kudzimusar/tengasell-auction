@@ -6,6 +6,7 @@
 import { APP_URL, TRAILBASE_URL } from "./config";
 import { db, all, execute, get, insert, run } from "./db";
 import { defaultDeepLink } from "./emit";
+import { HttpError } from "./http";
 import { getTemplate, interpolate } from "./templates";
 import { nowIso, safeJsonParse, toIsoOut } from "./util";
 
@@ -116,14 +117,17 @@ export interface EvaluateRemindersResult {
   skippedDuplicates: number;
   suppressedUnsubscribed: number;
   items: Array<{
-    dedupeKey: string;
-    userId: string;
+    dedupeKey?: string;
+    userId?: string;
+    subscriptionId?: number;
     targetType: string;
     targetId: string;
     stage: string;
-    eventKey: string;
-    channel: "in_app";
-    queueId: number;
+    eventKey?: string;
+    channel?: "in_app";
+    queueId?: number | null;
+    dispatched?: boolean;
+    error?: string;
   }>;
 }
 
@@ -197,104 +201,12 @@ export function setCustomTargetResolver(fn: TargetResolver | null): void {
   customResolver = fn;
 }
 
-const FALLBACK_SEED_CATALOGUE: Record<string, CanonicalTarget> = {
-  "event:901": {
-    targetType: "event",
-    targetId: "901",
-    eventId: 901,
-    lotId: null,
-    sessionId: 1,
-    auctionId: null,
-    title: "Harare Executive & Utility Fleet Live Auction",
-    startsAt: "2026-11-20T10:00:00Z",
-    status: "LIVE",
-    isLive: true,
-  },
-  "event:902": {
-    targetType: "event",
-    targetId: "902",
-    eventId: 902,
-    lotId: null,
-    sessionId: 2,
-    auctionId: null,
-    title: "Weekend Hybrid & Passenger Showcase",
-    startsAt: "2026-11-21T10:00:00Z",
-    status: "SCHEDULED",
-    isLive: false,
-  },
-  "event:903": {
-    targetType: "event",
-    targetId: "903",
-    eventId: 903,
-    lotId: null,
-    sessionId: null,
-    auctionId: null,
-    title: "Event Cancelled Demonstration",
-    startsAt: "2026-11-22T10:00:00Z",
-    status: "CANCELLED",
-    isLive: false,
-  },
-  "lot:9401": {
-    targetType: "lot",
-    targetId: "9401",
-    eventId: 901,
-    lotId: 9401,
-    sessionId: 1,
-    auctionId: 9101,
-    title: "Lot #1 · 2021 Toyota Hilux Double Cab",
-    startsAt: "2026-11-20T10:00:00Z",
-    status: "LIVE",
-    isLive: true,
-  },
-  "lot:9101": {
-    targetType: "lot",
-    targetId: "9101",
-    eventId: 901,
-    lotId: 9401,
-    sessionId: 1,
-    auctionId: 9101,
-    title: "Lot #1 · 2021 Toyota Hilux Double Cab",
-    startsAt: "2026-11-20T10:00:00Z",
-    status: "LIVE",
-    isLive: true,
-  },
-  "lot:9402": {
-    targetType: "lot",
-    targetId: "9402",
-    eventId: 901,
-    lotId: 9402,
-    sessionId: 1,
-    auctionId: 9102,
-    title: "Lot #2 · 2022 Isuzu D-Max 3.0 Ddi V-Cross",
-    startsAt: "2026-11-20T10:30:00Z",
-    status: "READY",
-    isLive: false,
-  },
-  "lot:9102": {
-    targetType: "lot",
-    targetId: "9102",
-    eventId: 901,
-    lotId: 9402,
-    sessionId: 1,
-    auctionId: 9102,
-    title: "Lot #2 · 2022 Isuzu D-Max 3.0 Ddi V-Cross",
-    startsAt: "2026-11-20T10:30:00Z",
-    status: "READY",
-    isLive: false,
-  },
-  "auction:9101": {
-    targetType: "auction",
-    targetId: "9101",
-    eventId: null,
-    lotId: null,
-    sessionId: 1,
-    auctionId: 9101,
-    title: "2021 Toyota Hilux Double Cab 2.8 GD-6 4x4",
-    startsAt: "2026-11-20T10:00:00Z",
-    status: "live",
-    isLive: true,
-  },
-};
+export class CanonicalAuthorityUnavailableError extends Error {
+  constructor(message = "Canonical auction authority is temporarily unavailable") {
+    super(message);
+    this.name = "CanonicalAuthorityUnavailableError";
+  }
+}
 
 export async function resolveCanonicalTarget(
   targetType: SubscriptionTargetType,
@@ -310,11 +222,19 @@ export async function resolveCanonicalTarget(
   try {
     if (targetType === "event") {
       const res = await fetch(`${TRAILBASE_URL}/api/records/v1/auction_events/${idStr}`, {
-        signal: AbortSignal.timeout(1500),
+        signal: AbortSignal.timeout(2500),
       });
+      if (res.status >= 500) {
+        throw new CanonicalAuthorityUnavailableError(
+          `TrailBase auction event lookup returned HTTP ${res.status}`,
+        );
+      }
+      if (res.status === 404 || res.status === 401 || res.status === 403) {
+        return null;
+      }
       if (res.ok) {
         const ev = await res.json();
-        if (ev && ev.status !== "DRAFT") {
+        if (ev && ev.status !== "DRAFT" && ev.status !== "CANCELLED" && ev.status !== "WITHDRAWN") {
           return {
             targetType: "event",
             targetId: String(ev.id),
@@ -328,19 +248,32 @@ export async function resolveCanonicalTarget(
             isLive: String(ev.status).toUpperCase() === "LIVE",
           };
         }
+        return null;
       }
+      return null;
     } else if (targetType === "lot") {
       let lot: any = null;
       const res = await fetch(`${TRAILBASE_URL}/api/records/v1/auction_lots/${idStr}`, {
-        signal: AbortSignal.timeout(1500),
+        signal: AbortSignal.timeout(2500),
       });
+      if (res.status >= 500) {
+        throw new CanonicalAuthorityUnavailableError(
+          `TrailBase lot lookup returned HTTP ${res.status}`,
+        );
+      }
       if (res.ok) {
         lot = await res.json();
-      } else {
+      } else if (res.status === 404) {
+        // Fallback: check if idStr is auction_id in auction_lots
         const listRes = await fetch(
           `${TRAILBASE_URL}/api/records/v1/auction_lots?auction_id=${encodeURIComponent(idStr)}`,
-          { signal: AbortSignal.timeout(1500) },
+          { signal: AbortSignal.timeout(2500) },
         );
+        if (listRes.status >= 500) {
+          throw new CanonicalAuthorityUnavailableError(
+            `TrailBase auction_lots list returned HTTP ${listRes.status}`,
+          );
+        }
         if (listRes.ok) {
           const listData = (await listRes.json()) as { records?: any[] };
           if (listData?.records && listData.records.length > 0) {
@@ -350,15 +283,23 @@ export async function resolveCanonicalTarget(
       }
 
       if (lot) {
+        const lotStatus = String(lot.status || "").toUpperCase();
+        if (lotStatus === "CANCELLED" || lotStatus === "WITHDRAWN") return null;
+
         let eventTitle = `Lot #${lot.sequence_no ?? lot.id}`;
         let eventStartsAt: string | null = null;
         if (lot.event_id != null) {
           const evRes = await fetch(`${TRAILBASE_URL}/api/records/v1/auction_events/${lot.event_id}`, {
-            signal: AbortSignal.timeout(1500),
+            signal: AbortSignal.timeout(2500),
           });
+          if (evRes.status >= 500) {
+            throw new CanonicalAuthorityUnavailableError(
+              `TrailBase event lookup returned HTTP ${evRes.status}`,
+            );
+          }
           if (evRes.ok) {
             const ev = await evRes.json();
-            if (ev.status === "DRAFT") return null;
+            if (ev.status === "DRAFT" || ev.status === "CANCELLED" || ev.status === "WITHDRAWN") return null;
             eventTitle = String(ev.title || eventTitle);
             eventStartsAt = ev.starts_at ? String(ev.starts_at) : null;
           }
@@ -366,11 +307,17 @@ export async function resolveCanonicalTarget(
         let auctionTitle = "";
         if (lot.auction_id != null) {
           const aucRes = await fetch(`${TRAILBASE_URL}/api/records/v1/auctions/${lot.auction_id}`, {
-            signal: AbortSignal.timeout(1500),
+            signal: AbortSignal.timeout(2500),
           });
+          if (aucRes.status >= 500) {
+            throw new CanonicalAuthorityUnavailableError(
+              `TrailBase auction lookup returned HTTP ${aucRes.status}`,
+            );
+          }
           if (aucRes.ok) {
             const auc = await aucRes.json();
-            if (auc.status === "draft") return null;
+            const aucStatus = String(auc.status || "").toLowerCase();
+            if (aucStatus === "draft" || aucStatus === "cancelled" || aucStatus === "withdrawn") return null;
             auctionTitle = String(auc.title || "");
           }
         }
@@ -384,17 +331,23 @@ export async function resolveCanonicalTarget(
           title: auctionTitle ? `${auctionTitle} · ${eventTitle}` : eventTitle,
           startsAt: lot.opened_at ? String(lot.opened_at) : eventStartsAt,
           status: String(lot.status || "QUEUED"),
-          isLive: String(lot.status).toUpperCase() === "LIVE",
+          isLive: lotStatus === "LIVE",
         };
       }
 
       // If not an auction_lot record, check if it's an auction that can be followed as a lot
       const aucRes = await fetch(`${TRAILBASE_URL}/api/records/v1/auctions/${idStr}`, {
-        signal: AbortSignal.timeout(1500),
+        signal: AbortSignal.timeout(2500),
       });
+      if (aucRes.status >= 500) {
+        throw new CanonicalAuthorityUnavailableError(
+          `TrailBase auction lookup returned HTTP ${aucRes.status}`,
+        );
+      }
       if (aucRes.ok) {
         const auc = await aucRes.json();
-        if (auc && auc.status !== "draft") {
+        const aucStatus = String(auc.status || "").toLowerCase();
+        if (auc && aucStatus !== "draft" && aucStatus !== "cancelled" && aucStatus !== "withdrawn") {
           return {
             targetType: "lot",
             targetId: idStr,
@@ -405,17 +358,24 @@ export async function resolveCanonicalTarget(
             title: String(auc.title || `Auction #${auc.id}`),
             startsAt: auc.started_at ? String(auc.started_at) : auc.ends_at ? String(auc.ends_at) : null,
             status: String(auc.status || "live"),
-            isLive: ["live", "active", "running"].includes(String(auc.status).toLowerCase()),
+            isLive: ["live", "active", "running"].includes(aucStatus),
           };
         }
       }
+      return null;
     } else if (targetType === "auction") {
       const res = await fetch(`${TRAILBASE_URL}/api/records/v1/auctions/${idStr}`, {
-        signal: AbortSignal.timeout(1500),
+        signal: AbortSignal.timeout(2500),
       });
+      if (res.status >= 500) {
+        throw new CanonicalAuthorityUnavailableError(
+          `TrailBase auction lookup returned HTTP ${res.status}`,
+        );
+      }
       if (res.ok) {
         const auc = await res.json();
-        if (auc && auc.status !== "draft") {
+        const aucStatus = String(auc.status || "").toLowerCase();
+        if (auc && aucStatus !== "draft" && aucStatus !== "cancelled" && aucStatus !== "withdrawn") {
           return {
             targetType: "auction",
             targetId: String(auc.id),
@@ -430,16 +390,15 @@ export async function resolveCanonicalTarget(
           };
         }
       }
+      return null;
     }
-  } catch {
-    // TrailBase unreachable; fall back to seed catalogue
+  } catch (err) {
+    if (err instanceof CanonicalAuthorityUnavailableError) throw err;
+    throw new CanonicalAuthorityUnavailableError(
+      `TrailBase connection error: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 
-  const fallback =
-    FALLBACK_SEED_CATALOGUE[`${targetType}:${idStr}`] ??
-    (targetType === "lot" ? FALLBACK_SEED_CATALOGUE[`auction:${idStr}`] : null);
-  if (fallback) return { ...fallback, targetType, targetId: idStr };
-  return null;
   return null;
 }
 
@@ -517,9 +476,21 @@ export async function upsertSubscription(
   }
 
   // Canonical resolution of target
-  const canonical = await resolveCanonicalTarget(targetType, targetId);
+  let canonical: CanonicalTarget | null = null;
+  try {
+    canonical = await resolveCanonicalTarget(targetType, targetId);
+  } catch (err) {
+    if (err instanceof CanonicalAuthorityUnavailableError) {
+      throw new HttpError(
+        503,
+        "Canonical auction authority is temporarily unavailable. Please retry in a moment.",
+        "upstream_unavailable",
+      );
+    }
+    throw err;
+  }
   if (!canonical) {
-    throw new Error(`Target not found in canonical catalogue: ${targetType} #${targetId}`);
+    throw new HttpError(404, `Target not found in canonical catalogue: ${targetType} #${targetId}`, "target_not_found");
   }
 
   const now = nowIso();
@@ -659,14 +630,37 @@ export async function evaluateDueReminders(input: EvaluateRemindersInput = {}): 
     evaluatedSubscriptions += 1;
 
     // Resolve canonical target record to ensure fresh schedule and live status
-    const canonical = await resolveCanonicalTarget(sub.target_type, sub.target_id);
-    const startsAtStr = canonical?.startsAt ?? sub.starts_at;
+    let canonical: CanonicalTarget | null = null;
+    try {
+      canonical = await resolveCanonicalTarget(sub.target_type, sub.target_id);
+    } catch (err) {
+      if (err instanceof CanonicalAuthorityUnavailableError) {
+        items.push({
+          subscriptionId: sub.id,
+          targetType: sub.target_type,
+          targetId: sub.target_id,
+          stage: "deferred_upstream_unavailable",
+          dispatched: false,
+          error: "Canonical authority temporarily unavailable (evaluation deferred)",
+        });
+        continue;
+      }
+      throw err;
+    }
+
+    // Suppress dispatch if canonical target is missing, draft, cancelled, or withdrawn
+    if (!canonical) {
+      suppressedUnsubscribed += 1;
+      continue;
+    }
+
+    const startsAtStr = canonical.startsAt;
     const startsMs = startsAtStr ? Date.parse(startsAtStr) : Number.NaN;
-    const title = canonical?.title ?? sub.title;
-    const eventId = canonical?.eventId ?? sub.event_id;
-    const sessionId = canonical?.sessionId ?? sub.session_id;
-    const auctionId = canonical?.auctionId ?? sub.auction_id;
-    const isActuallyLive = canonical ? canonical.isLive : false;
+    const title = canonical.title;
+    const eventId = canonical.eventId;
+    const sessionId = canonical.sessionId;
+    const auctionId = canonical.auctionId;
+    const isActuallyLive = canonical.isLive;
 
     const candidateStages: Array<{
       stage: string;

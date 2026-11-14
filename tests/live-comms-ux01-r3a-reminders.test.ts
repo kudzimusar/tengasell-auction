@@ -10,11 +10,15 @@ import path from "node:path";
 const TEST_DB_PATH = path.resolve(import.meta.dir, "../db/comms-test-r3a.db");
 process.env.COMMS_DB_PATH = TEST_DB_PATH;
 process.env.COMMS_ALLOW_EXTERNAL_R4 = "0"; // Strict R3A external provider lock ($0 spend)
+const TEST_INTERNAL_SECRET = "tgs_sec_r3a_test_credential_32chars_long";
+process.env.INTERNAL_COMMS_SECRET = TEST_INTERNAL_SECRET;
 
 import { db, run, all, get, execute, insert } from "../mini-services/comms-service/db";
 import { EVENTS, EVENT_KEYS, eventDef } from "../mini-services/comms-service/taxonomy";
 import { getTemplate, seedTemplates } from "../mini-services/comms-service/templates";
 import {
+  type CanonicalTarget,
+  CanonicalAuthorityUnavailableError,
   evaluateDueReminders,
   listReminderLedger,
   listSubscriptions,
@@ -27,7 +31,114 @@ import {
 import { isMock, providerLabels } from "../mini-services/comms-service/providers";
 import { emitEvent } from "../mini-services/comms-service/emit";
 import { handleRequest } from "../mini-services/comms-service/index";
-import { INTERNAL_COMMS_SECRET } from "../mini-services/comms-service/config";
+import {
+  BANNED_LEGACY_SECRETS,
+  getInternalCommsSecret,
+  isInternalSecretConfigured,
+  verifyInternalSecret,
+} from "../mini-services/comms-service/config";
+
+// Isolated test fixture catalogue strictly for unit tests in isolation
+const TEST_FIXTURE_CATALOGUE: Record<string, CanonicalTarget> = {
+  "event:901": {
+    targetType: "event",
+    targetId: "901",
+    eventId: 901,
+    lotId: null,
+    sessionId: 1,
+    auctionId: null,
+    title: "Harare Executive & Utility Fleet Live Auction",
+    startsAt: "2026-11-20T10:00:00Z",
+    status: "SCHEDULED",
+    isLive: false,
+  },
+  "event:902": {
+    targetType: "event",
+    targetId: "902",
+    eventId: 902,
+    lotId: null,
+    sessionId: 2,
+    auctionId: null,
+    title: "Weekend Hybrid & Passenger Showcase",
+    startsAt: "2026-11-21T10:00:00Z",
+    status: "SCHEDULED",
+    isLive: false,
+  },
+  "event:903": {
+    targetType: "event",
+    targetId: "903",
+    eventId: 903,
+    lotId: null,
+    sessionId: null,
+    auctionId: null,
+    title: "Event Cancelled Demonstration",
+    startsAt: "2026-11-22T10:00:00Z",
+    status: "CANCELLED",
+    isLive: false,
+  },
+  "lot:9401": {
+    targetType: "lot",
+    targetId: "9401",
+    eventId: 901,
+    lotId: 9401,
+    sessionId: 1,
+    auctionId: 9101,
+    title: "Lot #1 · 2021 Toyota Hilux Double Cab",
+    startsAt: "2026-11-20T10:00:00Z",
+    status: "READY",
+    isLive: false,
+  },
+  "lot:9101": {
+    targetType: "lot",
+    targetId: "9101",
+    eventId: 901,
+    lotId: 9401,
+    sessionId: 1,
+    auctionId: 9101,
+    title: "Lot #1 · 2021 Toyota Hilux Double Cab",
+    startsAt: "2026-11-20T10:00:00Z",
+    status: "READY",
+    isLive: false,
+  },
+  "lot:9402": {
+    targetType: "lot",
+    targetId: "9402",
+    eventId: 901,
+    lotId: 9402,
+    sessionId: 1,
+    auctionId: 9102,
+    title: "Lot #2 · 2022 Isuzu D-Max 3.0 Ddi V-Cross",
+    startsAt: "2026-11-20T10:30:00Z",
+    status: "READY",
+    isLive: false,
+  },
+  "lot:9102": {
+    targetType: "lot",
+    targetId: "9102",
+    eventId: 901,
+    lotId: 9402,
+    sessionId: 1,
+    auctionId: 9102,
+    title: "Lot #2 · 2022 Isuzu D-Max 3.0 Ddi V-Cross",
+    startsAt: "2026-11-20T10:30:00Z",
+    status: "READY",
+    isLive: false,
+  },
+  "auction:9101": {
+    targetType: "auction",
+    targetId: "9101",
+    eventId: null,
+    lotId: null,
+    sessionId: 1,
+    auctionId: 9101,
+    title: "2021 Toyota Hilux Double Cab 2.8 GD-6 4x4",
+    startsAt: "2026-11-20T10:00:00Z",
+    status: "live",
+    isLive: true,
+  },
+};
+
+const testFixtureResolver = (type: string, id: string) => TEST_FIXTURE_CATALOGUE[`${type}:${id}`] ?? null;
 
 describe("TENGASELL-LIVE-COMMS-UX-01 R3A First-Party Reminders & Subscriptions", () => {
   beforeAll(() => {
@@ -38,7 +149,7 @@ describe("TENGASELL-LIVE-COMMS-UX-01 R3A First-Party Reminders & Subscriptions",
     run("DELETE FROM auction_subscriptions;");
     run("DELETE FROM reminder_dispatch_ledger;");
     run("DELETE FROM outbound_queue;");
-    setCustomTargetResolver(null);
+    setCustomTargetResolver(testFixtureResolver);
   });
 
   afterAll(() => {
@@ -370,8 +481,41 @@ describe("TENGASELL-LIVE-COMMS-UX-01 R3A First-Party Reminders & Subscriptions",
     expect(liveEval.items[0].stage).toBe("live_now");
   });
 
-  test("6. P0-B Network Boundary & Service Authentication (R3A-AUTH-01)", async () => {
-    // Direct call without internal token -> 401
+  test("6. P0-B Network Boundary & Service Authentication (R3A-AUTH-01 & R4A-COMMS-AUTH-01)", async () => {
+    // A. Secret Hygiene & Constant-Time Validation
+    expect(isInternalSecretConfigured()).toBe(true);
+    expect(getInternalCommsSecret()).toBe(TEST_INTERNAL_SECRET);
+    expect(verifyInternalSecret(TEST_INTERNAL_SECRET)).toBe(true);
+    expect(verifyInternalSecret("")).toBe(false);
+    expect(verifyInternalSecret(null)).toBe(false);
+    expect(verifyInternalSecret(undefined)).toBe(false);
+    expect(verifyInternalSecret("wrong_secret_1234567890")).toBe(false);
+
+    // Banned legacy secrets must fail closed
+    for (const banned of BANNED_LEGACY_SECRETS) {
+      process.env.INTERNAL_COMMS_SECRET = banned;
+      expect(isInternalSecretConfigured()).toBe(false);
+      expect(getInternalCommsSecret()).toBeNull();
+      expect(verifyInternalSecret(banned)).toBe(false);
+    }
+
+    // Short secret (< 16 chars) must fail closed
+    process.env.INTERNAL_COMMS_SECRET = "short_secret_12";
+    expect(isInternalSecretConfigured()).toBe(false);
+    expect(getInternalCommsSecret()).toBeNull();
+    expect(verifyInternalSecret("short_secret_12")).toBe(false);
+
+    // Unset secret must fail closed
+    delete process.env.INTERNAL_COMMS_SECRET;
+    expect(isInternalSecretConfigured()).toBe(false);
+    expect(getInternalCommsSecret()).toBeNull();
+    expect(verifyInternalSecret(TEST_INTERNAL_SECRET)).toBe(false);
+
+    // Restore valid secret for request boundary verification
+    process.env.INTERNAL_COMMS_SECRET = TEST_INTERNAL_SECRET;
+    expect(isInternalSecretConfigured()).toBe(true);
+
+    // B. Request Boundary: Missing internal token -> 401
     const unauthedReq = new Request("http://127.0.0.1:3005/me/subscriptions", {
       headers: { "x-tgs-user": "takudzwa" },
     });
@@ -392,15 +536,40 @@ describe("TENGASELL-LIVE-COMMS-UX-01 R3A First-Party Reminders & Subscriptions",
     const invalidSecretRes = await handleRequest(invalidSecretReq);
     expect(invalidSecretRes.status).toBe(401);
 
-    // Valid internal token + user header -> 200
+    // Valid internal token but missing x-tgs-user on /me/* -> 401
+    const missingUserReq = new Request("http://127.0.0.1:3005/me/subscriptions", {
+      headers: { "x-tgs-internal-token": TEST_INTERNAL_SECRET },
+    });
+    const missingUserRes = await handleRequest(missingUserReq);
+    expect(missingUserRes.status).toBe(401);
+
+    // Valid internal token + non-admin on /admin/* -> 401
+    const nonAdminReq = new Request("http://127.0.0.1:3005/admin/queue", {
+      headers: { "x-tgs-user": "normal_user", "x-tgs-internal-token": TEST_INTERNAL_SECRET },
+    });
+    const nonAdminRes = await handleRequest(nonAdminReq);
+    expect(nonAdminRes.status).toBe(401);
+
+    // Legitimate authenticated BFF user request -> 200
     const validReq = new Request("http://127.0.0.1:3005/me/subscriptions", {
       headers: {
         "x-tgs-user": "takudzwa",
-        "x-tgs-internal-token": INTERNAL_COMMS_SECRET,
+        "x-tgs-internal-token": TEST_INTERNAL_SECRET,
       },
     });
     const validRes = await handleRequest(validReq);
     expect(validRes.status).toBe(200);
+
+    // Legitimate authenticated BFF admin request -> 200
+    const validAdminReq = new Request("http://127.0.0.1:3005/admin/queue", {
+      headers: {
+        "x-tgs-user": "admin_user",
+        "x-tgs-admin": "1",
+        "x-tgs-internal-token": TEST_INTERNAL_SECRET,
+      },
+    });
+    const validAdminRes = await handleRequest(validAdminReq);
+    expect(validAdminRes.status).toBe(200);
 
     // Public health check does not require secret -> 200
     const healthReq = new Request("http://127.0.0.1:3005/health");
@@ -503,7 +672,7 @@ describe("TENGASELL-LIVE-COMMS-UX-01 R3A First-Party Reminders & Subscriptions",
     expect(draftError).toBe(true);
 
     // Valid target derives canonical title, schedule, and IDs
-    setCustomTargetResolver(null); // Return to default seed resolver
+    setCustomTargetResolver(testFixtureResolver); // Return to test fixture resolver
     const validSub = await upsertSubscription(userId, {
       targetType: "event",
       targetId: "901",
@@ -544,5 +713,158 @@ describe("TENGASELL-LIVE-COMMS-UX-01 R3A First-Party Reminders & Subscriptions",
     expect(files.length).toBe(16);
     expect(files.some((f) => f.includes("U1000000017"))).toBe(false);
     expect(files.some((f) => f.includes("U1000000025"))).toBe(false);
+  });
+
+  test("11. Webhook Isolation & Provider Callbacks Security", async () => {
+    // Mock telegram callback without internal token -> 401
+    const untrustedMockReq = new Request("http://127.0.0.1:3005/hooks/mock/telegram/123", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "START" }),
+    });
+    const untrustedMockRes = await handleRequest(untrustedMockReq);
+    expect(untrustedMockRes.status).toBe(401);
+
+    // Delivery callback without internal token -> 401
+    const untrustedDeliveryReq = new Request("http://127.0.0.1:3005/hooks/delivery", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ queueId: 1, event: "delivered" }),
+    });
+    const untrustedDeliveryRes = await handleRequest(untrustedDeliveryReq);
+    expect(untrustedDeliveryRes.status).toBe(401);
+
+    // External WhatsApp webhook with no WHATSAPP_APP_SECRET configured -> 403 provider_disabled
+    const waReq = new Request("http://127.0.0.1:3005/hooks/whatsapp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entry: [] }),
+    });
+    const waRes = await handleRequest(waReq);
+    expect(waRes.status).toBe(403);
+
+    // External Telegram webhook in mock mode -> 403 provider_disabled
+    const tgReq = new Request("http://127.0.0.1:3005/hooks/telegram", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ update_id: 1 }),
+    });
+    const tgRes = await handleRequest(tgReq);
+    expect(tgRes.status).toBe(403);
+  });
+
+  test("12. P0 Canonical Authority Failure Semantics & Outage Deferral (R4A-REMINDER-TRUTH-02)", async () => {
+    const userId = "test-authority-actor";
+
+    // 1. TrailBase 503 / Network Failure during subscription upsert -> fails with 503
+    setCustomTargetResolver(() => {
+      throw new CanonicalAuthorityUnavailableError("TrailBase HTTP 503 Service Unavailable");
+    });
+
+    let upsertStatus = 0;
+    try {
+      await upsertSubscription(userId, {
+        targetType: "event",
+        targetId: "901",
+      });
+    } catch (err: any) {
+      upsertStatus = err.status || 0;
+    }
+    expect(upsertStatus).toBe(503);
+
+    // 2. TrailBase 503 during reminder evaluation -> evaluation is DEFERRED, never dispatches from stale metadata
+    // First, insert an active subscription directly to test evaluation behavior during outage
+    const now = "2026-11-15T10:00:00Z";
+    insert(
+      `INSERT INTO auction_subscriptions(
+         user_id, target_type, target_id, title, starts_at, status, channels_json, notify_24h, notify_1h, notify_live, created_at, updated_at
+       ) VALUES(?, 'event', '901', 'Test Event', '2026-11-15T10:30:00Z', 'active', '["in_app"]', 1, 1, 1, ?, ?)`,
+      [userId, now, now],
+    );
+
+    // Running evaluateDueReminders while TrailBase is throwing CanonicalAuthorityUnavailableError
+    const deferredEval = await evaluateDueReminders({
+      nowIso: "2026-11-15T10:05:00Z",
+      userId,
+    });
+    expect(deferredEval.dispatched).toBe(0);
+    expect(deferredEval.items.length).toBe(1);
+    expect(deferredEval.items[0].stage).toBe("deferred_upstream_unavailable");
+    expect(deferredEval.items[0].dispatched).toBe(false);
+
+    // 3. Target returning null (404, or DRAFT/CANCELLED/WITHDRAWN) -> suppressed, never dispatched
+    setCustomTargetResolver(() => null);
+    const suppressedEval = await evaluateDueReminders({
+      nowIso: "2026-11-15T10:05:00Z",
+      userId,
+    });
+    expect(suppressedEval.dispatched).toBe(0);
+    expect(suppressedEval.suppressedUnsubscribed).toBe(1);
+
+    // 4. Outage Recovery -> TrailBase recovers and returns fresh canonical record
+    setCustomTargetResolver((type, id) => ({
+      targetType: "event",
+      targetId: "901",
+      eventId: 901,
+      lotId: null,
+      sessionId: 1,
+      auctionId: null,
+      title: "Recovered Event Authority",
+      startsAt: "2026-11-15T10:30:00Z", // 25 mins away -> starting_1h
+      status: "SCHEDULED",
+      isLive: false,
+    }));
+
+    const recoveredEval = await evaluateDueReminders({
+      nowIso: "2026-11-15T10:05:00Z",
+      userId,
+    });
+    expect(recoveredEval.dispatched).toBe(1);
+    expect(recoveredEval.items[0].stage).toBe("starting_1h");
+  });
+
+  test("13. Authoritative Server Clock Enforcement on Customer Endpoint (R4A-REMINDER-CLOCK-03)", async () => {
+    const userId = "test-clock-actor";
+    const eventTime = new Date(Date.now() + 5 * 24 * 3600_000).toISOString(); // 5 days in future
+
+    setCustomTargetResolver((type, id) => ({
+      targetType: "event",
+      targetId: "905",
+      eventId: 905,
+      lotId: null,
+      sessionId: 1,
+      auctionId: null,
+      title: "Far Future Event",
+      startsAt: eventTime,
+      status: "SCHEDULED",
+      isLive: false,
+    }));
+
+    await upsertSubscription(userId, {
+      targetType: "event",
+      targetId: "905",
+      notify1h: true,
+      notify24h: true,
+      notifyLive: true,
+    });
+
+    // Customer attempts to inject a future nowIso into POST /me/reminders/evaluate to trigger reminders prematurely
+    const clientTimeTravelReq = new Request("http://127.0.0.1:3005/me/reminders/evaluate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-tgs-user": userId,
+        "x-tgs-internal-token": TEST_INTERNAL_SECRET,
+      },
+      body: JSON.stringify({
+        nowIso: new Date(Date.now() + 5 * 24 * 3600_000 - 30 * 60_000).toISOString(), // 30 min before start
+      }),
+    });
+
+    const res = await handleRequest(clientTimeTravelReq);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    // Because customer-supplied nowIso was ignored and the authoritative server clock was used, 0 reminders were dispatched
+    expect(body.dispatched).toBe(0);
   });
 });

@@ -249,7 +249,13 @@ export function projectPublicVehicleBundle(bundle: any) {
       verified_at: d.verified_at ?? null,
     }))
 
-  const safeInspection = bundle.inspection
+  const isInspectionPublished =
+    Boolean(bundle.inspection) &&
+    (bundle.inspection.lifecycle === "REVIEWED" ||
+      bundle.inspection.lifecycle === "COMPLETED" ||
+      bundle.inspection.lifecycle === "VERIFIED");
+
+  const safeInspection = isInspectionPublished
     ? {
         id: bundle.inspection.id,
         vehicle_id: bundle.inspection.vehicle_id,
@@ -262,16 +268,17 @@ export function projectPublicVehicleBundle(bundle: any) {
         odometer_reading: bundle.inspection.odometer_reading ?? null,
         roadworthy: bundle.inspection.roadworthy ?? null,
       }
-    : null
+    : null;
 
-  const safeFindings = (bundle.findings || []).map((f: any) => ({
-    id: f.id,
-    inspection_id: f.inspection_id,
-    component: f.component,
-    severity: f.severity,
-    description: f.description,
-    photos: f.photos ?? null,
-  }))
+  const safeFindings = isInspectionPublished
+    ? (bundle.findings || []).map((f: any) => ({
+        id: f.id,
+        inspection_id: f.inspection_id,
+        component: f.component,
+        severity: f.severity,
+        description: f.description,
+      }))
+    : [];
 
   return {
     vehicle: publicVehicle,
@@ -281,9 +288,9 @@ export function projectPublicVehicleBundle(bundle: any) {
     findings: safeFindings,
     eligibility: null,
     eligibilityReasons: [],
-    provenance: bundle.provenance ?? {},
+    provenance: {},
     permissions: bundle.permissions,
-  }
+  };
 }
 
 export async function vehicleBundle(
