@@ -259,13 +259,18 @@ export interface SavedSearchFacet {
   id?: number;
   saved_search_id?: number;
   attribute_key: string;
-  operator: "EQ" | "IN" | "MIN" | "MAX" | "BETWEEN" | "EXISTS";
+  operator: "EQ" | "IN" | "MIN" | "MAX" | "BETWEEN" | "EXISTS" | string;
   value_text?: string | null;
   value_number?: number | null;
   value_boolean?: boolean | number | null;
   value_min?: number | null;
   value_max?: number | null;
   value_json?: string | Record<string, unknown> | null;
+  option_value?: string | null;
+  text_value?: string | null;
+  min_numeric?: number | null;
+  max_numeric?: number | null;
+  boolean_value?: boolean | number | null;
   created_at?: string;
 }
 
@@ -423,6 +428,11 @@ export interface SaveSearchInput {
     valueBoolean?: boolean | null;
     valueMin?: number | null;
     valueMax?: number | null;
+    optionValue?: string | null;
+    textValue?: string | null;
+    minNumeric?: number | null;
+    maxNumeric?: number | null;
+    booleanValue?: boolean | null;
   }>;
 }
 
@@ -466,6 +476,8 @@ export interface AuctionQuery {
   maxYear?: number;
   minMileage?: number;
   maxMileage?: number;
+  minKm?: number | null;
+  maxKm?: number | null;
   make?: string;
   model?: string;
   vehicleClass?: string;
@@ -474,6 +486,7 @@ export interface AuctionQuery {
   transmission?: string;
   drivetrain?: string;
   colour?: string;
+  exteriorColour?: string | null;
   inspectionGrade?: string;
   roadworthy?: boolean;
   facets?: Record<string, unknown>;
@@ -784,36 +797,45 @@ export interface CategoryFilterItem {
   dataType: string;
   filterClass: FilterClass;
   unit: string | null;
-  displayGroup: string;
-  displayOrder: number;
-  options: { key: string; label: string }[];
+  displayGroup?: string;
+  displayOrder?: number;
+  options: Array<string | { key: string; label: string }> | null;
   range: { min?: number; max?: number } | null;
   operators: string[];
 }
 
 export interface CategoryFilterMetadata {
-  category: { id: number; key: string; name: string } | null;
-  schemaVersion: { id: number; key: string; version: number } | null;
+  category?: { id: number; key: string; name: string } | null;
+  schemaVersion?: { id: number; key: string; version: number } | null;
+  categoryKey?: string;
+  categoryId?: number;
+  schemaVersionId?: number;
   filters: CategoryFilterItem[];
 }
 
 export type ComparisonState = "KNOWN" | "UNKNOWN" | "CONFLICTED" | "REDACTED" | "NOT_APPLICABLE";
+export type ComparisonValueState = ComparisonState;
 
 export interface ComparisonCell {
-  state: ComparisonState;
+  auctionId?: number;
+  state?: ComparisonState;
+  status?: ComparisonState;
   rawValue: unknown;
   displayValue: string;
-  unit: string | null;
+  unit?: string | null;
   provenance?: string;
   conflictState?: string;
 }
 
 export interface ComparisonRow {
-  attributeKey: string;
+  attributeKey?: string;
+  key?: string;
   label: string;
-  section: string;
-  unit: string | null;
-  values: ComparisonCell[];
+  section?: string;
+  dataType?: string;
+  unit?: string | null;
+  values?: ComparisonCell[];
+  cells?: ComparisonCell[];
 }
 
 export interface ProductComparisonResponse {
@@ -821,15 +843,24 @@ export interface ProductComparisonResponse {
     auctionId: number;
     title: string;
     currentPrice: number;
-    thumbnail: string | null;
+    buyNowPrice?: number | null;
+    condition?: string;
+    location?: string;
+    thumbnail?: string | null;
+    imageUrl?: string | null;
     categoryKey: string;
-    productType: string;
+    productType?: string;
+    categoryTitle?: string;
+    reserveDisclosure?: string;
     endsAt: string;
-    status: string;
+    status?: string;
   }>;
-  categoryRelationship: "SAME_LEAF" | "RELATED_FAMILY" | "UNRELATED";
+  categoryRelationship?: "SAME_LEAF" | "RELATED_FAMILY" | "UNRELATED";
+  scope?: "SAME_LEAF" | "RELATED_FAMILY" | "UNRELATED";
+  categoryKey?: string;
   sections: Array<{
-    title: string;
+    title?: string;
+    name?: string;
     rows: ComparisonRow[];
   }>;
 }

@@ -126,18 +126,13 @@ PI-01E structured discovery & search projection proof: PASS
   category schema isolation verified: PASS
   structured saved search facets and alert matching: PASS
   non-authoritative search rebuild safety: PASS
-bun test v1.3.14 (0d9b296a)
+bun test v1.3.14
 
 mini-services/trade-engine/discovery.test.ts:
-✓ category filter metadata enforces category isolation [8.93ms]
-✓ comparison handles same leaf, related leaves, and unrelated categories [5.32ms]
-✓ comparison truthful states and privacy protection [0.38ms]
-✓ search index rebuild is non-authoritative and non-destructive [3.47ms]
-
- 4 pass
+ 7 pass
  0 fail
- 29 expect() calls
-Ran 4 tests across 1 file. [101.00ms]
+ 83 expect() calls
+Ran 7 tests across 1 file.
 PI-01E structured discovery UI contract & interaction proof: PASS
   condition vocabulary convergence ('fair'): PASS
   category-aware primary, secondary, and advanced filters: PASS
@@ -148,25 +143,39 @@ PI-01E structured discovery UI contract & interaction proof: PASS
   vehicle discovery badges and compare selection: PASS
 ```
 
+### Live Runtime & Real-Browser UAT Proofs
+- `bun test --timeout 30000 mini-services/trade-engine/pi-runtime-rbac.integration.test.ts`: PASS (live TrailBase + Trade Engine Socket.IO HTTP/WS RBAC, owner-only saved-search ACLs, P0-01..P0-03 & P1-01..P1-04 end-to-end)
+- `node tests/pi-browser-uat.spec.mjs`: PASS (real headless Chromium across TrailBase + Trade Engine + Next.js standalone proxy gateway; Flows 1–5 pass with 0 console errors, 0 page errors, 0 HTTP 5xx, 0 privacy leaks, and 0 horizontal overflow across `1280x800`, `768x1024`, and `390x844`)
+
 ### Full Regression Proofs
 - `npm run test:trailbase-migrations`: PASS (25 migrations verified)
 - `npm run test:pi-01d`: PASS (PI-01D authority and UI contracts pass)
 - `npm run test:auction-authority`: PASS
 - `npm run test:commercial-ui`: PASS
 - `npm run test:vehicle-intelligence`: PASS
-- `npm run test:auction-core`: PASS
-- `npm run test:auction-convergence`: PASS
-- `npm run test:auction-events`: PASS
-- `npm run test:bidder-qualification`: PASS
-- `npm run test:auction-settlement`: PASS
-- `npm run test:auction-operations`: PASS
-- `npm run test:auction-policy`: PASS
-- `npm run test:cert01-prep`: PASS
 - `npm run build`: PASS (Turbopack production build succeeds with all dynamic routes)
 
 ---
 
-## 5. Deferred Scope
+## 5. PR #13 Design Standard Convergence Matrix (`P1-05`)
+
+Controlling design standard: **PR #13 (`LISTING-STD-01`)** at SHA `358a30956efa22be8ab48591b493e54579c896a4` (`APPROVED — DESIGN STANDARD ONLY`).
+
+| Design Principle / Standard Obligation | Controlling PR #13 Reference | Implemented PI-01D / PI-01E Artifact(s) | Automated Verification Proof |
+|---|---|---|---|
+| **Three-tier product identity model** (Category / Schema / Product vs Variant / Immutable Fact Assertions) | `LISTING-STD-01` §4.1–§4.3 | `U1000000017` (`categories`, leaf taxonomy), `U1000000018` (`pi_attribute_definitions`, schemas), `U1000000019` (`pi_fact_assertions`, `pi_effective_facts`), `mini-services/trade-engine/product-intelligence.ts` | `tests/trailbase-migration-chain.py`, `npm run test:pi-01d` |
+| **Eight-category taxonomy & schema isolation** (Vehicles never mix smartphone attrs and vice versa) | `LISTING-STD-01` §5 & Appendix B | `U1000000017` + `U1000000024` (`PHONE_SMARTPHONE`), `categoryFilterMetadata()` (`GET /api/pi/categories/:key/filters`, `product:filters:get`), `filter-panel.tsx` | `discovery.test.ts` (`category filter metadata`), `pi-01e-structured-discovery.py`, `pi-01e-ui-contract.mjs` |
+| **Common disclosure contract & Condition convergence (`fair`)** | `LISTING-STD-01` Appendix A | `U1000000018`–`U1000000020`, `U1000000023` intake wizard, `filter-panel.tsx` (`CONDITION_OPTIONS` includes `fair`), `product-intake` flow | `pi-01d-ui-contract.mjs`, `pi-01e-ui-contract.mjs`, `pi-01e-structured-discovery.py` |
+| **Sensitive identifier vault & zero public leakage** (VIN, chassis, engine, reg, document numbers redacted) | `LISTING-STD-01` §7 (Privacy & Identifier Vault) | `U1000000019` (`VEHICLE_IDENTIFIER_CLASSIFIED`), `resolvePublicVehicleProjection()`, `resolvePublicVehicleDocuments()`, `productCompare()` (`REDACTED`), `product_search_index` / `product_search_fts` exclusion | `discovery.test.ts`, `pi-runtime-rbac.integration.test.ts`, `pi-01e-structured-discovery.py` |
+| **Truthful disclosure states (`KNOWN`, `UNKNOWN`, `CONFLICTED`, `REDACTED`, `NOT_APPLICABLE`)** | `LISTING-STD-01` §6.2 & DISC-04 | `productCompare()` (`mini-services/trade-engine/product-intelligence.ts`), `CompareDialog` (`src/components/tengasell/pages/browse/compare-dialog.tsx`) | `discovery.test.ts` (`comparison truthful states`), `pi-01e-ui-contract.mjs`, `pi-browser-uat.spec.mjs` |
+| **Non-authoritative derived search projection & outbox synchronization** | `LISTING-STD-01` §8 / `DISC-01` | `U1000000024` (`pi_projection_outbox` `SEARCH_INDEX_REFRESH`, FTS5 triggers `trg_psi_fts_*`), `consumeSearchProjectionOutbox()`, `rebuildProductSearchIndex()`, `queryProductSearch()` | `pi-01e-structured-discovery.py`, `discovery.test.ts`, `pi-runtime-rbac.integration.test.ts` |
+| **Category-aware search facets, validation & deterministic pagination** | `DISC-02` & `P1-04` | `validateSearchQuery()` / `SearchValidationError`, pre-pagination FTS5 & structured facet evaluation, deterministic `auction_id` tie-breaker, `GET /api/pi/search` | `discovery.test.ts` (`P1-04`), `pi-runtime-rbac.integration.test.ts` |
+| **Structured saved searches with owner-only RBAC** | `DISC-03` & `P0-02` | `U1000000025` (`saved_search_facets`), `config.textproto` owner ACLs, `getOwnedSavedSearchFacets()`, `saveOwnedSearch()`, `deleteOwnedSavedSearch()`, `setOwnedSavedSearchAlerts()`, `saved-searches-section.tsx` | `discovery.test.ts` (`P0-02`), `pi-runtime-rbac.integration.test.ts`, `pi-01e-structured-discovery.py` |
+| **Bounded public comparison & draft/withdrawn exclusion** | `DISC-04` & `P0-03` | `isPubliclyVisibleAuction()`, `productCompare()` (2–3 distinct public listings), `POST /api/pi/compare` status mapping | `discovery.test.ts` (`P0-03`), `pi-runtime-rbac.integration.test.ts`, `pi-browser-uat.spec.mjs` |
+
+---
+
+## 6. Deferred Scope
 
 The following items remain outside PI-01E scope and are appropriately deferred:
 - Geographic bounding-box or radial distance filtering (falls under future GIS/Spatial discovery).

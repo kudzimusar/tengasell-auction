@@ -72,7 +72,7 @@ function SearchBar({ autoFocus = false }: { autoFocus?: boolean }) {
   };
 
   return (
-    <div className="relative flex-1 max-w-2xl mx-2">
+    <div className="relative flex-1 min-w-0 max-w-2xl mx-1 sm:mx-2">
       <form
         role="search"
         onSubmit={(e) => {
@@ -616,16 +616,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="mx-auto max-w-7xl px-2 sm:px-4 flex items-center gap-1 min-h-16">
           <a
             href="#/"
-            className="flex items-center min-h-11 px-1 rounded-control"
+            className="flex items-center min-h-11 px-1 rounded-control shrink-0"
             aria-label="Tengasell home"
           >
             <TengaLogo size={34} wordmarkClassName="max-[440px]:hidden" />
           </a>
-          <div className="hidden sm:flex flex-1 justify-center">
+          <div className="hidden sm:flex flex-1 min-w-0 justify-center">
             <SearchBar />
           </div>
           <div className="flex-1 sm:hidden" />
-          <div className="flex items-center gap-0.5">
+          <div className="flex items-center gap-0.5 shrink-0">
             <button
               onClick={() => setMobileSearch(!mobileSearch)}
               className="sm:hidden size-11 grid place-items-center rounded-control hover:bg-accent/60 transition-colors"

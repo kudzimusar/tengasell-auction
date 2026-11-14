@@ -62,16 +62,24 @@ import {
   vehicleBundle,
 } from "./vehicle-authority";
 import {
+  ProductIntelligenceError,
   categoryFilterMetadata,
+  deleteOwnedSavedSearch,
+  getOwnedSavedSearchFacets,
   intakeSession,
+  listOwnedSavedSearches,
   openProductIntake,
   productCompare,
   productSchema,
   publicProductBundle,
   publishIntake,
   saveIntakeStep,
+  saveOwnedSearch,
+  setOwnedSavedSearchAlerts,
 } from "./product-intelligence";
 import {
+  SearchValidationError,
+  consumeSearchProjectionOutbox,
   queryProductSearch,
   rebuildProductSearchIndex,
   refreshAuctionSearch,
@@ -229,11 +237,45 @@ async function updateRecord(table: string, id: number | string, patch: unknown):
   return res.ok;
 }
 
+async function deleteRecord(table: string, id: number | string): Promise<boolean> {
+  const res = await tb("DELETE", `/api/records/v1/${table}/${id}`);
+  return res.ok;
+}
+
+async function searchFtsRecords(rawQuery: string): Promise<number[] | null> {
+  const dataDir = resolveTrailBaseDataDir();
+  if (!dataDir) return null;
+  const tokens = String(rawQuery ?? "")
+    .trim()
+    .split(/[\s\-_/.,:;]+/)
+    .map((t) => t.replace(/[^\p{L}\p{N}_]/gu, ""))
+    .filter((t) => t.length > 0);
+  if (tokens.length === 0) return [];
+  const ftsQuery = tokens.map((t) => `"${t}"*`).join(" AND ");
+  try {
+    const mainDb = new Database(path.join(dataDir, "main.db"), { readonly: true });
+    try {
+      mainDb.exec("PRAGMA busy_timeout = 2000;");
+      const rows = mainDb
+        .query("SELECT auction_id FROM product_search_fts WHERE product_search_fts MATCH ? ORDER BY bm25(product_search_fts) LIMIT 5000")
+        .all(ftsQuery) as Array<{ auction_id: number }>;
+      return rows.map((r) => Number(r.auction_id));
+    } finally {
+      mainDb.close();
+    }
+  } catch (err) {
+    console.warn("[searchFts]", err);
+    return null;
+  }
+}
+
 const auctionCoreStore = {
   create: createRecord,
   get: getRecord,
   list: getRecords,
   update: updateRecord,
+  remove: deleteRecord,
+  searchFts: searchFtsRecords,
 };
 
 function nowIso(): string {
@@ -910,21 +952,9 @@ async function publishAuctionCoreEvent(event: AuctionOutboxEnvelope): Promise<vo
 
 async function drainPiProjectionOutbox(): Promise<void> {
   try {
-    const events = await getRecords("pi_projection_outbox", "order=id&limit=50");
-    for (const evt of events) {
-      if (evt.product_type === "AUCTION" || evt.product_type === "VEHICLE") {
-        let auctionId = Number(evt.product_id);
-        if (evt.product_type === "VEHICLE") {
-          const veh = await getRecord("vehicles", evt.product_id);
-          auctionId = Number(veh?.auction_id ?? 0);
-        }
-        if (auctionId > 0) {
-          await refreshAuctionSearch(auctionCoreStore, auctionId);
-        }
-      }
-    }
-  } catch (e) {
-    /* best effort */
+    await consumeSearchProjectionOutbox(auctionCoreStore, { limit: 100 });
+  } catch (err) {
+    console.error("[pi-projection-outbox]", err);
   }
 }
 
@@ -1098,7 +1128,8 @@ function matchesSearch(a: any, ss: any, facets: any[] = [], psi: any = null): bo
       switch (key) {
         case "MAKE": actualValue = psi.make; break;
         case "MODEL": actualValue = psi.model; break;
-        case "MODEL_YEAR": actualValue = psi.year; break;
+        case "MODEL_YEAR":
+        case "YEAR": actualValue = psi.year; break;
         case "ODOMETER_KM": actualValue = psi.mileage; break;
         case "BODY_TYPE": actualValue = psi.body_type; break;
         case "VEHICLE_CLASS": actualValue = psi.vehicle_class; break;
@@ -1132,12 +1163,16 @@ function matchesSearch(a: any, ss: any, facets: any[] = [], psi: any = null): bo
         } catch { /* ignore */ }
         if (!allowed.includes(String(actualValue).toLowerCase())) return false;
         break;
-      case "MIN":
-        if (f.value_number != null && Number(actualValue) < Number(f.value_number)) return false;
+      case "MIN": {
+        const minBound = f.value_min ?? f.value_number;
+        if (minBound != null && Number(actualValue) < Number(minBound)) return false;
         break;
-      case "MAX":
-        if (f.value_number != null && Number(actualValue) > Number(f.value_number)) return false;
+      }
+      case "MAX": {
+        const maxBound = f.value_max ?? f.value_number;
+        if (maxBound != null && Number(actualValue) > Number(maxBound)) return false;
         break;
+      }
       case "BETWEEN":
         if (f.value_min != null && Number(actualValue) < Number(f.value_min)) return false;
         if (f.value_max != null && Number(actualValue) > Number(f.value_max)) return false;
@@ -1426,7 +1461,10 @@ io.on("connection", (socket: Socket) => {
     try {
       const res = await queryProductSearch(auctionCoreStore, data?.query ?? {});
       ack?.({ ok: true, ...res });
-    } catch (err) {
+    } catch (err: any) {
+      if (err instanceof SearchValidationError) {
+        return ack?.({ ok: false, code: err.code, error: err.message });
+      }
       console.error("[product:search:query]", err);
       ack?.({ ok: false, error: "Search query failed." });
     }
@@ -1436,7 +1474,10 @@ io.on("connection", (socket: Socket) => {
     try {
       const res = await productCompare(auctionCoreStore, data?.auctionIds ?? []);
       ack?.({ ok: true, comparison: res });
-    } catch (err) {
+    } catch (err: any) {
+      if (err instanceof ProductIntelligenceError) {
+        return ack?.({ ok: false, code: err.code, error: err.message });
+      }
       console.error("[product:compare]", err);
       ack?.({ ok: false, error: "Product comparison failed." });
     }
@@ -1447,20 +1488,38 @@ io.on("connection", (socket: Socket) => {
       const user = await requireAuth();
       if (!user?.admin) return ack?.({ ok: false, error: "Admin authority required to rebuild search index." });
       const res = await rebuildProductSearchIndex(auctionCoreStore);
-      ack?.({ ok: true, count: res.count });
+      ack?.({ ok: true, count: res.count, removed: res.removed });
     } catch (err) {
       console.error("[product:search:rebuild]", err);
       ack?.({ ok: false, error: "Search rebuild failed." });
     }
   });
 
+  socket.on("saved-search:list", async (_data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, code: "AUTH_REQUIRED", error: "Sign in to view saved searches." });
+      const savedSearches = await listOwnedSavedSearches(auctionCoreStore, user);
+      ack?.({ ok: true, savedSearches });
+    } catch (err: any) {
+      if (err instanceof ProductIntelligenceError) {
+        return ack?.({ ok: false, code: err.code, error: err.message });
+      }
+      console.error("[saved-search:list]", err);
+      ack?.({ ok: false, error: "Saved searches could not be loaded." });
+    }
+  });
+
   socket.on("saved-search:facets:get", async (data: any, ack?: Ack) => {
     try {
-      const searchId = Number(data?.savedSearchId);
-      if (!searchId) return ack?.({ ok: false, error: "Saved search id is required." });
-      const facets = await getRecords("saved_search_facets", `filter[saved_search_id][$eq]=${searchId}&limit=50`);
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, code: "AUTH_REQUIRED", error: "Sign in to view saved search facets." });
+      const facets = await getOwnedSavedSearchFacets(auctionCoreStore, user, Number(data?.savedSearchId));
       ack?.({ ok: true, facets });
-    } catch (err) {
+    } catch (err: any) {
+      if (err instanceof ProductIntelligenceError) {
+        return ack?.({ ok: false, code: err.code, error: err.message });
+      }
       console.error("[saved-search:facets:get]", err);
       ack?.({ ok: false, error: "Saved search facets could not be loaded." });
     }
@@ -1470,47 +1529,49 @@ io.on("connection", (socket: Socket) => {
     try {
       const user = await requireAuth();
       if (!user) return ack?.({ ok: false, code: "AUTH_REQUIRED", error: "Sign in to save searches." });
-      const input = data?.search ?? {};
-      const searchId = await createRecord("saved_searches", {
-        user: user.id,
-        name: clean(input.name, 100),
-        query: input.query ? clean(input.query, 120) : null,
-        category: input.category ? clean(input.category, 80) : null,
-        product_category_id: input.productCategoryId ? Number(input.productCategoryId) : null,
-        product_schema_version_id: input.productSchemaVersionId ? Number(input.productSchemaVersionId) : null,
-        category_key: input.categoryKey ? clean(input.categoryKey, 80) : null,
-        min_price: input.minPrice != null ? Number(input.minPrice) : null,
-        max_price: input.maxPrice != null ? Number(input.maxPrice) : null,
-        alerts: input.alerts === false ? 0 : 1,
-        last_seen_id: 0,
-        created_at: nowIso(),
-        updated_at: nowIso(),
-      });
-      if (!searchId) return ack?.({ ok: false, error: "Could not save search." });
-
-      const facets = Array.isArray(input.facets) ? input.facets : [];
-      for (const f of facets) {
-        if (!f.attributeKey || !f.operator) continue;
-        await createRecord("saved_search_facets", {
-          saved_search_id: searchId,
-          attribute_key: clean(f.attributeKey, 80).toUpperCase(),
-          operator: clean(f.operator, 20).toUpperCase(),
-          value_text: f.valueText != null ? clean(f.valueText, 200) : null,
-          value_number: f.valueNumber != null ? Number(f.valueNumber) : null,
-          value_boolean: f.valueBoolean != null ? (f.valueBoolean ? 1 : 0) : null,
-          value_min: f.valueMin != null ? Number(f.valueMin) : null,
-          value_max: f.valueMax != null ? Number(f.valueMax) : null,
-          value_json: JSON.stringify(f.valueJson ?? {}),
-          created_at: nowIso(),
-        });
+      const savedSearch = await saveOwnedSearch(auctionCoreStore, user, data?.search ?? {});
+      ack?.({ ok: true, savedSearch });
+    } catch (err: any) {
+      if (err instanceof ProductIntelligenceError) {
+        return ack?.({ ok: false, code: err.code, error: err.message });
       }
-
-      const saved = await getRecord("saved_searches", searchId);
-      const savedFacets = await getRecords("saved_search_facets", `filter[saved_search_id][$eq]=${searchId}&limit=50`);
-      ack?.({ ok: true, savedSearch: { ...saved, facets: savedFacets } });
-    } catch (err) {
       console.error("[saved-search:save]", err);
       ack?.({ ok: false, error: "Saving search failed." });
+    }
+  });
+
+  socket.on("saved-search:delete", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, code: "AUTH_REQUIRED", error: "Sign in to delete saved searches." });
+      const ok = await deleteOwnedSavedSearch(auctionCoreStore, user, Number(data?.savedSearchId));
+      ack?.({ ok });
+    } catch (err: any) {
+      if (err instanceof ProductIntelligenceError) {
+        return ack?.({ ok: false, code: err.code, error: err.message });
+      }
+      console.error("[saved-search:delete]", err);
+      ack?.({ ok: false, error: "Deleting saved search failed." });
+    }
+  });
+
+  socket.on("saved-search:alerts:set", async (data: any, ack?: Ack) => {
+    try {
+      const user = await requireAuth();
+      if (!user) return ack?.({ ok: false, code: "AUTH_REQUIRED", error: "Sign in to update saved search alerts." });
+      const savedSearch = await setOwnedSavedSearchAlerts(
+        auctionCoreStore,
+        user,
+        Number(data?.savedSearchId),
+        Boolean(data?.alerts),
+      );
+      ack?.({ ok: true, savedSearch });
+    } catch (err: any) {
+      if (err instanceof ProductIntelligenceError) {
+        return ack?.({ ok: false, code: err.code, error: err.message });
+      }
+      console.error("[saved-search:alerts:set]", err);
+      ack?.({ ok: false, error: "Updating saved search alerts failed." });
     }
   });
 

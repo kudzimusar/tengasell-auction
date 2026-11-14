@@ -273,11 +273,13 @@ SELECT
 FROM auctions a
 LEFT JOIN categories c ON c.id=a.product_category_id
 LEFT JOIN vehicles v ON v.auction_id=a.id
-LEFT JOIN pi_vehicle_inspection_projection ip ON ip.vehicle_id=v.id;
+LEFT JOIN pi_vehicle_inspection_projection ip ON ip.vehicle_id=v.id
+WHERE lower(COALESCE(a.status, 'live')) IN ('live','scheduled','active','closing','settled','ended','sold','unsold');
 
 -- Initial FTS Index Population
-INSERT INTO product_search_fts(auction_id, title, description, make, model, variant, trim, model_code, brand, search_text)
+INSERT INTO product_search_fts(rowid, auction_id, title, description, make, model, variant, trim, model_code, brand, search_text)
 SELECT
+  psi.auction_id,
   psi.auction_id,
   psi.title,
   psi.description,
@@ -346,19 +348,254 @@ WHERE (
   (ad.attribute_key='ROADWORTHY' AND psi.roadworthy IS NOT NULL)
 );
 
--- 7. Outbox Triggers for Search Index Synchronization
+-- 7. Rebuild pi_projection_outbox to support SEARCH_INDEX_REFRESH & recreate triggers safely
+DROP TRIGGER IF EXISTS trg_pi_fact_projection_event;
+DROP TRIGGER IF EXISTS trg_pi_effective_projection_event;
+DROP TRIGGER IF EXISTS trg_pi_effective_projection_update_event;
+DROP TRIGGER IF EXISTS trg_pi_product_published_event;
+
+CREATE TABLE pi_projection_outbox__v24 (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_key TEXT NOT NULL UNIQUE,
+  product_type TEXT NOT NULL,
+  product_id INTEGER NOT NULL,
+  event_type TEXT NOT NULL CHECK(event_type IN ('FACT_ASSERTED','EFFECTIVE_FACT_CHANGED','PRODUCT_PUBLISHED','INSPECTION_PROJECTED','SEARCH_INDEX_REFRESH')),
+  payload TEXT NOT NULL DEFAULT '{}',
+  occurred_at TEXT NOT NULL,
+  published_at TEXT,
+  CHECK(json_valid(payload))
+) STRICT;
+
+INSERT INTO pi_projection_outbox__v24(id, event_key, product_type, product_id, event_type, payload, occurred_at, published_at)
+SELECT id, event_key, product_type, product_id, event_type, payload, occurred_at, published_at
+FROM pi_projection_outbox;
+
+DROP TABLE pi_projection_outbox;
+ALTER TABLE pi_projection_outbox__v24 RENAME TO pi_projection_outbox;
+
+CREATE INDEX IF NOT EXISTS idx_pi_projection_outbox_pending ON pi_projection_outbox(published_at, id);
+
+CREATE TRIGGER trg_pi_fact_projection_event
+AFTER INSERT ON pi_fact_assertions
+BEGIN
+  INSERT INTO pi_projection_outbox(event_key,product_type,product_id,event_type,payload,occurred_at)
+  VALUES('fact:'||NEW.id,NEW.product_type,NEW.product_id,'FACT_ASSERTED',
+         json_object('assertionId',NEW.id,'attributeId',NEW.attribute_id,'sourceClass',NEW.source_class),NEW.asserted_at)
+  ON CONFLICT(event_key) DO UPDATE SET
+    payload = excluded.payload,
+    occurred_at = excluded.occurred_at,
+    published_at = NULL;
+END;
+
+CREATE TRIGGER trg_pi_effective_projection_event
+AFTER INSERT ON pi_effective_facts
+BEGIN
+  INSERT INTO pi_projection_outbox(event_key,product_type,product_id,event_type,payload,occurred_at)
+  VALUES('effective:'||NEW.id||':'||NEW.resolved_at,NEW.product_type,NEW.product_id,'EFFECTIVE_FACT_CHANGED',
+         json_object('effectiveFactId',NEW.id,'attributeId',NEW.attribute_id,'conflict',NEW.conflict_state),NEW.resolved_at)
+  ON CONFLICT(event_key) DO UPDATE SET
+    payload = excluded.payload,
+    occurred_at = excluded.occurred_at,
+    published_at = NULL;
+END;
+
+CREATE TRIGGER trg_pi_effective_projection_update_event
+AFTER UPDATE ON pi_effective_facts
+BEGIN
+  INSERT INTO pi_projection_outbox(event_key,product_type,product_id,event_type,payload,occurred_at)
+  VALUES('effective:'||NEW.id||':'||NEW.resolved_at,NEW.product_type,NEW.product_id,'EFFECTIVE_FACT_CHANGED',
+         json_object('effectiveFactId',NEW.id,'attributeId',NEW.attribute_id,'conflict',NEW.conflict_state),NEW.resolved_at)
+  ON CONFLICT(event_key) DO UPDATE SET
+    payload = excluded.payload,
+    occurred_at = excluded.occurred_at,
+    published_at = NULL;
+END;
+
+CREATE TRIGGER trg_pi_product_published_event
+AFTER UPDATE OF state ON product_intake_sessions
+WHEN NEW.state='PUBLISHED' AND OLD.state<>'PUBLISHED'
+BEGIN
+  INSERT INTO pi_projection_outbox(event_key,product_type,product_id,event_type,payload,occurred_at)
+  VALUES('published:'||NEW.auction_id||':'||NEW.revision,'AUCTION',NEW.auction_id,'PRODUCT_PUBLISHED',
+         json_object('auctionId',NEW.auction_id,'categoryId',NEW.category_id,'schemaVersionId',NEW.schema_version_id),NEW.updated_at)
+  ON CONFLICT(event_key) DO UPDATE SET
+    payload = excluded.payload,
+    occurred_at = excluded.occurred_at,
+    published_at = NULL;
+END;
+
+-- 8. Outbox Triggers for Search Index Synchronization
+CREATE TRIGGER trg_psi_auction_insert
+AFTER INSERT ON auctions
+BEGIN
+  INSERT INTO pi_projection_outbox(event_key, product_type, product_id, event_type, payload, occurred_at)
+  VALUES(
+    'search:auction:'||NEW.id||':'||COALESCE(NULLIF(NEW.updated_at,''), strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    'AUCTION',
+    NEW.id,
+    'SEARCH_INDEX_REFRESH',
+    json_object('auctionId', NEW.id, 'status', NEW.status, 'price', COALESCE(NEW.current_price, NEW.start_price)),
+    COALESCE(NULLIF(NEW.updated_at,''), strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+  )
+  ON CONFLICT(event_key) DO UPDATE SET
+    payload = excluded.payload,
+    occurred_at = excluded.occurred_at,
+    published_at = NULL;
+END;
+
 CREATE TRIGGER trg_psi_auction_mutation
 AFTER UPDATE ON auctions
 BEGIN
-  INSERT OR IGNORE INTO pi_projection_outbox(event_key, product_type, product_id, event_type, payload, occurred_at)
-  VALUES('search:auction:'||NEW.id||':'||NEW.updated_at, 'AUCTION', NEW.id, 'SEARCH_INDEX_REFRESH',
-         json_object('auctionId', NEW.id, 'status', NEW.status, 'price', NEW.current_price), NEW.updated_at);
+  INSERT INTO pi_projection_outbox(event_key, product_type, product_id, event_type, payload, occurred_at)
+  VALUES(
+    'search:auction:'||NEW.id||':'||COALESCE(NULLIF(NEW.updated_at,''), strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    'AUCTION',
+    NEW.id,
+    'SEARCH_INDEX_REFRESH',
+    json_object('auctionId', NEW.id, 'status', NEW.status, 'price', COALESCE(NEW.current_price, NEW.start_price)),
+    COALESCE(NULLIF(NEW.updated_at,''), strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+  )
+  ON CONFLICT(event_key) DO UPDATE SET
+    payload = excluded.payload,
+    occurred_at = excluded.occurred_at,
+    published_at = NULL;
+END;
+
+CREATE TRIGGER trg_psi_auction_delete
+AFTER DELETE ON auctions
+BEGIN
+  DELETE FROM product_search_index WHERE auction_id = OLD.id;
+  DELETE FROM product_search_facet_values WHERE auction_id = OLD.id;
+  INSERT INTO pi_projection_outbox(event_key, product_type, product_id, event_type, payload, occurred_at)
+  VALUES(
+    'search:auction:del:'||OLD.id,
+    'AUCTION',
+    OLD.id,
+    'SEARCH_INDEX_REFRESH',
+    json_object('auctionId', OLD.id, 'deleted', 1),
+    strftime('%Y-%m-%dT%H:%M:%SZ','now')
+  )
+  ON CONFLICT(event_key) DO UPDATE SET
+    payload = excluded.payload,
+    occurred_at = excluded.occurred_at,
+    published_at = NULL;
+END;
+
+CREATE TRIGGER trg_psi_vehicle_insert
+AFTER INSERT ON vehicles
+BEGIN
+  INSERT INTO pi_projection_outbox(event_key, product_type, product_id, event_type, payload, occurred_at)
+  VALUES(
+    'search:vehicle:'||NEW.id||':'||COALESCE(NULLIF(NEW.updated_at,''), strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    'VEHICLE',
+    NEW.id,
+    'SEARCH_INDEX_REFRESH',
+    json_object('vehicleId', NEW.id, 'auctionId', NEW.auction_id),
+    COALESCE(NULLIF(NEW.updated_at,''), strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+  )
+  ON CONFLICT(event_key) DO UPDATE SET
+    payload = excluded.payload,
+    occurred_at = excluded.occurred_at,
+    published_at = NULL;
 END;
 
 CREATE TRIGGER trg_psi_vehicle_mutation
 AFTER UPDATE ON vehicles
 BEGIN
-  INSERT OR IGNORE INTO pi_projection_outbox(event_key, product_type, product_id, event_type, payload, occurred_at)
-  VALUES('search:vehicle:'||NEW.id||':'||NEW.updated_at, 'VEHICLE', NEW.id, 'SEARCH_INDEX_REFRESH',
-         json_object('vehicleId', NEW.id, 'auctionId', NEW.auction_id), NEW.updated_at);
+  INSERT INTO pi_projection_outbox(event_key, product_type, product_id, event_type, payload, occurred_at)
+  VALUES(
+    'search:vehicle:'||NEW.id||':'||COALESCE(NULLIF(NEW.updated_at,''), strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    'VEHICLE',
+    NEW.id,
+    'SEARCH_INDEX_REFRESH',
+    json_object('vehicleId', NEW.id, 'auctionId', NEW.auction_id),
+    COALESCE(NULLIF(NEW.updated_at,''), strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+  )
+  ON CONFLICT(event_key) DO UPDATE SET
+    payload = excluded.payload,
+    occurred_at = excluded.occurred_at,
+    published_at = NULL;
+END;
+
+CREATE TRIGGER trg_psi_inspection_insert
+AFTER INSERT ON vehicle_inspections
+BEGIN
+  INSERT INTO pi_projection_outbox(event_key, product_type, product_id, event_type, payload, occurred_at)
+  VALUES(
+    'search:inspection:'||NEW.id||':'||COALESCE(NULLIF(NEW.updated_at,''), strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    'VEHICLE',
+    NEW.vehicle_id,
+    'INSPECTION_PROJECTED',
+    json_object('inspectionId', NEW.id, 'vehicleId', NEW.vehicle_id, 'lifecycle', NEW.lifecycle, 'grade', NEW.grade, 'roadworthy', NEW.roadworthy),
+    COALESCE(NULLIF(NEW.updated_at,''), strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+  )
+  ON CONFLICT(event_key) DO UPDATE SET
+    payload = excluded.payload,
+    occurred_at = excluded.occurred_at,
+    published_at = NULL;
+END;
+
+CREATE TRIGGER trg_psi_inspection_mutation
+AFTER UPDATE ON vehicle_inspections
+BEGIN
+  INSERT INTO pi_projection_outbox(event_key, product_type, product_id, event_type, payload, occurred_at)
+  VALUES(
+    'search:inspection:'||NEW.id||':'||COALESCE(NULLIF(NEW.updated_at,''), strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    'VEHICLE',
+    NEW.vehicle_id,
+    'INSPECTION_PROJECTED',
+    json_object('inspectionId', NEW.id, 'vehicleId', NEW.vehicle_id, 'lifecycle', NEW.lifecycle, 'grade', NEW.grade, 'roadworthy', NEW.roadworthy),
+    COALESCE(NULLIF(NEW.updated_at,''), strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+  )
+  ON CONFLICT(event_key) DO UPDATE SET
+    payload = excluded.payload,
+    occurred_at = excluded.occurred_at,
+    published_at = NULL;
+END;
+
+-- 9. FTS5 Synchronization Triggers for product_search_index
+CREATE TRIGGER trg_psi_fts_insert
+AFTER INSERT ON product_search_index
+BEGIN
+  DELETE FROM product_search_fts WHERE auction_id = NEW.auction_id OR rowid = NEW.auction_id;
+  INSERT INTO product_search_fts(rowid, auction_id, title, description, make, model, variant, trim, model_code, brand, search_text)
+  VALUES(
+    NEW.auction_id,
+    NEW.auction_id,
+    COALESCE(NEW.title, ''),
+    COALESCE(NEW.description, ''),
+    COALESCE(NEW.make, ''),
+    COALESCE(NEW.model, ''),
+    COALESCE(NEW.variant, ''),
+    COALESCE(NEW.trim, ''),
+    COALESCE(NEW.model_code, ''),
+    COALESCE(NEW.make, ''),
+    trim(COALESCE(NEW.title,'') || ' ' || COALESCE(NEW.description,'') || ' ' || COALESCE(NEW.make,'') || ' ' || COALESCE(NEW.model,'') || ' ' || COALESCE(NEW.variant,'') || ' ' || COALESCE(NEW.trim,'') || ' ' || COALESCE(NEW.model_code,'') || ' ' || COALESCE(NEW.vehicle_class,'') || ' ' || COALESCE(NEW.body_type,'') || ' ' || COALESCE(NEW.fuel,'') || ' ' || COALESCE(NEW.transmission,'') || ' ' || COALESCE(NEW.drivetrain,'') || ' ' || COALESCE(NEW.exterior_colour,'') || ' ' || COALESCE(NEW.location,''))
+  );
+END;
+
+CREATE TRIGGER trg_psi_fts_update
+AFTER UPDATE ON product_search_index
+BEGIN
+  DELETE FROM product_search_fts WHERE auction_id = OLD.auction_id OR rowid = OLD.auction_id OR auction_id = NEW.auction_id OR rowid = NEW.auction_id;
+  INSERT INTO product_search_fts(rowid, auction_id, title, description, make, model, variant, trim, model_code, brand, search_text)
+  VALUES(
+    NEW.auction_id,
+    NEW.auction_id,
+    COALESCE(NEW.title, ''),
+    COALESCE(NEW.description, ''),
+    COALESCE(NEW.make, ''),
+    COALESCE(NEW.model, ''),
+    COALESCE(NEW.variant, ''),
+    COALESCE(NEW.trim, ''),
+    COALESCE(NEW.model_code, ''),
+    COALESCE(NEW.make, ''),
+    trim(COALESCE(NEW.title,'') || ' ' || COALESCE(NEW.description,'') || ' ' || COALESCE(NEW.make,'') || ' ' || COALESCE(NEW.model,'') || ' ' || COALESCE(NEW.variant,'') || ' ' || COALESCE(NEW.trim,'') || ' ' || COALESCE(NEW.model_code,'') || ' ' || COALESCE(NEW.vehicle_class,'') || ' ' || COALESCE(NEW.body_type,'') || ' ' || COALESCE(NEW.fuel,'') || ' ' || COALESCE(NEW.transmission,'') || ' ' || COALESCE(NEW.drivetrain,'') || ' ' || COALESCE(NEW.exterior_colour,'') || ' ' || COALESCE(NEW.location,''))
+  );
+END;
+
+CREATE TRIGGER trg_psi_fts_delete
+AFTER DELETE ON product_search_index
+BEGIN
+  DELETE FROM product_search_fts WHERE auction_id = OLD.auction_id OR rowid = OLD.auction_id;
 END;

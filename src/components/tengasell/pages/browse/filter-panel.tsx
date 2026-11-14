@@ -360,15 +360,19 @@ export function FilterPanel({
     onApply({ minKm: kmin, maxKm: kmax });
   };
 
-  const isVehicleCategory =
-    !categoryFilterMeta ||
-    categoryFilterMeta.categoryKey.startsWith("VEHICLE") ||
-    categoryFilterMeta.categoryKey === "cars" ||
-    categoryFilterMeta.categoryKey === "vehicles";
-
+  const activeMetaKey = categoryFilterMeta?.categoryKey ?? categoryFilterMeta?.category?.key ?? "";
+  const activeMetaLower = activeMetaKey.toLowerCase();
   const isPhoneCategory =
-    Boolean(categoryFilterMeta?.categoryKey.startsWith("PHONE")) ||
-    categoryFilterMeta?.categoryKey === "electronics";
+    activeMetaKey.startsWith("PHONE") ||
+    activeMetaLower === "phones" ||
+    activeMetaLower === "phone-smartphone" ||
+    activeMetaLower === "electronics";
+  const isVehicleCategory =
+    !isPhoneCategory &&
+    (!categoryFilterMeta ||
+      activeMetaKey.startsWith("VEHICLE") ||
+      activeMetaLower === "cars" ||
+      activeMetaLower === "vehicles");
 
   return (
     <div className={cn("space-y-5", className)}>
@@ -493,7 +497,7 @@ export function FilterPanel({
             .filter((f) => f.filterClass === "PRIMARY" || f.filterClass === "SECONDARY")
             .map((cf) => (
               <FilterSection key={cf.attributeKey} title={cf.label}>
-                {cf.options ? (
+                {Array.isArray(cf.options) && cf.options.length > 0 ? (
                   <Select
                     value={filters.facets?.[cf.attributeKey] || "any"}
                     onValueChange={(v) =>
@@ -510,11 +514,15 @@ export function FilterPanel({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="any">All {cf.label.toLowerCase()}</SelectItem>
-                      {cf.options.map((opt) => (
-                        <SelectItem key={opt} value={opt}>
-                          {opt}
-                        </SelectItem>
-                      ))}
+                      {cf.options.map((opt) => {
+                        const optKey = typeof opt === "string" ? opt : opt.key;
+                        const optLabel = typeof opt === "string" ? opt : opt.label;
+                        return (
+                          <SelectItem key={optKey} value={optKey}>
+                            {optLabel}
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                 ) : (

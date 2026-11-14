@@ -126,9 +126,9 @@ export function CompareDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-6 overflow-hidden">
+      <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col p-6 overflow-hidden bg-raised">
         <DialogHeader className="shrink-0 pb-2">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 pe-8">
             <div>
               <DialogTitle className="text-headline font-bold text-foreground">
                 Product Comparison
@@ -137,7 +137,7 @@ export function CompareDialog({
                 Compare verified product intelligence attributes, provenance, and commercial terms.
               </DialogDescription>
             </div>
-            {data && <div>{scopeBadge(data.scope)}</div>}
+            {data && <div>{scopeBadge(data.scope ?? data.categoryRelationship)}</div>}
           </div>
         </DialogHeader>
 
@@ -152,17 +152,16 @@ export function CompareDialog({
             <p className="text-body font-bold text-foreground">Comparison Unavailable</p>
             <p className="text-caption text-muted-foreground max-w-md mx-auto">{error}</p>
           </div>
-        ) : !data || data.items.length === 0 ? (
+        ) : !data || data.items.length < 2 ? (
           <div className="py-12 text-center text-muted-foreground">
-            <p className="text-body">Select at least 1 item to inspect or up to 3 to compare.</p>
+            <p className="text-body">Select 2 to 3 public listings to compare.</p>
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto ts-scrollbar pr-1 -mr-1 space-y-6">
             {/* Header Product Cards */}
             <div
               className={cn(
-                "grid gap-4 sticky top-0 bg-background/95 backdrop-blur z-10 pb-4 border-b border-border",
-                data.items.length === 1 && "grid-cols-[140px_1fr]",
+                "grid gap-4 sticky top-0 bg-raised z-10 pb-4 border-b border-border",
                 data.items.length === 2 && "grid-cols-[140px_1fr_1fr]",
                 data.items.length === 3 && "grid-cols-[140px_1fr_1fr_1fr]",
               )}
@@ -172,7 +171,9 @@ export function CompareDialog({
                   Product Lot
                 </span>
               </div>
-              {data.items.map((item) => (
+              {data.items.map((item) => {
+                const img = item.imageUrl ?? item.thumbnail;
+                return (
                 <div
                   key={item.auctionId}
                   className="rounded-card border border-border bg-raised p-3 relative flex flex-col gap-2 shadow-xs"
@@ -186,10 +187,10 @@ export function CompareDialog({
                     <X className="size-3.5" />
                   </button>
                   <div className="aspect-video w-full rounded-input overflow-hidden bg-muted">
-                    {item.imageUrl ? (
+                    {img ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        src={item.imageUrl}
+                        src={img}
                         alt={item.title}
                         className="w-full h-full object-cover"
                       />
@@ -212,27 +213,32 @@ export function CompareDialog({
                       US${item.currentPrice.toLocaleString()}
                     </p>
                     <p className="text-[11px] text-muted-foreground">
-                      {item.location || "Zimbabwe"} · {item.categoryTitle}
+                      {item.location || "Zimbabwe"} · {item.categoryTitle ?? item.productType}
                     </p>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Comparison Sections */}
             <div className="space-y-6">
-              {data.sections.map((sec) => (
-                <div key={sec.name} className="space-y-2">
+              {data.sections.map((sec) => {
+                const secTitle = sec.name ?? sec.title;
+                return (
+                <div key={secTitle} className="space-y-2">
                   <h4 className="text-label font-bold text-foreground px-1 border-b border-border/60 pb-1">
-                    {sec.name}
+                    {secTitle}
                   </h4>
                   <div className="divide-y divide-border/40">
-                    {sec.rows.map((row) => (
+                    {sec.rows.map((row) => {
+                      const rowKey = row.key ?? row.attributeKey;
+                      const cells = row.cells ?? row.values ?? [];
+                      return (
                       <div
-                        key={row.key}
+                        key={rowKey}
                         className={cn(
                           "grid gap-4 py-2.5 px-1 items-center hover:bg-accent/40 rounded transition-colors",
-                          data.items.length === 1 && "grid-cols-[140px_1fr]",
                           data.items.length === 2 && "grid-cols-[140px_1fr_1fr]",
                           data.items.length === 3 && "grid-cols-[140px_1fr_1fr_1fr]",
                         )}
@@ -240,16 +246,18 @@ export function CompareDialog({
                         <div className="text-caption font-medium text-muted-foreground">
                           {row.label}
                         </div>
-                        {row.cells.map((cell) => (
-                          <div key={cell.auctionId} className="text-body min-w-0">
-                            {renderCellStatus(cell.status, cell.displayValue)}
+                        {cells.map((cell, idx) => (
+                          <div key={cell.auctionId ?? `${rowKey}-${idx}`} className="text-body min-w-0">
+                            {renderCellStatus((cell.status ?? cell.state ?? "UNKNOWN") as ComparisonValueState, cell.displayValue)}
                           </div>
                         ))}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

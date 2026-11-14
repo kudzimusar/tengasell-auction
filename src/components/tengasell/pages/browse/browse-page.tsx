@@ -363,6 +363,13 @@ export default function BrowsePage({
     if (filters.transmission) facets.push({ attributeKey: "TRANSMISSION", operator: "EQ", optionValue: filters.transmission });
     if (filters.drivetrain) facets.push({ attributeKey: "DRIVETRAIN", operator: "EQ", optionValue: filters.drivetrain });
     if (filters.inspectionGrade) facets.push({ attributeKey: "INSPECTION_GRADE", operator: "EQ", optionValue: filters.inspectionGrade });
+    if (filters.facets) {
+      for (const [attributeKey, optionValue] of Object.entries(filters.facets)) {
+        if (optionValue && !facets.some((f) => f.attributeKey === attributeKey)) {
+          facets.push({ attributeKey, operator: "EQ", optionValue });
+        }
+      }
+    }
 
     try {
       await api.saveSearch({
@@ -535,6 +542,13 @@ export default function BrowsePage({
     if (filters.drivetrain) base.drivetrain = filters.drivetrain;
     if (filters.exteriorColour) base.exteriorColour = filters.exteriorColour;
     if (filters.inspectionGrade) base.inspectionGrade = filters.inspectionGrade;
+    if (filters.facets) {
+      const activeFacets: Record<string, string> = {};
+      for (const [k, v] of Object.entries(filters.facets)) {
+        if (v) activeFacets[k] = v;
+      }
+      if (Object.keys(activeFacets).length > 0) base.facets = activeFacets;
+    }
     return base;
   }, [mode, categorySlug, catParam, q, sort, filters]);
 
@@ -786,10 +800,11 @@ export default function BrowsePage({
             <p className="text-label font-bold text-foreground">
               Compare ({selectedCompareIds.length}/3)
             </p>
-            <p className="text-caption text-muted-foreground">Select up to 3 listings</p>
+            <p className="text-caption text-muted-foreground">Select 2 to 3 listings</p>
           </div>
           <Button
             variant="default"
+            disabled={selectedCompareIds.length < 2}
             className="h-10 px-4 bg-teal hover:bg-teal-deep text-white font-bold"
             onClick={() => setCompareModalOpen(true)}
           >

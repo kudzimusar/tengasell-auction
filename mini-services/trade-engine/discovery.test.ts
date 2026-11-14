@@ -1,8 +1,23 @@
-// TENGASELL-PI-01E / DISC-01, DISC-02, DISC-03, DISC-04 unit tests
+// TENGASELL-PI-01E / DISC-01, DISC-02, DISC-03, DISC-04 unit & remediation tests
 import { expect, test } from "bun:test";
-import { categoryFilterMetadata, productCompare } from "./product-intelligence";
-import { refreshAuctionSearch, rebuildProductSearchIndex, queryProductSearch } from "./search-indexing";
-import type { VehicleStore } from "./vehicle-authority";
+import {
+  ProductIntelligenceError,
+  categoryFilterMetadata,
+  deleteOwnedSavedSearch,
+  getOwnedSavedSearchFacets,
+  listOwnedSavedSearches,
+  productCompare,
+  saveOwnedSearch,
+  setOwnedSavedSearchAlerts,
+} from "./product-intelligence";
+import {
+  SearchValidationError,
+  consumeSearchProjectionOutbox,
+  queryProductSearch,
+  rebuildProductSearchIndex,
+  refreshAuctionSearch,
+} from "./search-indexing";
+import type { VehicleIdentity, VehicleStore } from "./vehicle-authority";
 
 function createInMemoryStore(): VehicleStore & { data: Record<string, any[]> } {
   const data: Record<string, any[]> = {
@@ -61,34 +76,50 @@ function createInMemoryStore(): VehicleStore & { data: Record<string, any[]> } {
       { option_id: 3, locale: "en", label: "Front-Wheel Drive" },
     ],
     pi_category_attributes: [
-      // Vehicle Passenger Car bindings
       { id: 1, category_id: 2, schema_version_id: 1, attribute_id: 1, attribute_version_id: 1, filter_class: "PRIMARY", display_group: "IDENTITY", display_order: 1 },
       { id: 2, category_id: 2, schema_version_id: 1, attribute_id: 2, attribute_version_id: 2, filter_class: "PRIMARY", display_group: "IDENTITY", display_order: 2 },
       { id: 3, category_id: 2, schema_version_id: 1, attribute_id: 3, attribute_version_id: 3, filter_class: "PRIMARY", display_group: "IDENTITY", display_order: 3 },
       { id: 4, category_id: 2, schema_version_id: 1, attribute_id: 4, attribute_version_id: 4, filter_class: "SECONDARY", display_group: "TECHNICAL", display_order: 4 },
       { id: 5, category_id: 2, schema_version_id: 1, attribute_id: 5, attribute_version_id: 5, filter_class: "PRIMARY", display_group: "TECHNICAL", display_order: 5 },
       { id: 6, category_id: 2, schema_version_id: 1, attribute_id: 6, attribute_version_id: 6, filter_class: "NONE", display_group: "IDENTITY", display_order: 6 },
-      // Phone bindings
       { id: 7, category_id: 4, schema_version_id: 3, attribute_id: 7, attribute_version_id: 7, filter_class: "PRIMARY", display_group: "IDENTITY", display_order: 1 },
       { id: 8, category_id: 4, schema_version_id: 3, attribute_id: 8, attribute_version_id: 8, filter_class: "PRIMARY", display_group: "TECHNICAL", display_order: 2 },
       { id: 9, category_id: 4, schema_version_id: 3, attribute_id: 9, attribute_version_id: 9, filter_class: "SECONDARY", display_group: "TECHNICAL", display_order: 3 },
     ],
     auctions: [
-      { id: 101, title: "2020 Toyota Hilux 2.8 GD-6 4WD", current_price: 32000, start_price: 30000, product_category_id: 2, product_schema_version_id: 1, city: "Harare", condition: "used", status: "live", ends_at: "2030-01-01T00:00:00Z", images: "[]", created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z" },
-      { id: 102, title: "2019 Ford Ranger Wildtrak 3.2 4WD", current_price: 28000, start_price: 25000, product_category_id: 3, product_schema_version_id: 2, city: "Bulawayo", condition: "used", status: "live", ends_at: "2030-01-01T00:00:00Z", images: "[]", created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z" },
+      { id: 101, title: "2020 Toyota Hilux 2.8 GD-6 4WD", current_price: 32000, start_price: 30000, reserve_price: 34500, product_category_id: 2, product_schema_version_id: 1, city: "Harare", condition: "used", status: "live", ends_at: "2030-01-01T00:00:00Z", images: "[]", created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z" },
+      { id: 102, title: "2019 Ford Ranger Wildtrak 3.2 4WD", current_price: 28000, start_price: 25000, reserve_price: 29500, product_category_id: 3, product_schema_version_id: 2, city: "Bulawayo", condition: "used", status: "live", ends_at: "2030-01-01T00:00:00Z", images: "[]", created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z" },
       { id: 103, title: "Apple iPhone 15 Pro Max 256GB", current_price: 1100, start_price: 1000, product_category_id: 4, product_schema_version_id: 3, city: "Harare", condition: "like-new", status: "live", ends_at: "2030-01-01T00:00:00Z", images: "[]", created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z" },
+      { id: 104, title: "Draft Secret Vehicle", current_price: 19000, start_price: 19000, product_category_id: 2, product_schema_version_id: 1, city: "Mutare", condition: "used", status: "draft", ends_at: "2030-01-01T00:00:00Z", images: "[]", created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z" },
     ],
     vehicles: [
-      { id: 501, auction_id: 101, make: "Toyota", model: "Hilux", variant: "GD-6", model_year: 2020, odometer_km: 85000, fuel_type: "DIESEL", drivetrain: "4WD", transmission: "AUTOMATIC", primary_exterior_colour: "WHITE", vin: "AHTBA3CD123456789" },
-      { id: 502, auction_id: 102, make: "Ford", model: "Ranger", variant: "Wildtrak", model_year: 2019, odometer_km: 98000, fuel_type: "DIESEL", drivetrain: "4WD", transmission: "AUTOMATIC", primary_exterior_colour: "GREY", vin: "MNAUMFF50JW123456" },
+      { id: 501, auction_id: 101, make: "Toyota", model: "Hilux", variant: "GD-6", model_year: 2020, odometer_km: 85000, fuel_type: "DIESEL", drivetrain: "4WD", transmission: "AUTOMATIC", primary_exterior_colour: "WHITE", vin: "AHTBA3CD123456789", chassis_number: "CH-SECRET-99", registration_number: "ZAA-1122", engine_number: "1GD-998877" },
+      { id: 502, auction_id: 102, make: "Ford", model: "Ranger", variant: "Wildtrak", model_year: 2019, odometer_km: 98000, fuel_type: "DIESEL", drivetrain: "4WD", transmission: "AUTOMATIC", primary_exterior_colour: "GREY", vin: "MNAUMFF50JW123456", cab_type: "DOUBLE_CAB" },
     ],
+    vehicle_inspections: [
+      { id: 601, vehicle_id: 501, version: 1, lifecycle: "REVIEWED", grade: "B", grade_score: 82, roadworthy: 1, odometer_km: 85000 },
+      { id: 602, vehicle_id: 502, version: 1, lifecycle: "REVIEWED", grade: "A", grade_score: 91, roadworthy: 1, odometer_km: 98000 },
+    ],
+    vehicle_eligibility: [
+      { id: 701, vehicle_id: 501, inspection_id: 601, version: 1, status: "ELIGIBLE" },
+      { id: 702, vehicle_id: 502, inspection_id: 602, version: 1, status: "ELIGIBLE" },
+    ],
+    vehicle_inspection_findings: [],
+    vehicle_documents: [],
+    vehicle_history_events: [],
+    vehicle_modifications: [],
+    vehicle_equipment: [],
     pi_effective_facts: [],
-    pi_vehicle_inspection_projection: [
-      { vehicle_id: 501, inspection_status: "COMPLETED", inspection_grade: "B", roadworthy: 1 },
-      { vehicle_id: 502, inspection_status: "COMPLETED", inspection_grade: "A", roadworthy: 1 },
-    ],
+    pi_fact_assertions: [],
+    pi_vehicle_inspection_projection: [],
+    pi_vehicle_public: [],
+    pi_vehicle_document_public: [],
+    product_intake_sessions: [],
     product_search_index: [],
     product_search_facet_values: [],
+    pi_projection_outbox: [],
+    saved_searches: [],
+    saved_search_facets: [],
   };
 
   let nextId = 1000;
@@ -113,6 +144,12 @@ function createInMemoryStore(): VehicleStore & { data: Record<string, any[]> } {
       }
       return false;
     },
+    async remove(table: string, id: number | string) {
+      const list = data[table] ?? [];
+      const before = list.length;
+      data[table] = list.filter((r) => String(r.id) !== String(id) && String(r.auction_id) !== String(id));
+      return data[table].length < before;
+    },
     async list(table: string, queryStr: string) {
       const list = data[table] ?? [];
       const searchParams = new URLSearchParams(queryStr);
@@ -124,10 +161,26 @@ function createInMemoryStore(): VehicleStore & { data: Record<string, any[]> } {
           if (op === "eq") res = res.filter((r) => String(r[col]) === String(val));
           if (op === "gte") res = res.filter((r) => Number(r[col]) >= Number(val));
           if (op === "lte") res = res.filter((r) => Number(r[col]) <= Number(val));
+          if (op === "is" && val.toUpperCase() === "NULL") res = res.filter((r) => r[col] == null || r[col] === "");
         }
       }
+      const order = searchParams.get("order");
+      if (order) {
+        const primary = order.split(",")[0];
+        const desc = primary.startsWith("-");
+        const col = desc ? primary.slice(1) : primary;
+        res.sort((a, b) => {
+          const av = a[col];
+          const bv = b[col];
+          if (av === bv) return 0;
+          if (av == null) return 1;
+          if (bv == null) return -1;
+          return desc ? (av < bv ? 1 : -1) : (av < bv ? -1 : 1);
+        });
+      }
+      const offset = Number(searchParams.get("offset") ?? 0);
       const limit = Number(searchParams.get("limit") ?? 100);
-      return res.slice(0, limit);
+      return res.slice(offset, offset + limit);
     },
   };
 }
@@ -142,7 +195,7 @@ test("category filter metadata enforces category isolation", async () => {
   expect(vehicleAttrKeys).toContain("DRIVETRAIN");
   expect(vehicleAttrKeys).not.toContain("STORAGE_GB");
   expect(vehicleAttrKeys).not.toContain("RAM_GB");
-  expect(vehicleAttrKeys).not.toContain("VIN"); // filter_class === 'NONE' is excluded
+  expect(vehicleAttrKeys).not.toContain("VIN");
 
   const phoneFilters = await categoryFilterMetadata(store, "PHONE_SMARTPHONE");
   const phoneAttrKeys = phoneFilters.filters.map((f) => f.attributeKey);
@@ -156,59 +209,249 @@ test("category filter metadata enforces category isolation", async () => {
 test("comparison handles same leaf, related leaves, and unrelated categories", async () => {
   const store = createInMemoryStore();
 
-  // Same leaf comparison: two passenger vehicles
-  const sameLeaf = await productCompare(store, [101, 102]);
-  expect(sameLeaf.categoryRelationship).toBe("RELATED_FAMILY"); // Car and Pickup share VEHICLE_ family
-  const powertrain = sameLeaf.sections.find((s) => s.title === "Powertrain");
+  const related = await productCompare(store, [101, 102]);
+  expect(related.categoryRelationship).toBe("RELATED_FAMILY");
+  expect(related.scope).toBe("RELATED_FAMILY");
+  const powertrain = related.sections.find((s) => s.title === "Powertrain");
   expect(powertrain).toBeDefined();
 
-  // Unrelated comparison: Vehicle and Phone
   const unrelated = await productCompare(store, [101, 103]);
   expect(unrelated.categoryRelationship).toBe("UNRELATED");
-  // Unrelated categories should only compare Commercial/universal rows, never phone RAM vs car drivetrain!
   const sectionTitles = unrelated.sections.map((s) => s.title);
   expect(sectionTitles).toContain("Commercial");
   expect(sectionTitles).not.toContain("Powertrain");
   expect(sectionTitles).not.toContain("Configuration");
 });
 
-test("comparison truthful states and privacy protection", async () => {
+test("comparison truthful states and strict privacy protection", async () => {
   const store = createInMemoryStore();
-  const res = await productCompare(store, [101]);
+  // Seed conflicted odometer fact on vehicle 501
+  store.data.pi_effective_facts.push({
+    id: 901,
+    product_type: "VEHICLE",
+    product_id: 501,
+    attribute_id: 5,
+    source_class: "INSPECTOR_VERIFIED",
+    value_decimal: 85000,
+    conflict_state: "PEER_CONFLICT",
+  });
 
-  // VIN must never be raw in comparison!
-  const identitySection = res.sections.find((s) => s.title === "Identity");
-  const vinRow = res.sections.flatMap((s) => s.rows).find((r) => r.attributeKey === "VIN");
-  expect(vinRow).toBeUndefined(); // Raw VIN row is never present
+  const res = await productCompare(store, [101, 102]);
+  const serialized = JSON.stringify(res);
+  for (const secret of ["AHTBA3CD123456789", "MNAUMFF50JW123456", "CH-SECRET-99", "ZAA-1122", "1GD-998877", "34500", "29500"]) {
+    expect(serialized).not.toContain(secret);
+  }
 
-  const vinClassificationRow = res.sections.flatMap((s) => s.rows).find((r) => r.attributeKey === "VIN_CLASSIFICATION");
-  expect(vinClassificationRow?.values[0].state).toBe("REDACTED");
-  expect(vinClassificationRow?.values[0].displayValue).toBe("Recorded privately");
+  const allRows = res.sections.flatMap((s) => s.rows);
+  expect(allRows.find((r) => r.attributeKey === "VIN")).toBeUndefined();
 
-  // Missing values are truthfully UNKNOWN, never converted to 0 or False
-  const doorsRow = res.sections.flatMap((s) => s.rows).find((r) => r.attributeKey === "DOORS");
+  const vinClassRow = allRows.find((r) => r.attributeKey === "VIN_CLASSIFICATION");
+  expect(vinClassRow?.values[0].state).toBe("REDACTED");
+  expect(vinClassRow?.values[0].rawValue).toBeNull();
+  expect(vinClassRow?.values[0].displayValue).toBe("Recorded privately");
+
+  const doorsRow = allRows.find((r) => r.attributeKey === "DOORS");
   expect(doorsRow?.values[0].state).toBe("UNKNOWN");
-  expect(doorsRow?.values[0].displayValue).toBe("Not provided");
   expect(doorsRow?.values[0].rawValue).toBeNull();
+
+  const cabRow = allRows.find((r) => r.attributeKey === "CAB_TYPE");
+  expect(cabRow?.values[0].state).toBe("NOT_APPLICABLE");
+  expect(cabRow?.values[1].state).toBe("KNOWN");
+
+  const odoRow = allRows.find((r) => r.attributeKey === "ODOMETER_KM");
+  expect(odoRow?.values[0].state).toBe("CONFLICTED");
+  expect(odoRow?.values[1].state).toBe("KNOWN");
 });
 
-test("search index rebuild is non-authoritative and non-destructive", async () => {
+test("P0-03 comparison rejects invalid cardinality, duplicates, missing, and non-public listings", async () => {
   const store = createInMemoryStore();
 
-  const originalAuctions = JSON.stringify(store.data.auctions);
-  const originalVehicles = JSON.stringify(store.data.vehicles);
+  await expect(productCompare(store, [101])).rejects.toThrow(/at least 2/i);
+  await expect(productCompare(store, [101, 102, 103, 104])).rejects.toThrow(/at most 3/i);
+  await expect(productCompare(store, [101, 101])).rejects.toThrow(/distinct/i);
+  await expect(productCompare(store, [101, 999999])).rejects.toThrow(/not found/i);
+  await expect(productCompare(store, [101, 104])).rejects.toThrow(/not publicly available/i);
 
-  // Rebuild index
-  const result = await rebuildProductSearchIndex(store);
-  expect(result.count).toBe(3);
-  expect(store.data.product_search_index.length).toBe(3);
+  store.data.auctions.push({
+    id: 105,
+    title: "Withdrawn Hilux",
+    current_price: 21000,
+    start_price: 21000,
+    product_category_id: 2,
+    product_schema_version_id: 1,
+    city: "Harare",
+    condition: "used",
+    status: "withdrawn",
+    ends_at: "2030-01-01T00:00:00Z",
+    images: "[]",
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+  });
+  await expect(productCompare(store, [101, 105])).rejects.toThrow(/not publicly available/i);
+});
 
-  // Verify canonical facts unchanged
-  expect(JSON.stringify(store.data.auctions)).toBe(originalAuctions);
-  expect(JSON.stringify(store.data.vehicles)).toBe(originalVehicles);
+test("P0-01 outbox consumer syncs search index, inspection changes, and removes withdrawn listings", async () => {
+  const store = createInMemoryStore();
+  await rebuildProductSearchIndex(store);
 
-  // Query search
-  const searchRes = await queryProductSearch(store, { make: "Toyota", fuel: "DIESEL" });
-  expect(searchRes.items.length).toBe(1);
-  expect(searchRes.items[0].title).toContain("Hilux");
+  // Draft listing 104 must NOT be present in search index
+  expect(store.data.product_search_index.some((r) => r.auction_id === 104)).toBe(false);
+
+  // Enqueue outbox events across multiple types
+  store.data.auctions[0].current_price = 33500;
+  store.data.vehicle_inspections[0].grade = "A";
+  store.data.pi_projection_outbox.push(
+    { id: 1, event_key: "search:auction:101:t1", product_type: "AUCTION", product_id: 101, event_type: "SEARCH_INDEX_REFRESH", payload: JSON.stringify({ auctionId: 101 }), occurred_at: "2026-01-02T00:00:00Z", published_at: null },
+    { id: 2, event_key: "insp:501:t1", product_type: "VEHICLE", product_id: 501, event_type: "INSPECTION_PROJECTED", payload: JSON.stringify({ vehicleId: 501 }), occurred_at: "2026-01-02T00:01:00Z", published_at: null },
+  );
+
+  const drain1 = await consumeSearchProjectionOutbox(store);
+  expect(drain1.processed).toBe(2);
+  expect(drain1.refreshed).toBe(1);
+  expect(store.data.pi_projection_outbox.every((e) => typeof e.published_at === "string" && e.published_at.length > 0)).toBe(true);
+
+  const row101 = store.data.product_search_index.find((r) => r.auction_id === 101);
+  expect(row101?.price).toBe(33500);
+  expect(row101?.inspection_grade).toBe("A");
+
+  // Transition 102 to withdrawn & verify outbox removal removes stale search + facet rows
+  store.data.auctions[1].status = "withdrawn";
+  store.data.pi_projection_outbox.push({
+    id: 3,
+    event_key: "search:auction:102:withdrawn",
+    product_type: "AUCTION",
+    product_id: 102,
+    event_type: "SEARCH_INDEX_REFRESH",
+    payload: JSON.stringify({ auctionId: 102 }),
+    occurred_at: "2026-01-03T00:00:00Z",
+    published_at: null,
+  });
+  const drain2 = await consumeSearchProjectionOutbox(store);
+  expect(drain2.removed).toBe(1);
+  expect(store.data.product_search_index.some((r) => r.auction_id === 102)).toBe(false);
+  expect(store.data.product_search_facet_values.some((f) => f.auction_id === 102)).toBe(false);
+});
+
+test("P0-02 saved search ownership and facet normalization block cross-user & anonymous access", async () => {
+  const store = createInMemoryStore();
+  const sellerA: VehicleIdentity = { id: "user-a", username: "seller_a", admin: false };
+  const sellerB: VehicleIdentity = { id: "user-b", username: "seller_b", admin: false };
+  const admin: VehicleIdentity = { id: "admin-1", username: "admin", admin: true };
+
+  // Anonymous denied
+  await expect(saveOwnedSearch(store, null, { name: "Anon" })).rejects.toThrow(/Sign in/i);
+
+  // Invalid operator & range rejected before saving
+  await expect(
+    saveOwnedSearch(store, sellerA, {
+      name: "Bad Operator",
+      facets: [{ attributeKey: "MAKE", operator: "DROP_TABLE", valueText: "Toyota" }],
+    }),
+  ).rejects.toThrow(/Unsupported facet operator/i);
+  await expect(
+    saveOwnedSearch(store, sellerA, {
+      name: "Inverted Year",
+      facets: [{ attributeKey: "YEAR", operator: "BETWEEN", minNumeric: 2024, maxNumeric: 2018 }],
+    }),
+  ).rejects.toThrow(/valueMin cannot exceed valueMax/i);
+
+  const saved = await saveOwnedSearch(store, sellerA, {
+    name: "Diesel Hilux 2018+",
+    query: "Hilux",
+    facets: [
+      { attributeKey: "MAKE", operator: "EQ", optionValue: "Toyota" },
+      { attributeKey: "YEAR", operator: "MIN", minNumeric: 2018 },
+    ],
+  });
+  expect(saved.user).toBe("user-a");
+  expect(saved.facets.length).toBe(2);
+  expect(saved.facets[0].value_text).toBe("Toyota");
+  expect(saved.facets[1].attribute_key).toBe("MODEL_YEAR");
+  expect(saved.facets[1].value_min).toBe(2018);
+
+  // Owner B cannot read facets, overwrite, toggle alerts, or delete
+  await expect(getOwnedSavedSearchFacets(store, sellerB, saved.id)).rejects.toThrow(ProductIntelligenceError);
+  await expect(saveOwnedSearch(store, sellerB, { id: saved.id, name: "Hijack" })).rejects.toThrow(/Not authorized/i);
+  await expect(setOwnedSavedSearchAlerts(store, sellerB, saved.id, false)).rejects.toThrow(/Not authorized/i);
+  await expect(deleteOwnedSavedSearch(store, sellerB, saved.id)).rejects.toThrow(/Not authorized/i);
+
+  // Seller B list returns 0 rows
+  expect((await listOwnedSavedSearches(store, sellerB)).length).toBe(0);
+
+  // Owner A and Admin succeed
+  expect((await getOwnedSavedSearchFacets(store, sellerA, saved.id)).length).toBe(2);
+  expect((await getOwnedSavedSearchFacets(store, admin, saved.id)).length).toBe(2);
+  const toggled = await setOwnedSavedSearchAlerts(store, sellerA, saved.id, false);
+  expect(toggled.alerts).toBe(0);
+  expect(await deleteOwnedSavedSearch(store, sellerA, saved.id)).toBe(true);
+  await expect(getOwnedSavedSearchFacets(store, sellerA, saved.id)).rejects.toThrow(/not found/i);
+});
+
+test("P1-04 search validation, full-candidate pagination, deterministic ordering, and >1,000 rebuild", async () => {
+  const store = createInMemoryStore();
+
+  // Seed 1,050 additional live & draft auctions (same price groups to test deterministic auction_id tie-breaking)
+  store.data.auctions = [];
+  store.data.vehicles = [];
+  for (let i = 1; i <= 1050; i++) {
+    const isDraft = i === 1050;
+    const isHilux = i <= 60;
+    store.data.auctions.push({
+      id: 2000 + i,
+      title: isHilux ? `Toyota Hilux Batch Lot ${i}` : `Other Lot ${i}`,
+      description: isHilux ? "Diesel double cab pickup" : "General lot",
+      current_price: isHilux ? 25000 : 10000 + (i % 5) * 100,
+      start_price: 9000,
+      product_category_id: isHilux ? 2 : 4,
+      product_schema_version_id: isHilux ? 1 : 3,
+      city: isHilux && i % 2 === 0 ? "Harare" : "Bulawayo",
+      condition: "used",
+      status: isDraft ? "draft" : "live",
+      ends_at: "2030-01-01T00:00:00Z",
+      images: "[]",
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+    });
+    if (isHilux) {
+      store.data.vehicles.push({
+        id: 5000 + i,
+        auction_id: 2000 + i,
+        make: "Toyota",
+        model: "Hilux",
+        model_year: 2021,
+        odometer_km: 50000,
+        fuel_type: "DIESEL",
+        drivetrain: "4WD",
+        transmission: "AUTOMATIC",
+      });
+    }
+  }
+
+  const rebuilt = await rebuildProductSearchIndex(store, 250);
+  expect(rebuilt.count).toBe(1049);
+  expect(rebuilt.removed).toBe(1);
+  expect(store.data.product_search_index.length).toBe(1049);
+
+  // Pre-pagination filtering + exact total across >250 rows + deterministic auction_id tie-breaker
+  const p1 = await queryProductSearch(store, {
+    search: "Hilux Diesel",
+    facets: { DRIVETRAIN: "4WD" },
+    order: "price_asc",
+    limit: 10,
+    offset: 10,
+  });
+  expect(p1.total).toBe(60);
+  expect(p1.items.length).toBe(10);
+  expect(p1.items[0].auction_id).toBe(2011);
+  expect(p1.items[9].auction_id).toBe(2020);
+  expect(p1.facetOptions.make[0]).toEqual({ value: "Toyota", label: "Toyota", count: 60 });
+
+  // Input validation rejects invalid bounds/status/order/length
+  await expect(queryProductSearch(store, { minPrice: 20000, maxPrice: 10000 })).rejects.toThrow(SearchValidationError);
+  await expect(queryProductSearch(store, { minYear: 2024, maxYear: 2018 })).rejects.toThrow(SearchValidationError);
+  await expect(queryProductSearch(store, { limit: 500 })).rejects.toThrow(SearchValidationError);
+  await expect(queryProductSearch(store, { offset: -1 })).rejects.toThrow(SearchValidationError);
+  await expect(queryProductSearch(store, { status: "draft" })).rejects.toThrow(SearchValidationError);
+  await expect(queryProductSearch(store, { order: "bogus" as any })).rejects.toThrow(SearchValidationError);
+  await expect(queryProductSearch(store, { search: "x".repeat(201) })).rejects.toThrow(SearchValidationError);
 });

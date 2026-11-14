@@ -91,10 +91,7 @@ def main() -> None:
       )
     """, (veh_cat_id, veh_schema_id))
 
-    db.execute("""
-      INSERT INTO product_search_fts(rowid, title, description, make, model, search_text)
-      VALUES (9001, '2021 Toyota Hilux 2.8 GD-6 4x4 Double Cab', 'Clean local Toyota Hilux 4WD bakkie with full service history', 'Toyota', 'Hilux', 'Toyota Hilux Pickup Diesel Automatic Harare 2021')
-    """)
+    # FTS row 9001 must be populated automatically by trg_psi_fts_insert
 
     # Insert test vehicle 2: Nissan X-Trail 2016 Petrol FWD 140,000 km, Grade C
     db.execute("""
@@ -125,10 +122,7 @@ def main() -> None:
       )
     """, (veh_cat_id, veh_schema_id))
 
-    db.execute("""
-      INSERT INTO product_search_fts(rowid, title, description, make, model, search_text)
-      VALUES (9002, '2016 Nissan X-Trail 2.0 2WD', 'Used family SUV Nissan X-Trail in Harare', 'Nissan', 'X-Trail', 'Nissan X-Trail SUV Petrol CVT Harare 2016')
-    """)
+    # FTS row 9002 must also be populated automatically by trg_psi_fts_insert
 
     # Insert test phone: Apple iPhone 15 Pro 256GB
     db.execute("""
@@ -259,11 +253,22 @@ def main() -> None:
     """).fetchall()
     assert len(matches_9002) == 0, f"Saved search alert should NOT match 9002: {matches_9002}"
 
-    # 8. Non-Destructive Search Index Rebuild Safety
-    # Wipe the search projection and prove canonical auctions remain intact
+    # 8. Outbox trigger (P0-01), FTS update/delete triggers & Non-Destructive Rebuild
+    db.execute("DELETE FROM pi_projection_outbox")
+    db.execute("UPDATE auctions SET current_price = 29500, updated_at = '2026-01-02T00:00:00Z' WHERE id = 9001")
+    outbox_rows = db.execute(
+        "SELECT event_type, product_type, product_id, published_at FROM pi_projection_outbox WHERE product_id=9001"
+    ).fetchall()
+    assert outbox_rows == [("SEARCH_INDEX_REFRESH", "AUCTION", 9001, None)], f"Outbox trigger failed: {outbox_rows}"
+
+    # Updating product_search_index must update FTS automatically via trg_psi_fts_update
+    db.execute("UPDATE product_search_index SET title='2021 Toyota Hilux SR5 Special' WHERE auction_id=9001")
+    assert 9001 in [r[0] for r in db.execute("SELECT rowid FROM product_search_fts WHERE product_search_fts MATCH 'SR5'").fetchall()]
+
+    # Wipe the search projection -> trg_psi_fts_delete automatically clears product_search_fts
     db.execute("DELETE FROM product_search_index")
-    db.execute("DELETE FROM product_search_fts")
     assert db.execute("SELECT count(*) FROM product_search_index").fetchone()[0] == 0
+    assert db.execute("SELECT count(*) FROM product_search_fts").fetchone()[0] == 0
 
     # Canonical auctions are untouched
     assert db.execute("SELECT count(*) FROM auctions WHERE id IN (9001, 9002, 9003)").fetchone()[0] == 3
@@ -281,11 +286,13 @@ def main() -> None:
       FROM auctions a WHERE a.id=9001
     """)
     assert db.execute("SELECT count(*) FROM product_search_index WHERE auction_id=9001").fetchone()[0] == 1
+    assert 9001 in [r[0] for r in db.execute("SELECT rowid FROM product_search_fts WHERE product_search_fts MATCH 'Hilux'").fetchall()]
 
     print("PI-01E structured discovery & search projection proof: PASS")
     print("  migrations U24-U25 verified: PASS")
+    print("  outbox SEARCH_INDEX_REFRESH trigger verified: PASS")
     print("  sensitive identifier exclusion verified: PASS")
-    print("  FTS5 full text search verified: PASS")
+    print("  FTS5 insert/update/delete trigger sync verified: PASS")
     print("  compound vehicle filtering verified: PASS")
     print("  category schema isolation verified: PASS")
     print("  structured saved search facets and alert matching: PASS")
