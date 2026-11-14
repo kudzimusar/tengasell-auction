@@ -26,6 +26,7 @@ import { runGuardedBid } from "../../bids/bid-completion";
 import { reconcileBidOutcome } from "../../bids/bid-reconcile";
 import { AuctionCard } from "../../components/AuctionCard";
 import { BottomNav } from "../../components/BottomNav";
+import { VehicleProductIntelligenceCard } from "../../components/VehicleProductIntelligenceCard";
 import { presentBidOutcome } from "../../lib/bid-copy";
 import {
   deriveListingState,
@@ -61,6 +62,7 @@ import { nxsTokens, type NxsTheme } from "../../nxs/tokens";
 
 export default function ItemScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const scrollRef = useRef<React.ElementRef<typeof ScrollView> | null>(null);
   const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -110,6 +112,15 @@ export default function ItemScreen() {
     loaded: false,
     bids: [],
   });
+
+  useEffect(() => {
+    if (item) {
+      const timer = setTimeout(() => {
+        scrollRef.current?.scrollTo({ y: 360, animated: false });
+      }, 200);
+      return () => clearTimeout(timer);
+    }
+  }, [item]);
 
   const load = useCallback(
     async (opts?: { silent?: boolean }) => {
@@ -422,6 +433,7 @@ export default function ItemScreen() {
         ) : (
           <>
             <ScrollView
+              ref={scrollRef}
               contentContainerStyle={styles.scroll}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode="on-drag"
@@ -529,6 +541,8 @@ export default function ItemScreen() {
                   })}
                 </Text>
               )}
+
+              <VehicleProductIntelligenceCard item={item} />
             </View>
 
             <View style={styles.block}>

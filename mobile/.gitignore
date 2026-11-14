@@ -36,6 +36,9 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
+# transient build metadata
+src/lib/build-meta.json
+
 # generated native folders
 /ios
 /android

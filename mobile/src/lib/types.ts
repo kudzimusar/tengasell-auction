@@ -2,7 +2,46 @@
 // These mirror the TrailBase SQLite schema (mini-services/trailbase-db).
 // `user` fields are opaque base64 ids from the records API.
 
-export type AuctionStatus = "live" | "ended" | "sold" | "cancelled" | "draft";
+export const ALLOWED_AUCTION_STATUSES = [
+  "live",
+  "ended",
+  "sold",
+  "cancelled",
+  "draft",
+] as const;
+export type AuctionStatus = (typeof ALLOWED_AUCTION_STATUSES)[number];
+
+export const ALLOWED_RESERVE_DISCLOSURES = [
+  "UNSPECIFIED",
+  "NO_RESERVE",
+  "RESERVE_APPLIES",
+  "UPSET_APPLIES",
+] as const;
+export type ReserveDisclosure = (typeof ALLOWED_RESERVE_DISCLOSURES)[number];
+
+export type FactSourceClass = "SELLER_DECLARED" | "INSPECTOR_VERIFIED" | "DOCUMENT_EVIDENCE" | "THIRD_PARTY";
+
+export const ALLOWED_FACT_VERIFICATION_STATES = [
+  "VERIFIED",
+  "UNVERIFIED",
+  "NOT_PROVIDED",
+] as const;
+export type FactVerificationState = (typeof ALLOWED_FACT_VERIFICATION_STATES)[number];
+
+export interface VehiclePublicProjection {
+  make?: string | null;
+  model?: string | null;
+  year?: number | null;
+  mileage?: number | null;
+  odometer_source?: FactSourceClass | string | null;
+  transmission?: string | null;
+  fuel_type?: string | null;
+  body_type?: string | null;
+  verification_state?: FactVerificationState;
+  inspection_status?: string | null;
+  inspection_grade?: string | null;
+  vin_classification?: "RECORDED" | "NOT_PROVIDED" | string;
+}
 export type OrderStatus =
   | "pending_payment"
   | "paid"
@@ -68,6 +107,10 @@ export interface Auction {
   status: AuctionStatus;
   extension_count: number;
   featured: number;
+  /** PR #14 Product Intelligence & canonical public projection fields. */
+  reserve_disclosure?: ReserveDisclosure;
+  asset_kind?: "general" | "vehicle" | "part" | string;
+  vehicle_projection?: VehiclePublicProjection | null;
   /** Gap-8 schema fields (present in live TrailBase records). */
   allow_offers?: number;
   offer_min?: number | null;
@@ -263,6 +306,7 @@ export interface AuctionView extends Auction {
   endingSoon: boolean;
   hasBids: boolean;
   reserveMet: boolean | null;
+  reserveDisclosure: ReserveDisclosure;
 }
 
 export function toAuctionView(a: Auction): AuctionView {
@@ -275,12 +319,14 @@ export function toAuctionView(a: Auction): AuctionView {
   }
   const ends = Date.parse(a.ends_at);
   const endingSoon = a.status === "live" && ends - Date.now() < 3600_000;
+  const reserveDisclosure: ReserveDisclosure = a.reserve_disclosure ?? "UNSPECIFIED";
   return {
     ...a,
     imageList,
     endingSoon,
     hasBids: a.bid_count > 0,
     reserveMet: a.reserve_price == null ? null : a.current_price >= a.reserve_price,
+    reserveDisclosure,
   };
 }
 

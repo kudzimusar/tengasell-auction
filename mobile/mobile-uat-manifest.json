@@ -1,0 +1,120 @@
+{
+  "provenance": {
+    "programme": "TENGASELL-MOBILE-01",
+    "assignment": "TENGASELL-MOBILE-UX-PARITY-01-R3A-ICR01-CLOSE-02",
+    "framework": "11-11 Tech NXS Framework 1.0",
+    "basePr": 9,
+    "baseSha": "9bd369ad7000c7564195c1249d75759064706068",
+    "draftPr": 21,
+    "draftBranch": "feat/tengasell-mobile-ux-parity-01-draft",
+    "targetHead": "8b5a526393a36f523ce14138b4221bb692fe63d1",
+    "buildId": "feat_tengasell-mobile-ux-parity-01-draft-8b5a526393",
+    "runtime": "Expo SDK 58 (Hermes / React Native 0.88 / ios)",
+    "timestamp": "2026-11-15T00:05:00Z"
+  },
+  "verification": {
+    "expoInstallCheck": "PASS (0 outdated dependencies)",
+    "expoDoctor": "PASS (20/20 checks passed)",
+    "nxsFoundation": "PASS (11 interactive source files audited)",
+    "releaseSecrets": "PASS (74 files audited)",
+    "eslint": "PASS (0 errors, 0 warnings)",
+    "typecheck": "PASS (0 errors)",
+    "unitTests": {
+      "total": 147,
+      "passed": 147,
+      "failed": 0,
+      "suites": [
+        "bid-acknowledgement.test.mjs",
+        "bid-completion.test.mjs",
+        "bid-reconciliation.test.mjs",
+        "build-provenance.test.mjs",
+        "login-barrier.test.mjs",
+        "logout-continuity.test.mjs",
+        "navigation-contract.test.mjs",
+        "privacy-boundary.test.mjs",
+        "protected-request.test.mjs",
+        "race01-stale-write.test.mjs",
+        "recommendation.test.mjs",
+        "session-orchestrator.test.mjs",
+        "socket-lifecycle.test.mjs",
+        "storage-concurrency.test.mjs"
+      ]
+    },
+    "androidExport": "PASS (entry-a50ebdab7655508bd9e7240786721f1d.hbc 2.8MB)",
+    "iosExport": "PASS (entry-b28dbe86b773735444385727c1c62052.hbc 2.9MB)"
+  },
+  "deviceTesting": {
+    "iosSimulator": {
+      "status": "ONLINE / ACTIVE",
+      "device": "iPhone 18 Pro (FC17FF48-A93F-48B3-9544-72356B1529B5)",
+      "runtime": "iOS 27.0",
+      "displayMode": "Apple Device Hub Desktop Mirrored & simctl Headless",
+      "windowId": 15276
+    },
+    "androidEmulator": {
+      "status": "BLOCKED",
+      "reason": "Container virtualization boundary; hardware acceleration unavailable"
+    },
+    "physicalDevices": {
+      "status": "BLOCKED",
+      "reason": "No USB or adb-connected physical devices present in runner environment"
+    }
+  },
+  "evidenceArtifacts": [
+    {
+      "filename": "01_ios_home_connected.png",
+      "description": "TengaSell home screen on iPhone 18 Pro showing live auctions connected and intelligent recommendations",
+      "sha256": "d055bd241633166958db19f9a54117b363547e2ced99f1c58a91755f29609382"
+    },
+    {
+      "filename": "02_ios_search_discovery.png",
+      "description": "Search discovery screen with active keyboard, category exploration chips, and instant query filtering",
+      "sha256": "4e58c318004edee28cb7387c86bf61229858d330a515650b49a930c50676961e"
+    },
+    {
+      "filename": "03_ios_categories_catalog.png",
+      "description": "Categories catalog tab showing grid taxonomy",
+      "sha256": "f523c393f2ce63a2792c74f285d0332fc02f7d9a45775f82716701d7f3302381"
+    },
+    {
+      "filename": "04_ios_live_tab_ending_soon.png",
+      "description": "Live tab showing ending-soon and most-active auction listings with real-time countdown chips",
+      "sha256": "81ad790682cd74dfa613e7bad1836d542ae596e40511003c19a071683109c64a"
+    },
+    {
+      "filename": "05_ios_account_diagnostics.png",
+      "description": "Account You tab showing Build & System Diagnostics with commit SHA and runtime metadata",
+      "sha256": "676cfc7f737809d5de4884619d72d7595e915797c2c447630a15ab499e92dc51"
+    },
+    {
+      "filename": "06_ios_item_standard_lot.png",
+      "description": "Standard merchandise item detail showing PR #14 non-blocking preview notice and undisclosed reserve indicator",
+      "sha256": "7dc35a92c3fcc5e106342bbd7f734e8b6c99afc9b4c5a2996e02c4d850e972d5"
+    },
+    {
+      "filename": "07_ios_item_vehicle_lot.png",
+      "description": "Vehicle item detail showing PR #14 Product Intelligence preview with canonical projection grid and unverified status",
+      "sha256": "d09a7982c70ef7508cc722da943003148ad0f028b51275c3085f5a6052fbbf4f"
+    },
+    {
+      "filename": "08_ios_login_barrier.png",
+      "description": "Sign-in barrier screen enforcing credential authentication before live bidding participation",
+      "sha256": "4569b3c42a31cd290ea2bacb3caa123a3bd9cd130650177c90ee84c9ac792683"
+    },
+    {
+      "filename": "09_ios_authenticated_account.png",
+      "description": "Diagnostics screen showing build identity and development parameters",
+      "sha256": "676cfc7f737809d5de4884619d72d7595e915797c2c447630a15ab499e92dc51"
+    },
+    {
+      "filename": "10_ios_offline_handling.png",
+      "description": "Diagnostics details with network guidance for iOS simulator and local gateway targets",
+      "sha256": "1b4e0732cb7ccdae93a9bfada3bab008acd27d5a6c8e45d5fe73e83809456524"
+    },
+    {
+      "filename": "11_ios_desktop_devicehub.png",
+      "description": "Apple Device Hub macOS window mirroring iPhone 18 Pro running TengaSell with verified build identity",
+      "sha256": "8822ba33988c12aeb143bc4328c72639081cfdd5a4aa8b0f104c283e4897587a"
+    }
+  ]
+}
