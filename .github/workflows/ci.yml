@@ -12,11 +12,15 @@ on:
       - fix/tengasell-auction-imp-lr01-r1-rbac-preview
       - feat/tengasell-auction-imp-lr02-commercial-operations
       - cert/tengasell-auction-cert-01-stg01
+      - feat/tengasell-pi-01d-vehicle-product-intelligence
+      - feat/tengasell-pi-01e-structured-discovery
   pull_request:
     branches:
       - main
       - feat/tengasell-auction-imp01-authority-safety-barrier
       - feat/tengasell-auction-imp-lr01-core-vehicle-events
+      - cert/tengasell-auction-cert-01-stg01
+      - feat/tengasell-pi-01d-vehicle-product-intelligence
   workflow_dispatch:
 
 concurrency:
@@ -36,12 +40,14 @@ jobs:
       DATABASE_URL: file:${{ github.workspace }}/ci.db
       NEXT_TELEMETRY_DISABLED: "1"
       CI: "true"
+      ADMIN_PASSWORD: "${{ vars.TENGASELL_CI_ADMIN_PASSWORD || 'Tengasell#2025' }}"
 
     steps:
       - name: Checkout exact source head
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
 
       - name: Publish LR01-R1 regression pending status
         if: github.job == 'build-and-smoke'
@@ -98,8 +104,57 @@ jobs:
       - name: CERT-01-PREP full commercial journey proof
         run: npm run test:cert01-prep
 
+      - name: Setup Bun for canonical trade engine
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install canonical trade-engine dependencies
+        working-directory: mini-services/trade-engine
+        run: bun install
+
+      - name: Download TrailBase v0.35.1 runtime for disposable verification
+        run: |
+          mkdir -p .tools/tb
+          curl -fsSL https://github.com/trailbaseio/trailbase/releases/download/v0.35.1/trailbase_v0.35.1_x86_64_linux.zip -o .tools/tb/trailbase.zip
+          unzip -o .tools/tb/trailbase.zip -d .tools/tb/
+          chmod +x .tools/tb/trail
+          .tools/tb/trail --version
+
       - name: TrailBase migration fresh-install and parent-to-tip proof
         run: npm run test:trailbase-migrations
+
+      - name: PI-01D Vehicle Product Intelligence proof
+        run: npm run test:pi-01d
+
+      - name: PI-01E Structured Discovery proof (when present)
+        if: hashFiles('tests/pi-01e-structured-discovery.py') != ''
+        run: npm run test:pi-01e
+
+      - name: Real authenticated TrailBase runtime RBAC and fail-closed proof
+        run: |
+          TMP_DEPOT=$(mktemp -d)
+          cp -R mini-services/trailbase-db/traildepot/config.textproto mini-services/trailbase-db/traildepot/migrations "$TMP_DEPOT/"
+          (.tools/tb/trail --depot "$TMP_DEPOT" run --address 127.0.0.1:18401 --stderr-logging >/tmp/tb-ci-smoke.log 2>&1 &
+           TB_PID=$!
+           trap 'kill "$TB_PID" 2>/dev/null || true; rm -rf "$TMP_DEPOT"' EXIT
+           READY=0
+           for i in $(seq 1 40); do
+             if curl -fsS http://127.0.0.1:18401/api/records/v1/pi_category_labels >/dev/null 2>&1; then
+               READY=1
+               break
+             fi
+             sleep 0.5
+           done
+           test "$READY" -eq 1
+           code_anon_sess=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18401/api/records/v1/product_intake_sessions)
+           echo "Anonymous product_intake_sessions -> HTTP ${code_anon_sess}"
+           test "$code_anon_sess" = "401" -o "$code_anon_sess" = "403"
+           kill "$TB_PID" 2>/dev/null || true
+           wait "$TB_PID" 2>/dev/null || true)
+          if [ -f mini-services/trade-engine/pi-runtime-rbac.integration.test.ts ]; then
+            TRAILBASE_BIN="$PWD/.tools/tb/trail" bun test mini-services/trade-engine/pi-runtime-rbac.integration.test.ts
+          fi
 
       - name: Event UI responsive and accessibility contract
         run: node tests/event-ui-contract.mjs
@@ -110,18 +165,35 @@ jobs:
       - name: LR01-R1 event RBAC and Auction Hub discoverability contract
         run: node tests/lr01-r1-rbac-navigation-contract.mjs
 
-      - name: Setup Bun for canonical trade engine
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install canonical trade-engine dependencies
+      - name: Vehicle / event / operations / policy / discovery behavioral RBAC proof
         working-directory: mini-services/trade-engine
-        run: bun install
+        run: |
+          bun test vehicle-authority.test.ts event-authority.test.ts operation-authority.test.ts policy-authority.test.ts product-intelligence.test.ts
+          if [ -f discovery.test.ts ]; then
+            bun test discovery.test.ts
+          fi
 
-      - name: Vehicle / event / operations / policy behavioral RBAC proof
-        working-directory: mini-services/trade-engine
-        run: bun test vehicle-authority.test.ts event-authority.test.ts operation-authority.test.ts policy-authority.test.ts
+      - name: Changed-code TypeScript validation
+        run: |
+          set -euo pipefail
+          BASE_SHA="${{ github.event.pull_request.base.sha || 'cert/tengasell-auction-cert-01-stg01' }}"
+          git fetch origin "$BASE_SHA" --depth=1 >/dev/null 2>&1 || true
+          CHANGED_TS=$(git diff --name-only "$BASE_SHA"...HEAD -- '*.ts' '*.tsx' 2>/dev/null || git diff --name-only HEAD~1..HEAD -- '*.ts' '*.tsx' 2>/dev/null || true)
+          echo "Changed TS/TSX files vs $BASE_SHA:"
+          echo "$CHANGED_TS"
+          if [ -n "$CHANGED_TS" ]; then
+            TSC_OUT=$(npx tsc --noEmit --pretty false 2>&1 || true)
+            FAILED=0
+            while IFS= read -r f; do
+              [ -z "$f" ] && continue
+              if echo "$TSC_OUT" | grep -qF "${f}("; then
+                echo "::error file=${f}::TypeScript error in changed file:"
+                echo "$TSC_OUT" | grep -F "${f}("
+                FAILED=1
+              fi
+            done <<< "$CHANGED_TS"
+            test "$FAILED" -eq 0
+          fi
 
       - name: Compile canonical trade engine
         working-directory: mini-services/trade-engine
