@@ -7,6 +7,7 @@ import test from "node:test";
 import {
   BUILD_PROVENANCE,
   resolveBundleSourceIdentity,
+  validateProvenance,
 } from "../src/lib/build-info.ts";
 
 test("PROV-01: distinguishes all five core provenance identities", () => {
@@ -85,4 +86,79 @@ test("PROV-04: convenience accessors preserve backwards compatibility with UI co
   assert.equal(BUILD_PROVENANCE.commitSha, BUILD_PROVENANCE.bundleSource.commitSha);
   assert.equal(BUILD_PROVENANCE.branch, BUILD_PROVENANCE.bundleSource.branch);
   assert.equal(BUILD_PROVENANCE.gatewayUrl, BUILD_PROVENANCE.gateway.gatewayUrl);
+});
+
+test("PROV-05 (Negative): rejects missing or UNKNOWN provenance in release mode", () => {
+  const emptySource = resolveBundleSourceIdentity(null);
+  const result = validateProvenance(emptySource, { isRelease: true });
+
+  assert.equal(result.valid, false, "Release build must fail validation if provenance is unknown");
+  assert.ok(result.errors.some((e) => e.includes("UNKNOWN")), "Must report UNKNOWN identity error");
+});
+
+test("PROV-06 (Negative): detects stale or mismatched manifest SHA", () => {
+  const currentHead = "8b5a526393a36f523ce14138b4221bb692fe63d1";
+  const staleManifestTarget = "d76daae1095842a1ad09039d022aa1febc486cdf";
+
+  const source = resolveBundleSourceIdentity({
+    commitSha: currentHead,
+    branch: "feat/tengasell-mobile-ux-parity-01-draft",
+    buildTimestamp: "2026-11-14T20:00:00Z",
+    manifestSha: currentHead,
+  });
+
+  const result = validateProvenance(source, {
+    expectedManifestSha: staleManifestTarget,
+  });
+
+  assert.equal(result.valid, false);
+  assert.ok(
+    result.errors.some((e) => e.includes("Manifest SHA mismatch")),
+    "Must flag stale manifest SHA reference",
+  );
+});
+
+test("PROV-07 (Negative): detects bundle digest mismatch", () => {
+  const source = resolveBundleSourceIdentity({
+    commitSha: "8b5a526393a36f523ce14138b4221bb692fe63d1",
+    bundleDigest: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  });
+
+  const result = validateProvenance(source, {
+    expectedBundleDigest: "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  });
+
+  assert.equal(result.valid, false);
+  assert.ok(
+    result.errors.some((e) => e.includes("Bundle digest mismatch")),
+    "Must reject bundle digest mismatch",
+  );
+});
+
+test("PROV-08 (Negative): validates distinct PR source SHA and CI merge SHA formats", () => {
+  const sourceWithMalformedSha = resolveBundleSourceIdentity({
+    commitSha: "8b5a526393a36f523ce14138b4221bb692fe63d1",
+    prSourceSha: "not-a-sha",
+    testedMergeSha: "invalid-sha-characters-xyz",
+  });
+
+  const result = validateProvenance(sourceWithMalformedSha);
+  assert.equal(result.valid, false);
+  assert.ok(result.errors.some((e) => e.includes("Invalid prSourceSha")));
+  assert.ok(result.errors.some((e) => e.includes("Invalid testedMergeSha")));
+});
+
+test("PROV-09 (Negative): distinguishes JS bundle update from native binary identity", () => {
+  // A JS OTA bundle or Metro bundle source change must never mutate native binary identity
+  const native = BUILD_PROVENANCE.nativeBinary;
+  const bundle = BUILD_PROVENANCE.bundleSource;
+
+  assert.equal(native.appName, "TengaSell");
+  assert.equal(native.bundleId, "com.tengasell.app");
+  assert.equal(native.version, "0.1.0");
+  assert.equal(native.buildNumber, "1");
+
+  // Bundle source commit SHA is distinct from binary version string
+  assert.notEqual(native.version, bundle.commitSha);
+  assert.notEqual(native.buildNumber, bundle.buildId);
 });

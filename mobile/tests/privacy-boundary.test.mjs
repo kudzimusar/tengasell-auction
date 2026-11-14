@@ -96,4 +96,88 @@ test("PRIV-04: defaults vehicle verification state to UNVERIFIED unless explicit
 
   const sanitized = sanitizeAuctionPublicView(unverifiedAuction);
   assert.equal(sanitized.vehicle_projection?.verification_state, "UNVERIFIED");
+
+  // Invalid verification state must also fall back to UNVERIFIED
+  const malformedAuction = {
+    id: 9006,
+    title: "2016 Mazda Demio",
+    vehicle_projection: {
+      make: "Mazda",
+      model: "Demio",
+      verification_state: "SUPER_VERIFIED_INVALID",
+    },
+  };
+  const sanitizedMalformed = sanitizeAuctionPublicView(malformedAuction);
+  assert.equal(sanitizedMalformed.vehicle_projection?.verification_state, "UNVERIFIED");
+});
+
+test("PRIV-05: resolves unrecognized or invalid reserve disclosures to UNSPECIFIED", () => {
+  const invalidDisclosures = ["SECRET", "1234", "CUSTOM", "", null, undefined, 42, {}];
+
+  for (const inv of invalidDisclosures) {
+    const record = {
+      id: 9010,
+      title: "Unknown Disclosure Test",
+      reserve_disclosure: inv,
+      reserve_price: null,
+    };
+    const sanitized = sanitizeAuctionPublicView(record);
+    assert.equal(sanitized.reserve_disclosure, "UNSPECIFIED", `Failed for value: ${String(inv)}`);
+    assert.equal(sanitized.reserve_price, null);
+  }
+});
+
+test("PRIV-06: detects contradiction between NO_RESERVE declaration and positive reserve price", () => {
+  // If an upstream record declares NO_RESERVE but leaks a positive reserve_price,
+  // we must fail-closed to UNSPECIFIED rather than misleading the bidder
+  const contradictory = {
+    id: 9011,
+    title: "Contradictory Reserve Auction",
+    reserve_disclosure: "NO_RESERVE",
+    reserve_price: 15000,
+  };
+
+  const sanitized = sanitizeAuctionPublicView(contradictory);
+  assert.equal(sanitized.reserve_disclosure, "UNSPECIFIED", "Contradiction must normalize to UNSPECIFIED");
+  assert.equal(sanitized.reserve_price, null, "reserve_price must be scrubbed");
+});
+
+test("PRIV-07: missing or null reserve price NEVER derives NO_RESERVE", () => {
+  const missingReserve = {
+    id: 9012,
+    title: "Missing Reserve Auction",
+    reserve_price: null,
+    reserve_disclosure: undefined,
+  };
+
+  const sanitized = sanitizeAuctionPublicView(missingReserve);
+  assert.notEqual(sanitized.reserve_disclosure, "NO_RESERVE", "Missing reserve must never imply NO_RESERVE");
+  assert.equal(sanitized.reserve_disclosure, "UNSPECIFIED");
+});
+
+test("PRIV-08: strict public-field allowlist mapping guarantees zero object spreading", () => {
+  const rawWithInjectedPrivateFields = {
+    id: 9013,
+    title: "Vehicle with Database Injections",
+    reserve_price: 20000,
+    // Arbitrary unredacted private database columns
+    ssn: "000-11-2222",
+    seller_phone: "+263771234567",
+    margin: 0.15,
+    private_notes: "Damaged transmission, do not disclose",
+    internal_crm_id: "CRM-9988",
+    audit_trail: { ip: "192.168.1.1" },
+  };
+
+  const sanitized = sanitizeAuctionPublicView(rawWithInjectedPrivateFields);
+
+  // Assert none of the arbitrary or unredacted keys exist on the returned object
+  const keys = Object.keys(sanitized);
+  assert.equal(keys.includes("ssn"), false);
+  assert.equal(keys.includes("seller_phone"), false);
+  assert.equal(keys.includes("margin"), false);
+  assert.equal(keys.includes("private_notes"), false);
+  assert.equal(keys.includes("internal_crm_id"), false);
+  assert.equal(keys.includes("audit_trail"), false);
+  assert.equal(sanitized.reserve_price, null);
 });

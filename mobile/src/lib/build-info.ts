@@ -17,6 +17,10 @@ export interface BundleSourceIdentity {
   buildTimestamp: string;
   buildId: string;
   isKnown: boolean;
+  prSourceSha?: string;
+  testedMergeSha?: string;
+  bundleDigest?: string;
+  manifestSha?: string;
 }
 
 export interface MetroServerIdentity {
@@ -86,12 +90,17 @@ export function resolveBundleSourceIdentity(customMeta?: unknown): BundleSourceI
   try {
     const meta = (customMeta ?? require("./build-meta.json")) as Record<string, unknown>;
     if (meta && typeof meta.commitSha === "string" && meta.commitSha.length > 0) {
+      const isKnown = meta.isKnown !== false && meta.commitSha !== "UNKNOWN_COMMIT";
       return {
         commitSha: meta.commitSha,
         branch: typeof meta.branch === "string" ? meta.branch : "unknown",
         buildTimestamp: typeof meta.buildTimestamp === "string" ? meta.buildTimestamp : "unknown",
         buildId: typeof meta.buildId === "string" ? meta.buildId : `build-${meta.commitSha.slice(0, 8)}`,
-        isKnown: meta.isKnown !== false && meta.commitSha !== "UNKNOWN_COMMIT",
+        isKnown,
+        prSourceSha: typeof meta.prSourceSha === "string" ? meta.prSourceSha : undefined,
+        testedMergeSha: typeof meta.testedMergeSha === "string" ? meta.testedMergeSha : undefined,
+        bundleDigest: typeof meta.bundleDigest === "string" ? meta.bundleDigest : undefined,
+        manifestSha: typeof meta.manifestSha === "string" ? meta.manifestSha : undefined,
       };
     }
   } catch {
@@ -104,6 +113,60 @@ export function resolveBundleSourceIdentity(customMeta?: unknown): BundleSourceI
     buildTimestamp: "unknown",
     buildId: "unknown-build",
     isKnown: false,
+  };
+}
+
+export interface ProvenanceValidationResult {
+  valid: boolean;
+  errors: string[];
+}
+
+export function validateProvenance(
+  bundleSource: BundleSourceIdentity,
+  options?: {
+    isRelease?: boolean;
+    expectedManifestSha?: string;
+    expectedBundleDigest?: string;
+  },
+): ProvenanceValidationResult {
+  const errors: string[] = [];
+  const isRelease = options?.isRelease ?? false;
+
+  // Rule 1: Release mode requires fully known provenance with valid 40-char SHA
+  if (isRelease) {
+    if (!bundleSource.isKnown || bundleSource.commitSha === "UNKNOWN_COMMIT") {
+      errors.push("Release build rejected: bundle source identity is UNKNOWN");
+    } else if (!/^[0-9a-f]{40}$/i.test(bundleSource.commitSha)) {
+      errors.push(`Release build rejected: commitSha '${bundleSource.commitSha}' is not a valid 40-character SHA`);
+    }
+  }
+
+  // Rule 2: If both prSourceSha and testedMergeSha are present, they must be valid SHAs
+  if (bundleSource.prSourceSha && !/^[0-9a-f]{40}$/i.test(bundleSource.prSourceSha)) {
+    errors.push(`Invalid prSourceSha: '${bundleSource.prSourceSha}'`);
+  }
+  if (bundleSource.testedMergeSha && !/^[0-9a-f]{40}$/i.test(bundleSource.testedMergeSha)) {
+    errors.push(`Invalid testedMergeSha: '${bundleSource.testedMergeSha}'`);
+  }
+
+  // Rule 3: Manifest SHA consistency check
+  if (options?.expectedManifestSha) {
+    const targetSha = bundleSource.manifestSha ?? bundleSource.testedMergeSha ?? bundleSource.commitSha;
+    if (targetSha !== options.expectedManifestSha) {
+      errors.push(`Manifest SHA mismatch: expected '${options.expectedManifestSha}', got '${targetSha}'`);
+    }
+  }
+
+  // Rule 4: Bundle digest check
+  if (options?.expectedBundleDigest && bundleSource.bundleDigest) {
+    if (bundleSource.bundleDigest !== options.expectedBundleDigest) {
+      errors.push(`Bundle digest mismatch: expected '${options.expectedBundleDigest}', got '${bundleSource.bundleDigest}'`);
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
   };
 }
 

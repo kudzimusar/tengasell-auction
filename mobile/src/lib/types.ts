@@ -2,10 +2,31 @@
 // These mirror the TrailBase SQLite schema (mini-services/trailbase-db).
 // `user` fields are opaque base64 ids from the records API.
 
-export type AuctionStatus = "live" | "ended" | "sold" | "cancelled" | "draft";
-export type ReserveDisclosure = "UNSPECIFIED" | "NO_RESERVE" | "RESERVE_APPLIES" | "UPSET_APPLIES";
+export const ALLOWED_AUCTION_STATUSES = [
+  "live",
+  "ended",
+  "sold",
+  "cancelled",
+  "draft",
+] as const;
+export type AuctionStatus = (typeof ALLOWED_AUCTION_STATUSES)[number];
+
+export const ALLOWED_RESERVE_DISCLOSURES = [
+  "UNSPECIFIED",
+  "NO_RESERVE",
+  "RESERVE_APPLIES",
+  "UPSET_APPLIES",
+] as const;
+export type ReserveDisclosure = (typeof ALLOWED_RESERVE_DISCLOSURES)[number];
+
 export type FactSourceClass = "SELLER_DECLARED" | "INSPECTOR_VERIFIED" | "DOCUMENT_EVIDENCE" | "THIRD_PARTY";
-export type FactVerificationState = "VERIFIED" | "UNVERIFIED" | "NOT_PROVIDED";
+
+export const ALLOWED_FACT_VERIFICATION_STATES = [
+  "VERIFIED",
+  "UNVERIFIED",
+  "NOT_PROVIDED",
+] as const;
+export type FactVerificationState = (typeof ALLOWED_FACT_VERIFICATION_STATES)[number];
 
 export interface VehiclePublicProjection {
   make?: string | null;
