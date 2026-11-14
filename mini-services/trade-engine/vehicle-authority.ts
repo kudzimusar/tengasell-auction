@@ -198,6 +198,94 @@ export async function saveVehicleIntake(
   return { ok: true, vehicle: await store.get("vehicles", vehicleId) }
 }
 
+function maskVin(vin: string | null | undefined): string | null {
+  if (!vin) return null
+  const v = String(vin).trim()
+  if (v.length < 8) return "***"
+  return `${v.slice(0, 3)}***${v.slice(-4)}`
+}
+
+export function projectPublicVehicleBundle(bundle: any) {
+  const v = bundle.vehicle
+  if (!v) return bundle
+
+  const publicVehicle = {
+    id: v.id,
+    auction_id: v.auction_id,
+    make: v.make,
+    model: v.model,
+    model_year: v.model_year,
+    variant: v.variant ?? null,
+    odometer_km: v.odometer_km,
+    transmission: v.transmission,
+    fuel_type: v.fuel_type,
+    drivetrain: v.drivetrain,
+    engine_displacement_cc: v.engine_displacement_cc ?? null,
+    tengasell_grade: v.tengasell_grade ?? null,
+    roadworthy: v.roadworthy ?? null,
+    lifecycle: v.lifecycle ?? null,
+    location_city: v.location_city ?? null,
+    location_country: v.location_country ?? null,
+    exterior_color: v.exterior_color ?? null,
+    interior_color: v.interior_color ?? null,
+    body_type: v.body_type ?? null,
+    steering_position: v.steering_position ?? null,
+    doors: v.doors ?? null,
+    seats: v.seats ?? null,
+    has_vin: Boolean(v.vin),
+    vin_masked: maskVin(v.vin),
+    has_registration: Boolean(v.registration_number),
+  }
+
+  const safeDocuments = (bundle.documents || [])
+    .filter((d: any) => d.status === "VERIFIED")
+    .map((d: any) => ({
+      id: d.id,
+      document_type: d.document_type,
+      issuer: d.issuer ?? null,
+      issued_at: d.issued_at ?? null,
+      expires_at: d.expires_at ?? null,
+      status: d.status,
+      verified_at: d.verified_at ?? null,
+    }))
+
+  const safeInspection = bundle.inspection
+    ? {
+        id: bundle.inspection.id,
+        vehicle_id: bundle.inspection.vehicle_id,
+        version: bundle.inspection.version,
+        lifecycle: bundle.inspection.lifecycle,
+        overall_grade: bundle.inspection.overall_grade ?? null,
+        grade_score: bundle.inspection.grade_score ?? null,
+        inspector_name: bundle.inspection.inspector_name || "Tengasell Certified Inspector",
+        completed_at: bundle.inspection.completed_at ?? null,
+        odometer_reading: bundle.inspection.odometer_reading ?? null,
+        roadworthy: bundle.inspection.roadworthy ?? null,
+      }
+    : null
+
+  const safeFindings = (bundle.findings || []).map((f: any) => ({
+    id: f.id,
+    inspection_id: f.inspection_id,
+    component: f.component,
+    severity: f.severity,
+    description: f.description,
+    photos: f.photos ?? null,
+  }))
+
+  return {
+    vehicle: publicVehicle,
+    documents: safeDocuments,
+    inspections: safeInspection ? [safeInspection] : [],
+    inspection: safeInspection,
+    findings: safeFindings,
+    eligibility: null,
+    eligibilityReasons: [],
+    provenance: bundle.provenance ?? {},
+    permissions: bundle.permissions,
+  }
+}
+
 export async function vehicleBundle(
   store: VehicleStore,
   auctionId: number,
@@ -246,7 +334,7 @@ export async function vehicleBundle(
     return out
   }, {})
 
-  return {
+  const rawBundle = {
     vehicle,
     documents: publicDocuments,
     inspections,
@@ -257,6 +345,22 @@ export async function vehicleBundle(
     provenance,
     permissions,
   }
+
+  const isPrivileged = Boolean(
+    viewer &&
+      (viewer.admin ||
+        permissions.inspect ||
+        permissions.review ||
+        permissions.administer ||
+        (vehicle.seller_user &&
+          (String(vehicle.seller_user) === String(viewer.id) ||
+            String(vehicle.seller_user) === String(viewer.username)))),
+  )
+
+  if (isPrivileged) {
+    return rawBundle
+  }
+  return projectPublicVehicleBundle(rawBundle)
 }
 
 

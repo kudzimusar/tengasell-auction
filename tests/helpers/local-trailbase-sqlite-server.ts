@@ -61,12 +61,14 @@ function serializeRow(row: Record<string, unknown> | null): Record<string, unkno
 class LocalTrailbaseSqlite {
   db!: Database;
   tables = new Map<string, Map<string, string>>();
+  revokedTokens = new Set<string>();
 
   constructor() {
     this.reset();
   }
 
   reset(): Record<string, unknown> {
+    this.revokedTokens?.clear?.();
     if (this.db) {
       try {
         this.db.close();
@@ -655,7 +657,7 @@ class LocalTrailbaseSqlite {
   private resolveBearerUser(req: Request): { id: Uint8Array; username: string; admin: boolean } | null {
     const auth = req.headers.get("authorization") ?? "";
     const token = auth.replace(/^Bearer\s+/i, "").trim();
-    if (!token) return null;
+    if (!token || this.revokedTokens.has(token)) return null;
     const payload = decodeJwtPayload(token);
     if (!payload.username) return null;
     const row = this.db
@@ -722,7 +724,16 @@ class LocalTrailbaseSqlite {
     }
 
     if (pathname === "/api/auth/v1/logout" && req.method === "POST") {
+      const auth = req.headers.get("authorization") ?? "";
+      const token = auth.replace(/^Bearer\s+/i, "").trim();
+      if (token) this.revokedTokens.add(token);
       return json({ ok: true });
+    }
+
+    if (pathname === "/__test/revoke" && req.method === "POST") {
+      const body = (await req.json().catch(() => ({}))) as { token?: string };
+      if (body.token) this.revokedTokens.add(body.token);
+      return json({ ok: true, revoked: body.token });
     }
 
     // Records endpoints
