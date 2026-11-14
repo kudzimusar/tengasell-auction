@@ -597,9 +597,11 @@ for (const vp of VIEWPORTS) {
     await expect(browseTimedCta).toBeVisible();
     await expect(exploreEventsCta).toBeVisible();
 
-    // Scenario 13: Interactive controls >= 44px height (layout box height; allows Chromium subpixel float)
-    expect(await browseTimedCta.evaluate((el) => Math.round(el.getBoundingClientRect().height))).toBeGreaterThanOrEqual(44);
-    expect(await exploreEventsCta.evaluate((el) => Math.round(el.getBoundingClientRect().height))).toBeGreaterThanOrEqual(44);
+    // Scenario 13: Interactive controls >= 44px height (retry across hydration/stylesheet settle)
+    await expect(async () => {
+      expect(await browseTimedCta.evaluate((el) => Math.round(el.getBoundingClientRect().height))).toBeGreaterThanOrEqual(44);
+      expect(await exploreEventsCta.evaluate((el) => Math.round(el.getBoundingClientRect().height))).toBeGreaterThanOrEqual(44);
+    }).toPass({ timeout: 5000 });
 
     // Scenario 5: Ordinary timed auctions show Open for Bids / Closing Soon, never red ON AIR
     await expect(page.locator("[data-timed-state='open']").first()).toContainText("Open for Bids");
