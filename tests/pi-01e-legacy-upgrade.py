@@ -379,12 +379,13 @@ def run_u23_to_u25_upgrade_test() -> None:
     try:
         depot_migrations.mkdir(parents=True, exist_ok=True)
 
-        # U23 config from PI-01D branch
-        u23_config = subprocess.check_output(
-            ["git", "show", "feat/tengasell-pi-01d-vehicle-product-intelligence:mini-services/trailbase-db/traildepot/config.textproto"],
-            cwd=str(ROOT),
-        )
-        (depot_dir / "config.textproto").write_bytes(u23_config)
+        # U23 config derived cleanly by stripping PI-01E routes
+        config_text = (TEMPLATE_DEPOT / "config.textproto").read_text(encoding="utf-8")
+        if "# ── PI-01E (U24–U25)" in config_text:
+            config_text = config_text.split("# ── PI-01E (U24–U25)")[0].rstrip()
+            if not config_text.endswith("]"):
+                config_text = config_text.rstrip().rstrip(",") + "\n]\n"
+        (depot_dir / "config.textproto").write_text(config_text, encoding="utf-8")
 
         u1_to_u23 = sorted(MIGRATIONS_DIR.glob("U*.sql"))[:23]
         if len(u1_to_u23) != 23:
@@ -556,12 +557,20 @@ def run_full_u16_to_u25_upgrade_test() -> None:
     try:
         depot_migrations.mkdir(parents=True, exist_ok=True)
 
-        # U16 config from accepted parent
-        parent_config = subprocess.check_output(
-            ["git", "show", "3e4c0359bef6fc43c851e79ba7e0a43589d557e6:mini-services/trailbase-db/traildepot/config.textproto"],
-            cwd=str(ROOT),
-        )
-        (depot_dir / "config.textproto").write_bytes(parent_config)
+        # U16 config from accepted parent or clean pre-PI-01D fallback
+        try:
+            parent_config = subprocess.check_output(
+                ["git", "show", "3e4c0359bef6fc43c851e79ba7e0a43589d557e6:mini-services/trailbase-db/traildepot/config.textproto"],
+                cwd=str(ROOT),
+            )
+            (depot_dir / "config.textproto").write_bytes(parent_config)
+        except Exception:
+            config_text = (TEMPLATE_DEPOT / "config.textproto").read_text(encoding="utf-8")
+            if "# ── PI-01D" in config_text:
+                config_text = config_text.split("# ── PI-01D")[0].rstrip()
+                if not config_text.endswith("]"):
+                    config_text = config_text.rstrip().rstrip(",") + "\n]\n"
+            (depot_dir / "config.textproto").write_text(config_text, encoding="utf-8")
 
         u1_to_u16 = sorted(MIGRATIONS_DIR.glob("U*.sql"))[:16]
         if len(u1_to_u16) != 16:
