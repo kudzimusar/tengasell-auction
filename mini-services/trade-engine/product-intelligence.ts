@@ -440,16 +440,286 @@ const provenanceLabels: Record<string, string> = {
   EXTERNAL_VERIFIED: "Externally verified",
 };
 
-export async function publicProductBundle(store: VehicleStore, auctionId: number) {
-  const product = (await store.list("pi_vehicle_public", params({ "filter[auction_id][$eq]": auctionId, limit: 1 })))[0] ?? null;
-  if (!product) return { product: null, facts: [], documents: [], history: [], modifications: [], equipment: [], findings: [] };
-  const [effective, definitions, documents, history, modifications, equipment] = await Promise.all([
-    store.list("pi_effective_facts", params({ "filter[product_type][$eq]": "VEHICLE", "filter[product_id][$eq]": product.vehicle_id, limit: 300 })),
+export class ProductIntelligenceError extends Error {
+  constructor(public readonly code: string, message: string) {
+    super(message);
+    this.name = "ProductIntelligenceError";
+  }
+}
+
+const PUBLIC_AUCTION_STATUSES = new Set([
+  "live",
+  "scheduled",
+  "active",
+  "closing",
+  "settled",
+  "ended",
+  "sold",
+  "unsold",
+]);
+
+export function isPubliclyVisibleAuction(
+  auction: Record<string, unknown> | null | undefined,
+  intakeSessions?: Array<Record<string, unknown>>,
+): boolean {
+  if (!auction || auction.id == null) return false;
+  const status = String(auction.status ?? "").trim().toLowerCase();
+  if (!PUBLIC_AUCTION_STATUSES.has(status)) return false;
+  if (intakeSessions && intakeSessions.length > 0) {
+    const hasPublished = intakeSessions.some((s) => String(s.state ?? "").toUpperCase() === "PUBLISHED");
+    const hasUnpublished = intakeSessions.some((s) => {
+      const state = String(s.state ?? "").toUpperCase();
+      return state === "DRAFT" || state === "ABANDONED";
+    });
+    if (hasUnpublished && !hasPublished) return false;
+  }
+  return true;
+}
+
+export async function resolveVehicleInspectionProjection(
+  store: VehicleStore,
+  vehicleId: number,
+  auctionId?: number,
+): Promise<Record<string, unknown> | null> {
+  const viewRows = await store.list(
+    "pi_vehicle_inspection_projection",
+    params({ "filter[vehicle_id][$eq]": vehicleId, limit: 1 }),
+  );
+  if (viewRows[0]) return viewRows[0];
+
+  const [inspections, eligibilities] = await Promise.all([
+    store.list("vehicle_inspections", params({ "filter[vehicle_id][$eq]": vehicleId, order: "-version", limit: 1 })),
+    store.list("vehicle_eligibility", params({ "filter[vehicle_id][$eq]": vehicleId, order: "-version", limit: 1 })),
+  ]);
+  const insp = inspections[0] ?? null;
+  const elig = eligibilities[0] ?? null;
+  let findings: Array<Record<string, unknown>> = [];
+  if (insp?.id != null) {
+    findings = await store.list(
+      "vehicle_inspection_findings",
+      params({ "filter[inspection_id][$eq]": insp.id, limit: 200 }),
+    );
+  }
+  const majorDefectCount = findings.filter((f) => {
+    const sev = String(f.severity ?? "").toUpperCase();
+    return sev === "MAJOR" || sev === "CRITICAL";
+  }).length;
+  const safetyCritical = findings.some((f) => Number(f.safety_critical ?? 0) === 1) ? 1 : 0;
+  const hasStructural = findings.some((f) => String(f.category ?? "").toUpperCase() === "STRUCTURAL");
+  const hasMechanical = findings.some((f) => String(f.category ?? "").toUpperCase() === "MECHANICAL");
+
+  return {
+    vehicle_id: vehicleId,
+    auction_id: auctionId ?? insp?.auction_id ?? null,
+    inspection_id: insp?.id ?? null,
+    inspection_status: insp?.lifecycle ?? null,
+    inspection_grade: insp?.grade ?? null,
+    grade_score: insp?.grade_score ?? null,
+    roadworthy: insp?.roadworthy ?? null,
+    inspection_odometer_km: insp?.odometer_km ?? null,
+    major_defect_count: majorDefectCount,
+    safety_critical: safetyCritical,
+    structural_condition_summary: hasStructural ? "STRUCTURAL" : "NOT_PROVIDED",
+    mechanical_condition_summary: hasMechanical ? "MECHANICAL" : "NOT_PROVIDED",
+    eligibility_status: elig?.status ?? null,
+  };
+}
+
+export async function resolvePublicVehicleDocuments(
+  store: VehicleStore,
+  vehicleId: number,
+): Promise<Array<Record<string, unknown>>> {
+  const viewDocs = await store.list(
+    "pi_vehicle_document_public",
+    params({ "filter[vehicle_id][$eq]": vehicleId, limit: 100 }),
+  );
+  if (viewDocs.length > 0) {
+    return viewDocs.map((d) => ({
+      vehicle_id: d.vehicle_id,
+      document_type: d.document_type,
+      status: d.status,
+      evidence_classification: d.evidence_classification,
+      historic_review_required: d.historic_review_required ?? 0,
+    }));
+  }
+
+  const rawDocs = await store.list(
+    "vehicle_documents",
+    params({ "filter[vehicle_id][$eq]": vehicleId, limit: 100 }),
+  );
+  return rawDocs.map((d) => {
+    const status = String(d.status ?? "");
+    const evidenceClassification =
+      status === "VERIFIED"
+        ? "VERIFIED_EVIDENCE"
+        : status === "DECLARED" || status === "UPLOADED"
+          ? "PENDING_EVIDENCE"
+          : status;
+    return {
+      vehicle_id: d.vehicle_id,
+      document_type: d.document_type,
+      status,
+      evidence_classification: evidenceClassification,
+      historic_review_required: d.historic_review_required ?? 0,
+    };
+  });
+}
+
+function sanitizePublicVehicleRow(row: Record<string, unknown>): Record<string, unknown> {
+  const {
+    vin: _vin,
+    chassis_number: _chassis,
+    engine_number: _eng,
+    registration_number: _reg,
+    reserve_price: _res,
+    user: _user,
+    seller_user: _sellerUser,
+    ...rest
+  } = row;
+  return rest;
+}
+
+export async function resolvePublicVehicleProjection(
+  store: VehicleStore,
+  auctionId: number,
+): Promise<Record<string, unknown> | null> {
+  const [auction, intakeSessions, viewRows] = await Promise.all([
+    store.get("auctions", auctionId),
+    store.list("product_intake_sessions", params({ "filter[auction_id][$eq]": auctionId, limit: 5 })),
+    store.list("pi_vehicle_public", params({ "filter[auction_id][$eq]": auctionId, limit: 1 })),
+  ]);
+  const viewRow = viewRows[0] ?? null;
+
+  if (auction) {
+    if (!isPubliclyVisibleAuction(auction, intakeSessions)) return null;
+  } else if (viewRow) {
+    if (!isPubliclyVisibleAuction({ id: auctionId, status: viewRow.auction_status ?? "live" }, intakeSessions)) {
+      return null;
+    }
+  } else {
+    return null;
+  }
+
+  if (viewRow) {
+    return sanitizePublicVehicleRow(viewRow);
+  }
+
+  const v = (await store.list("vehicles", params({ "filter[auction_id][$eq]": auctionId, limit: 1 })))[0] ?? null;
+  if (!v || !auction) return null;
+
+  const [category, labels, schemas, effective, definitions, ip, docs, findings] = await Promise.all([
+    auction.product_category_id != null ? store.get("categories", Number(auction.product_category_id)) : Promise.resolve(null),
+    auction.product_category_id != null
+      ? store.list("pi_category_labels", params({ "filter[category_id][$eq]": auction.product_category_id, limit: 10 }))
+      : Promise.resolve([]),
+    auction.product_schema_version_id != null
+      ? store.list("pi_category_schema_versions", params({ "filter[id][$eq]": auction.product_schema_version_id, limit: 1 }))
+      : Promise.resolve([]),
+    store.list("pi_effective_facts", params({ "filter[product_type][$eq]": "VEHICLE", "filter[product_id][$eq]": v.id, limit: 300 })),
     store.list("pi_attribute_definitions", params({ "filter[active][$eq]": 1, limit: 300 })),
-    store.list("pi_vehicle_document_public", params({ "filter[vehicle_id][$eq]": product.vehicle_id, limit: 100 })),
-    store.list("vehicle_history_events", params({ "filter[vehicle_id][$eq]": product.vehicle_id, order: "-occurred_at", limit: 100 })),
-    store.list("vehicle_modifications", params({ "filter[vehicle_id][$eq]": product.vehicle_id, order: "id", limit: 100 })),
-    store.list("vehicle_equipment", params({ "filter[vehicle_id][$eq]": product.vehicle_id, order: "id", limit: 200 })),
+    resolveVehicleInspectionProjection(store, Number(v.id), auctionId),
+    resolvePublicVehicleDocuments(store, Number(v.id)),
+    Promise.resolve([] as Array<Record<string, unknown>>),
+  ]);
+
+  const enLabel = labels.find((l) => String(l.locale) === "en")?.label ?? category?.name ?? null;
+  const odometerAttr = definitions.find((d) => String(d.attribute_key) === "ODOMETER_KM");
+  const odometerFact = odometerAttr
+    ? effective.find((ef) => Number(ef.attribute_id) === Number(odometerAttr.id))
+    : null;
+  const effectiveOdometer =
+    odometerFact?.value_decimal != null ? Math.round(Number(odometerFact.value_decimal)) : (v.odometer_km ?? null);
+
+  let findingCount = findings.length;
+  if (ip?.inspection_id != null) {
+    const inspFindings = await store.list(
+      "vehicle_inspection_findings",
+      params({ "filter[inspection_id][$eq]": Number(ip.inspection_id), limit: 200 }),
+    );
+    findingCount = inspFindings.length;
+  }
+
+  return {
+    vehicle_id: v.id,
+    auction_id: v.auction_id,
+    category_key: category?.category_key ?? null,
+    product_type: enLabel,
+    schema_key: schemas[0]?.schema_key ?? null,
+    title: auction.title,
+    auction_status: auction.status,
+    current_price: auction.current_price,
+    reserve_disclosure: auction.reserve_disclosure ?? null,
+    city: auction.city,
+    ends_at: auction.ends_at,
+    make: v.make,
+    model: v.model,
+    variant: v.variant ?? null,
+    trim: v.trim ?? null,
+    model_year: v.model_year,
+    manufacture_year: v.manufacture_year ?? null,
+    vehicle_class: v.vehicle_class ?? null,
+    body_type: v.body_type ?? null,
+    fuel_type: v.fuel_type,
+    transmission: v.transmission,
+    drivetrain: v.drivetrain,
+    effective_odometer_km: effectiveOdometer,
+    odometer_source: odometerFact?.source_class ?? "SELLER_DECLARED",
+    odometer_conflict: odometerFact?.conflict_state ?? "NONE",
+    engine_displacement_cc: v.engine_displacement_cc ?? null,
+    power_kw: v.power_kw ?? null,
+    torque_nm: v.torque_nm ?? null,
+    gear_count: v.gear_count ?? null,
+    hybrid_type: v.hybrid_type ?? null,
+    ev_battery_capacity_kwh: v.ev_battery_capacity_kwh ?? null,
+    ev_range_km: v.ev_range_km ?? null,
+    steering_side: v.steering_side ?? null,
+    doors: v.doors ?? null,
+    seats: v.seats ?? null,
+    cab_type: v.cab_type ?? null,
+    primary_exterior_colour: v.primary_exterior_colour ?? null,
+    manufacturer_colour_name: v.manufacturer_colour_name ?? null,
+    interior_colour: v.interior_colour ?? null,
+    interior_material: v.interior_material ?? null,
+    service_history_class: v.service_history_class ?? null,
+    accident_history: v.accident_history ?? null,
+    repair_history: v.repair_history ?? null,
+    structural_repair_history: v.structural_repair_history ?? null,
+    modification_status: v.modification_status ?? null,
+    number_of_keys: v.number_of_keys ?? null,
+    spare_key: v.spare_key ?? null,
+    spare_wheel: v.spare_wheel ?? null,
+    tool_kit: v.tool_kit ?? null,
+    manuals: v.manuals ?? null,
+    service_book: v.service_book ?? null,
+    vin_classification: v.vin ? "RECORDED" : "NOT_PROVIDED",
+    chassis_classification: v.chassis_number ? "RECORDED" : "NOT_PROVIDED",
+    registration_classification: v.registration_number ? "RECORDED" : "NOT_PROVIDED",
+    inspection_status: ip?.inspection_status ?? null,
+    inspection_grade: ip?.inspection_grade ?? null,
+    grade_score: ip?.grade_score ?? null,
+    roadworthy: ip?.roadworthy ?? null,
+    inspection_odometer_km: ip?.inspection_odometer_km ?? null,
+    major_defect_count: ip?.major_defect_count ?? 0,
+    safety_critical: ip?.safety_critical ?? 0,
+    structural_condition_summary: ip?.structural_condition_summary ?? "NOT_PROVIDED",
+    mechanical_condition_summary: ip?.mechanical_condition_summary ?? "NOT_PROVIDED",
+    eligibility_status: ip?.eligibility_status ?? null,
+    verified_document_count: docs.filter((d) => String(d.status) === "VERIFIED").length,
+    finding_count: findingCount,
+  };
+}
+
+export async function publicProductBundle(store: VehicleStore, auctionId: number) {
+  const product = await resolvePublicVehicleProjection(store, auctionId);
+  if (!product) return { product: null, facts: [], documents: [], history: [], modifications: [], equipment: [], findings: [] };
+  const [effective, definitions, documents, history, modifications, equipment, projection] = await Promise.all([
+    store.list("pi_effective_facts", params({ "filter[product_type][$eq]": "VEHICLE", "filter[product_id][$eq]": product.vehicle_id as number, limit: 300 })),
+    store.list("pi_attribute_definitions", params({ "filter[active][$eq]": 1, limit: 300 })),
+    resolvePublicVehicleDocuments(store, Number(product.vehicle_id)),
+    store.list("vehicle_history_events", params({ "filter[vehicle_id][$eq]": product.vehicle_id as number, order: "-occurred_at", limit: 100 })),
+    store.list("vehicle_modifications", params({ "filter[vehicle_id][$eq]": product.vehicle_id as number, order: "id", limit: 100 })),
+    store.list("vehicle_equipment", params({ "filter[vehicle_id][$eq]": product.vehicle_id as number, order: "id", limit: 200 })),
+    resolveVehicleInspectionProjection(store, Number(product.vehicle_id), auctionId),
   ]);
   const publicFacts: Array<Record<string, unknown>> = [];
   for (const fact of effective) {
@@ -470,17 +740,16 @@ export async function publicProductBundle(store: VehicleStore, auctionId: number
     });
   }
   let findings: any[] = [];
-  const projection = (await store.list("pi_vehicle_inspection_projection", params({ "filter[vehicle_id][$eq]": product.vehicle_id, limit: 1 })))[0];
   if (projection?.inspection_id) {
-    findings = await store.list("vehicle_inspection_findings", params({ "filter[inspection_id][$eq]": projection.inspection_id, order: "id", limit: 200 }));
+    findings = await store.list("vehicle_inspection_findings", params({ "filter[inspection_id][$eq]": projection.inspection_id as number, order: "id", limit: 200 }));
   }
   return {
     product,
     facts: publicFacts,
     documents,
-    history: history.map(({ asserted_by: _actor, ...row }) => row),
-    modifications: modifications.map(({ asserted_by: _actor, ...row }) => row),
-    equipment: equipment.map(({ asserted_by: _actor, ...row }) => row),
+    history: history.map(({ asserted_by: _actor, created_by: _cby, ...row }) => row),
+    modifications: modifications.map(({ asserted_by: _actor, created_by: _cby, ...row }) => row),
+    equipment: equipment.map(({ asserted_by: _actor, created_by: _cby, ...row }) => row),
     findings: findings.map(({ created_by: _actor, evidence_document_id: _evidence, ...row }) => row),
   };
 }

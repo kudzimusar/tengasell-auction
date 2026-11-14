@@ -7,22 +7,31 @@
 //
 // Env vars (same as the trade engine):
 //   ADMIN_USERNAME  (default "admin")
-//   ADMIN_PASSWORD  (default "Tengasell#2025")
+//   ADMIN_PASSWORD  (required — fail-closed if unset at runtime)
 
 const TRAILBASE = process.env.TRAILBASE_URL ?? "http://localhost:3001";
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME ?? "admin";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "Tengasell#2025";
+
+function getAdminPassword(): string {
+  const password = (process.env.ADMIN_PASSWORD ?? "").trim();
+  if (!password) {
+    throw new Error("ADMIN_PASSWORD environment variable is required for privileged TrailBase operations");
+  }
+  return password;
+}
 
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // TrailBase auth_token_ttl_sec: 86400
 
 let cached: { token: string; fetchedAt: number } | null = null;
+let loginPromise: Promise<string> | null = null;
 
 /** POST /api/auth/v1/login → auth_token (same as the trade engine's tbLogin). */
 export async function tbLogin(): Promise<string> {
+  const password = getAdminPassword();
   const res = await fetch(`${TRAILBASE}/api/auth/v1/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username: ADMIN_USERNAME, password: ADMIN_PASSWORD }),
+    body: JSON.stringify({ username: ADMIN_USERNAME, password }),
     signal: AbortSignal.timeout(8000),
   });
   if (!res.ok) throw new Error(`admin login failed: ${res.status}`);
@@ -31,13 +40,26 @@ export async function tbLogin(): Promise<string> {
   return data.auth_token;
 }
 
-/** Cached admin token — refreshed when older than 24h or after a 401. */
+/** Cached admin token — singleflight refresh when older than 24h or after a 401/403. */
 export async function ensureAdminToken(force = false): Promise<string> {
   const fresh = cached && Date.now() - cached.fetchedAt < TOKEN_TTL_MS;
-  if (force || !cached || !fresh) {
-    cached = { token: await tbLogin(), fetchedAt: Date.now() };
+  if (!force && cached && fresh) {
+    return cached.token;
   }
-  return cached.token;
+  if (!loginPromise || force) {
+    if (force) {
+      cached = null;
+    }
+    loginPromise = tbLogin()
+      .then((token) => {
+        cached = { token, fetchedAt: Date.now() };
+        return token;
+      })
+      .finally(() => {
+        loginPromise = null;
+      });
+  }
+  return loginPromise;
 }
 
 function invalidate() {
@@ -46,7 +68,7 @@ function invalidate() {
 
 /**
  * fetch() wrapper that attaches the admin Bearer token.
- * Retries once with a fresh token on 401 (token expired/invalidated).
+ * Retries once with a fresh token on 401/403 (token expired/invalidated).
  */
 export async function tbFetch(
   path: string,
@@ -70,7 +92,7 @@ export async function tbFetch(
     });
 
   let res = await run(await ensureAdminToken());
-  if (res.status === 401) {
+  if (res.status === 401 || res.status === 403) {
     invalidate();
     res = await run(await ensureAdminToken(true));
   }
