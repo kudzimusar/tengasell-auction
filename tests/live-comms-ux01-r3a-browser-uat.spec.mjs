@@ -11,7 +11,7 @@ const COMMS_URL = "http://127.0.0.1:3005";
 const COMMS_DB_PATH = path.join(ROOT, "db/comms-uat.db");
 const SCREENSHOT_DIR =
   process.env.UX01_SCREENSHOT_DIR ||
-  "/Users/shadreckmusarurwa/.gemini/antigravity/brain/73d48699-8558-414e-b7e2-e4f4b6c620a9";
+  path.join(process.cwd(), "test-artifacts/screenshots");
 
 const VIEWPORTS = [
   { name: "mobile-390", width: 390, height: 844 },
@@ -307,7 +307,7 @@ test("R3A-UAT-03: Communications Centre subscriptions panel, reminder evaluation
   await evalBtn.click();
 
   // Toast should confirm evaluation
-  await expect(page.getByText(/Reminders evaluated/i)).toBeVisible({ timeout: 10000 });
+  await expect(page.getByText(/Reminders evaluated/i).first()).toBeVisible({ timeout: 10000 });
 
   // Notifications tray should show items
   const notifCard = page.locator("div:has-text('Recent Notifications')").first();
@@ -317,7 +317,7 @@ test("R3A-UAT-03: Communications Centre subscriptions panel, reminder evaluation
   const unsubBtn = subsSection.getByTestId("comms-unsubscribe-btn").first();
   await expect(unsubBtn).toBeVisible();
   await unsubBtn.click();
-  await expect(page.getByText("Unsubscribed")).toBeVisible({ timeout: 8000 });
+  await expect(page.getByText("Unsubscribed").first()).toBeVisible({ timeout: 8000 });
 
   await assertNoHorizontalOverflow(page);
   expect(pageErrors).toEqual([]);

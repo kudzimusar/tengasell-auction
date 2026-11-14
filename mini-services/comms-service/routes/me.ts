@@ -254,7 +254,7 @@ export function registerMeRoutes(on: AddRoute): void {
     };
   });
 
-  on("POST", "/me/subscriptions", (ctx) => {
+  on("POST", "/me/subscriptions", async (ctx) => {
     const user = requireUser(ctx);
     const targetType = ctx.body?.targetType;
     if (!isTargetType(targetType)) {
@@ -264,15 +264,9 @@ export function registerMeRoutes(on: AddRoute): void {
     if (rawTargetId == null || String(rawTargetId).trim() === "") {
       throw new HttpError(400, "targetId is required", "missing_target_id");
     }
-    const { subscription, confirmDispatched } = upsertSubscription(user, {
+    const { subscription, confirmDispatched } = await upsertSubscription(user, {
       targetType,
       targetId: String(rawTargetId),
-      eventId: ctx.body?.eventId != null ? Number(ctx.body.eventId) : null,
-      lotId: ctx.body?.lotId != null ? Number(ctx.body.lotId) : null,
-      sessionId: ctx.body?.sessionId != null ? Number(ctx.body.sessionId) : null,
-      auctionId: ctx.body?.auctionId != null ? Number(ctx.body.auctionId) : null,
-      title: typeof ctx.body?.title === "string" ? ctx.body.title : null,
-      startsAt: typeof ctx.body?.startsAt === "string" ? ctx.body.startsAt : null,
       notify24h: ctx.body?.notify24h !== false,
       notify1h: ctx.body?.notify1h !== false,
       notifyLive: ctx.body?.notifyLive !== false,
@@ -314,13 +308,10 @@ export function registerMeRoutes(on: AddRoute): void {
     };
   });
 
-  on("POST", "/me/reminders/evaluate", (ctx) => {
+  on("POST", "/me/reminders/evaluate", async (ctx) => {
     const user = requireUser(ctx);
     const nowIsoParam = typeof ctx.body?.nowIso === "string" ? ctx.body.nowIso : undefined;
     const locale = typeof ctx.body?.locale === "string" ? ctx.body.locale : "en";
-    const targets = Array.isArray(ctx.body?.targets)
-      ? (ctx.body.targets as ReminderTargetState[])
-      : undefined;
-    return evaluateDueReminders({ nowIso: nowIsoParam, userId: user, locale, targets });
+    return await evaluateDueReminders({ nowIso: nowIsoParam, userId: user, locale });
   });
 }

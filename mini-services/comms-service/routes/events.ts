@@ -73,14 +73,12 @@ export function registerEventRoutes(on: AddRoute): void {
     return { moderation, queued, relayed, relayLogId: mod.logId };
   });
 
-  // POST /reminders/evaluate {nowIso?, userId?, targets?} → idempotent first-party evaluation
-  on("POST", "/reminders/evaluate", (ctx) => {
+  // POST /reminders/evaluate {nowIso?, userId?} → idempotent first-party evaluation
+  on("POST", "/reminders/evaluate", async (ctx) => {
+    ctx.requireAdmin();
     const nowIsoParam = bodyOptStr(ctx, "nowIso") ?? undefined;
     const userId = bodyOptStr(ctx, "userId") ?? undefined;
     const locale = bodyOptStr(ctx, "locale") ?? "en";
-    const targets = Array.isArray(ctx.body?.targets)
-      ? (ctx.body.targets as ReminderTargetState[])
-      : undefined;
-    return evaluateDueReminders({ nowIso: nowIsoParam, userId, locale, targets });
+    return await evaluateDueReminders({ nowIso: nowIsoParam, userId, locale });
   });
 }

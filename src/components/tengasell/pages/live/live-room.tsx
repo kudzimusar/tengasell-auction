@@ -955,8 +955,8 @@ function LiveRoom({ sessionId }: { sessionId: number }) {
             targetId={session.event_id}
             eventId={session.event_id}
             sessionId={session.id}
-            title={event?.title ?? session.title}
-            startsAt={event?.starts_at}
+            title={associatedEvent?.title ?? session.title}
+            startsAt={associatedEvent?.starts_at}
             testId="live-room-follow-event-btn"
             size="sm"
             compact

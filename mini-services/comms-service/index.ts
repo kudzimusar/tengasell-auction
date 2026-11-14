@@ -9,7 +9,7 @@
 // Auth model: the Next BFF sets `x-tgs-user: <username>` for user endpoints and
 // `x-tgs-admin: 1` for admin endpoints; /hooks/* are public webhooks.
 
-import { PORT, DB_PATH } from "./config";
+import { PORT, DB_PATH, INTERNAL_COMMS_SECRET } from "./config";
 import { db, scalar } from "./db"; // module load runs idempotent migrations
 import { seedTemplates } from "./templates";
 import { startSweeper } from "./queue";
@@ -88,9 +88,9 @@ function healthPayload() {
 // ── Request handling ───────────────────────────────────────────────────────────
 
 const CORS = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": "http://127.0.0.1:3000",
   "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-  "Access-Control-Allow-Headers": "*",
+  "Access-Control-Allow-Headers": "Content-Type, x-tgs-user, x-tgs-admin, x-tgs-internal-token",
 } as const;
 
 function jsonOut(body: unknown, status = 200): Response {
@@ -100,7 +100,7 @@ function jsonOut(body: unknown, status = 200): Response {
   });
 }
 
-async function handleRequest(req: Request): Promise<Response> {
+export async function handleRequest(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const started = Date.now();
 
@@ -109,6 +109,12 @@ async function handleRequest(req: Request): Promise<Response> {
   }
 
   try {
+    const isPublic = url.pathname === "/health" || url.pathname.startsWith("/hooks/");
+    const internalSecret = req.headers.get("x-tgs-internal-token");
+    if (!isPublic && internalSecret !== INTERNAL_COMMS_SECRET) {
+      throw new HttpError(401, "unauthorized internal service caller", "internal_secret_required");
+    }
+
     const match = findRoute(req.method, url.pathname);
     if (!match) throw new HttpError(404, "not found", "not_found");
 
@@ -190,6 +196,7 @@ function logRequest(method: string, path: string, status: number, started: numbe
 // ── Server ─────────────────────────────────────────────────────────────────────
 
 Bun.serve({
+  hostname: "127.0.0.1",
   port: PORT,
   async fetch(req) {
     return handleRequest(req);

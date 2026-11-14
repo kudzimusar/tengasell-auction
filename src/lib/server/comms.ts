@@ -16,6 +16,8 @@ import { resolveUserFromToken } from "./paynow-order";
 import { ensureCommsService } from "./services-spawn";
 
 const COMMS_BASE = process.env.COMMS_URL ?? "http://127.0.0.1:3005";
+const INTERNAL_COMMS_SECRET =
+  process.env.INTERNAL_COMMS_SECRET || "tgs_sec_internal_comms_default_k9102";
 
 const COMMS_TIMEOUT_MS = 10_000;
 
@@ -72,6 +74,7 @@ export async function commsProxy(
     method,
     headers: {
       "x-tgs-user": user.username,
+      "x-tgs-internal-token": INTERNAL_COMMS_SECRET,
       ...(hasBody ? { "Content-Type": "application/json" } : {}),
     },
     signal: AbortSignal.timeout(COMMS_TIMEOUT_MS),
@@ -148,6 +151,7 @@ export async function adminCommsProxy(
     headers: {
       "x-tgs-user": user.username,
       "x-tgs-admin": "1",
+      "x-tgs-internal-token": INTERNAL_COMMS_SECRET,
       ...(hasBody ? { "Content-Type": "application/json" } : {}),
     },
     signal: AbortSignal.timeout(COMMS_TIMEOUT_MS),

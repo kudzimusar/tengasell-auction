@@ -5,6 +5,10 @@ import path from "node:path";
 import fs from "node:fs";
 
 export const PORT = 3005;
+export const INTERNAL_COMMS_SECRET =
+  process.env.INTERNAL_COMMS_SECRET || "tgs_sec_internal_comms_default_k9102";
+export const TRAILBASE_URL =
+  process.env.TRAILBASE_URL || "http://127.0.0.1:3001";
 
 function resolveDbPath(): string {
   if (process.env.COMMS_DB_PATH) return process.env.COMMS_DB_PATH;

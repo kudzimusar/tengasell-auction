@@ -1,6 +1,6 @@
 // tests/live-comms-ux01-r3a-reminders.test.ts
 // Unit & Database Integration Proof for TUCS R3A First-Party Reminders & Subscriptions
-// Framework: Bun test (DATABASE_INTEGRATION + UNIT_TEST)
+// Framework: Bun test (DATABASE_INTEGRATION + UNIT_TEST + SECURITY_GATES)
 
 import { describe, expect, test, beforeAll, afterAll, beforeEach } from "bun:test";
 import fs from "node:fs";
@@ -11,7 +11,7 @@ const TEST_DB_PATH = path.resolve(import.meta.dir, "../db/comms-test-r3a.db");
 process.env.COMMS_DB_PATH = TEST_DB_PATH;
 process.env.COMMS_ALLOW_EXTERNAL_R4 = "0"; // Strict R3A external provider lock ($0 spend)
 
-import { db, run, all, get } from "../mini-services/comms-service/db";
+import { db, run, all, get, execute, insert } from "../mini-services/comms-service/db";
 import { EVENTS, EVENT_KEYS, eventDef } from "../mini-services/comms-service/taxonomy";
 import { getTemplate, seedTemplates } from "../mini-services/comms-service/templates";
 import {
@@ -21,8 +21,13 @@ import {
   R3A_EXTERNAL_LOCK,
   unsubscribeTarget,
   upsertSubscription,
+  setCustomTargetResolver,
+  recordFirstPartyReminderTx,
 } from "../mini-services/comms-service/subscriptions";
 import { isMock, providerLabels } from "../mini-services/comms-service/providers";
+import { emitEvent } from "../mini-services/comms-service/emit";
+import { handleRequest } from "../mini-services/comms-service/index";
+import { INTERNAL_COMMS_SECRET } from "../mini-services/comms-service/config";
 
 describe("TENGASELL-LIVE-COMMS-UX-01 R3A First-Party Reminders & Subscriptions", () => {
   beforeAll(() => {
@@ -33,6 +38,7 @@ describe("TENGASELL-LIVE-COMMS-UX-01 R3A First-Party Reminders & Subscriptions",
     run("DELETE FROM auction_subscriptions;");
     run("DELETE FROM reminder_dispatch_ledger;");
     run("DELETE FROM outbound_queue;");
+    setCustomTargetResolver(null);
   });
 
   afterAll(() => {
@@ -81,16 +87,13 @@ describe("TENGASELL-LIVE-COMMS-UX-01 R3A First-Party Reminders & Subscriptions",
     }
   });
 
-  test("2. Subscription CRUD and Initial Follow Confirmation", () => {
+  test("2. Subscription CRUD, Initial Follow Confirmation, and Status Semantics (R3A-STATUS-01)", async () => {
     const userId = "test-buyer-nyasha";
 
     // Follow Event 901
-    const res1 = upsertSubscription(userId, {
+    const res1 = await upsertSubscription(userId, {
       targetType: "event",
       targetId: "901",
-      eventId: 901,
-      title: "Harare Executive Fleet Auction",
-      startsAt: "2026-11-20T10:00:00Z",
       notify24h: true,
       notify1h: true,
       notifyLive: true,
@@ -104,7 +107,7 @@ describe("TENGASELL-LIVE-COMMS-UX-01 R3A First-Party Reminders & Subscriptions",
     expect(res1.subscription.channels).toEqual(["in_app"]);
     expect(res1.confirmDispatched).toBe(true);
 
-    // Verify outbound_queue received the first-party follow confirmation
+    // Verify outbound_queue received first-party follow confirmation with status='queued' (R3A-STATUS-01)
     const queueRows = all<{ id: number; template_key: string; channel: string; status: string }>(
       `SELECT * FROM outbound_queue WHERE user_id = ?`,
       [userId],
@@ -112,7 +115,7 @@ describe("TENGASELL-LIVE-COMMS-UX-01 R3A First-Party Reminders & Subscriptions",
     expect(queueRows.length).toBe(1);
     expect(queueRows[0].template_key).toBe("auction.event.FollowConfirmed");
     expect(queueRows[0].channel).toBe("in_app");
-    expect(queueRows[0].status).toBe("sent");
+    expect(["queued", "available"]).toContain(queueRows[0].status);
 
     // Verify reminder_dispatch_ledger recorded the dedupe_key
     const ledger = listReminderLedger(userId);
@@ -121,11 +124,9 @@ describe("TENGASELL-LIVE-COMMS-UX-01 R3A First-Party Reminders & Subscriptions",
     expect(ledger[0].channel).toBe("in_app");
 
     // Idempotent re-follow: updating preferences does not duplicate confirmation notification
-    const res2 = upsertSubscription(userId, {
+    const res2 = await upsertSubscription(userId, {
       targetType: "event",
       targetId: "901",
-      eventId: 901,
-      title: "Harare Executive Fleet Auction (Updated)",
       notify24h: true,
       notify1h: false,
     });
@@ -133,7 +134,6 @@ describe("TENGASELL-LIVE-COMMS-UX-01 R3A First-Party Reminders & Subscriptions",
 
     const subs = listSubscriptions(userId);
     expect(subs.length).toBe(1);
-    expect(subs[0].title).toBe("Harare Executive Fleet Auction (Updated)");
     expect(subs[0].notify1h).toBe(false);
 
     // Queue count must still be 1 (no duplicate spam)
@@ -141,31 +141,59 @@ describe("TENGASELL-LIVE-COMMS-UX-01 R3A First-Party Reminders & Subscriptions",
     expect(queueRowsAfter.length).toBe(1);
   });
 
-  test("3. Idempotent Reminder Stage Evaluation (24h, 1h, Live, Lot UpNext/Open)", () => {
+  test("3. Idempotent Reminder Stage Evaluation (24h, 1h, Live, Lot UpNext/Open)", async () => {
     const userId = "test-buyer-simba";
     const baseTime = Date.parse("2026-11-15T10:00:00Z");
 
-    // Subscribe to Event 902 starting in 3 hours (inside 24h window)
-    upsertSubscription(userId, {
-      targetType: "event",
+    let event902State = {
+      targetType: "event" as const,
       targetId: "902",
       eventId: 902,
-      title: "Bulawayo Construction & Mining Auction",
+      lotId: null,
+      sessionId: 2,
+      auctionId: null,
+      title: "Weekend Hybrid & Passenger Showcase",
       startsAt: new Date(baseTime + 3 * 3600_000).toISOString(),
-    });
+      status: "SCHEDULED",
+      isLive: false,
+    };
 
-    // Subscribe to Lot 9401 on Event 901
-    upsertSubscription(userId, {
-      targetType: "lot",
+    let lot9401State = {
+      targetType: "lot" as const,
       targetId: "9401",
       eventId: 901,
       lotId: 9401,
+      sessionId: 1,
       auctionId: 9101,
       title: "2021 Toyota Hilux Double Cab",
+      startsAt: new Date(baseTime).toISOString(),
+      status: "QUEUED",
+      isLive: false,
+    };
+
+    setCustomTargetResolver((type, id) => {
+      if (type === "event" && id === "902") return event902State;
+      if (type === "lot" && id === "9401") return lot9401State;
+      return null;
+    });
+
+    // Subscribe to Event 902 starting in 3 hours (inside 24h window)
+    await upsertSubscription(userId, {
+      targetType: "event",
+      targetId: "902",
+      notify24h: true,
+      notify1h: true,
+      notifyLive: true,
+    });
+
+    // Subscribe to Lot 9401 on Event 901
+    await upsertSubscription(userId, {
+      targetType: "lot",
+      targetId: "9401",
     });
 
     // ── First evaluation run at baseTime: starting_24h due for Event 902
-    const eval1 = evaluateDueReminders({
+    const eval1 = await evaluateDueReminders({
       nowIso: new Date(baseTime).toISOString(),
       userId,
     });
@@ -176,7 +204,7 @@ describe("TENGASELL-LIVE-COMMS-UX-01 R3A First-Party Reminders & Subscriptions",
     expect(eval1.items[0].channel).toBe("in_app");
 
     // ── Duplicate evaluation run at same time: zero dispatched, 1 skipped duplicate!
-    const eval1Repeat = evaluateDueReminders({
+    const eval1Repeat = await evaluateDueReminders({
       nowIso: new Date(baseTime).toISOString(),
       userId,
     });
@@ -184,7 +212,7 @@ describe("TENGASELL-LIVE-COMMS-UX-01 R3A First-Party Reminders & Subscriptions",
     expect(eval1Repeat.skippedDuplicates).toBe(1);
 
     // ── Fast-forward to 30 mins before start (inside 1h window): starting_1h due
-    const eval2 = evaluateDueReminders({
+    const eval2 = await evaluateDueReminders({
       nowIso: new Date(baseTime + 2.5 * 3600_000).toISOString(),
       userId,
     });
@@ -192,21 +220,21 @@ describe("TENGASELL-LIVE-COMMS-UX-01 R3A First-Party Reminders & Subscriptions",
     expect(eval2.items[0].eventKey).toBe("auction.event.Starting1h");
 
     // ── Duplicate check for 1h window
-    const eval2Repeat = evaluateDueReminders({
+    const eval2Repeat = await evaluateDueReminders({
       nowIso: new Date(baseTime + 2.5 * 3600_000).toISOString(),
       userId,
     });
     expect(eval2Repeat.dispatched).toBe(0);
     expect(eval2Repeat.skippedDuplicates).toBe(1);
 
-    // ── Fast-forward to live start: live_now due + lot up_next due
-    const eval3 = evaluateDueReminders({
+    // ── Server transitions Event 902 to LIVE and Lot 9401 to READY (UpNext)
+    event902State.status = "LIVE";
+    event902State.isLive = true;
+    lot9401State.status = "READY";
+
+    const eval3 = await evaluateDueReminders({
       nowIso: new Date(baseTime + 3.1 * 3600_000).toISOString(),
       userId,
-      targets: [
-        { targetType: "event", targetId: "902", isLive: true },
-        { targetType: "lot", targetId: "9401", lotStatus: "READY", upNext: true },
-      ],
     });
     expect(eval3.dispatched).toBe(2);
     const stages = eval3.items.map((i) => i.stage);
@@ -214,73 +242,67 @@ describe("TENGASELL-LIVE-COMMS-UX-01 R3A First-Party Reminders & Subscriptions",
     expect(stages).toContain("lot_up_next");
 
     // Duplicate check for live start + up next
-    const eval3Repeat = evaluateDueReminders({
+    const eval3Repeat = await evaluateDueReminders({
       nowIso: new Date(baseTime + 3.1 * 3600_000).toISOString(),
       userId,
-      targets: [
-        { targetType: "event", targetId: "902", isLive: true },
-        { targetType: "lot", targetId: "9401", lotStatus: "READY", upNext: true },
-      ],
     });
     expect(eval3Repeat.dispatched).toBe(0);
     expect(eval3Repeat.skippedDuplicates).toBe(2);
 
     // ── Lot opens on live floor: lot_open_now due
-    const eval4 = evaluateDueReminders({
+    lot9401State.status = "LIVE";
+    lot9401State.isLive = true;
+
+    const eval4 = await evaluateDueReminders({
       nowIso: new Date(baseTime + 3.2 * 3600_000).toISOString(),
       userId,
-      targets: [{ targetType: "lot", targetId: "9401", lotStatus: "LIVE", openNow: true }],
     });
     expect(eval4.dispatched).toBe(1);
     expect(eval4.items[0].stage).toBe("lot_open_now");
 
-    // ── Live floor outbid: outbid due with cycle key
-    const eval5 = evaluateDueReminders({
-      nowIso: new Date(baseTime + 3.3 * 3600_000).toISOString(),
+    // ── First-party live events: outbid and result
+    const outbidRec = recordFirstPartyReminderTx({
+      dedupeKey: `${userId}:lot:9401:live_outbid:bid-901-2`,
+      subscriptionId: null,
       userId,
-      targets: [
-        {
-          targetType: "lot",
-          targetId: "9401",
-          outbid: true,
-          outbidAmount: "US$28,500",
-          cycleKey: "bid-901-2",
-        },
-      ],
+      targetType: "lot",
+      targetId: "9401",
+      stage: "live_outbid",
+      eventKey: "auction.live.Outbid",
+      params: { title: lot9401State.title, amount: "US$28,500" },
+      deepLink: "http://localhost/live/1",
+      locale: "en",
+      now: new Date(baseTime + 3.3 * 3600_000).toISOString(),
     });
-    expect(eval5.dispatched).toBe(1);
-    expect(eval5.items[0].stage).toBe("live_outbid");
+    expect(outbidRec.dispatched).toBe(true);
+    expect(outbidRec.queueId).not.toBeNull();
 
-    // Duplicate outbid check with same cycleKey
-    const eval5Repeat = evaluateDueReminders({
-      nowIso: new Date(baseTime + 3.3 * 3600_000).toISOString(),
+    const resultRec = recordFirstPartyReminderTx({
+      dedupeKey: `${userId}:lot:9401:live_result`,
+      subscriptionId: null,
       userId,
-      targets: [
-        {
-          targetType: "lot",
-          targetId: "9401",
-          outbid: true,
-          outbidAmount: "US$28,500",
-          cycleKey: "bid-901-2",
-        },
-      ],
+      targetType: "lot",
+      targetId: "9401",
+      stage: "live_result",
+      eventKey: "auction.live.Result",
+      params: { title: lot9401State.title, outcome: "WON" },
+      deepLink: "http://localhost/live/1",
+      locale: "en",
+      now: new Date(baseTime + 3.4 * 3600_000).toISOString(),
     });
-    expect(eval5Repeat.dispatched).toBe(0);
-    expect(eval5Repeat.skippedDuplicates).toBeGreaterThanOrEqual(1);
+    expect(resultRec.dispatched).toBe(true);
+    expect(resultRec.queueId).not.toBeNull();
   });
 
-  test("4. Unsubscribed Target Suppression", () => {
+  test("4. Unsubscribed Target Suppression", async () => {
     const userId = "test-buyer-unsub";
 
-    upsertSubscription(userId, {
+    await upsertSubscription(userId, {
       targetType: "event",
-      targetId: "999",
-      eventId: 999,
-      title: "Temporary Sale",
-      startsAt: "2026-11-14T10:00:00Z",
+      targetId: "902",
     });
 
-    const unres = unsubscribeTarget(userId, "event", "999");
+    const unres = unsubscribeTarget(userId, "event", "902");
     expect(unres.ok).toBe(true);
     expect(unres.updated).toBe(true);
 
@@ -292,16 +314,205 @@ describe("TENGASELL-LIVE-COMMS-UX-01 R3A First-Party Reminders & Subscriptions",
     expect(fullList[0].status).toBe("unsubscribed");
 
     // Evaluation run suppresses unsubscribed targets
-    const evalResult = evaluateDueReminders({
-      nowIso: "2026-11-14T10:05:00Z",
+    const evalResult = await evaluateDueReminders({
+      nowIso: "2026-11-21T10:05:00Z",
       userId,
-      targets: [{ targetType: "event", targetId: "999", isLive: true }],
     });
     expect(evalResult.dispatched).toBe(0);
     expect(evalResult.suppressedUnsubscribed).toBe(1);
   });
 
-  test("5. External Provider Isolation Gate ($0 External Spend)", () => {
+  test("5. P0-A Reminder Truth & Non-Authoritative Client Rejection (R3A-TRUTH-01)", async () => {
+    const userId = "test-truth-actor";
+    const baseTime = Date.parse("2026-11-15T10:00:00Z");
+
+    let eventState = {
+      targetType: "event" as const,
+      targetId: "902",
+      eventId: 902,
+      lotId: null,
+      sessionId: 2,
+      auctionId: null,
+      title: "Demonstration Event",
+      startsAt: new Date(baseTime + 1000).toISOString(),
+      status: "SCHEDULED", // Clock has passed, but host has NOT opened the floor!
+      isLive: false,
+    };
+
+    setCustomTargetResolver((type, id) => {
+      if (type === "event" && id === "902") return eventState;
+      return null;
+    });
+
+    await upsertSubscription(userId, {
+      targetType: "event",
+      targetId: "902",
+      notifyLive: true,
+    });
+
+    // Fast-forward past startsAt: clock is past start time, but server status is still SCHEDULED.
+    // LiveNow MUST NOT be emitted by clock passage alone!
+    const clockPastEval = await evaluateDueReminders({
+      nowIso: new Date(baseTime + 5000).toISOString(),
+      userId,
+    });
+    expect(clockPastEval.dispatched).toBe(0);
+
+    // Only when canonical server record transitions to LIVE is LiveNow dispatched
+    eventState.status = "LIVE";
+    eventState.isLive = true;
+
+    const liveEval = await evaluateDueReminders({
+      nowIso: new Date(baseTime + 6000).toISOString(),
+      userId,
+    });
+    expect(liveEval.dispatched).toBe(1);
+    expect(liveEval.items[0].stage).toBe("live_now");
+  });
+
+  test("6. P0-B Network Boundary & Service Authentication (R3A-AUTH-01)", async () => {
+    // Direct call without internal token -> 401
+    const unauthedReq = new Request("http://127.0.0.1:3005/me/subscriptions", {
+      headers: { "x-tgs-user": "takudzwa" },
+    });
+    const unauthedRes = await handleRequest(unauthedReq);
+    expect(unauthedRes.status).toBe(401);
+
+    // Direct call with forged admin header and no internal token -> 401
+    const forgedAdminReq = new Request("http://127.0.0.1:3005/admin/queue", {
+      headers: { "x-tgs-user": "anonymous", "x-tgs-admin": "1" },
+    });
+    const forgedAdminRes = await handleRequest(forgedAdminReq);
+    expect(forgedAdminRes.status).toBe(401);
+
+    // Direct call with invalid internal token -> 401
+    const invalidSecretReq = new Request("http://127.0.0.1:3005/me/subscriptions", {
+      headers: { "x-tgs-user": "takudzwa", "x-tgs-internal-token": "wrong_secret_123" },
+    });
+    const invalidSecretRes = await handleRequest(invalidSecretReq);
+    expect(invalidSecretRes.status).toBe(401);
+
+    // Valid internal token + user header -> 200
+    const validReq = new Request("http://127.0.0.1:3005/me/subscriptions", {
+      headers: {
+        "x-tgs-user": "takudzwa",
+        "x-tgs-internal-token": INTERNAL_COMMS_SECRET,
+      },
+    });
+    const validRes = await handleRequest(validReq);
+    expect(validRes.status).toBe(200);
+
+    // Public health check does not require secret -> 200
+    const healthReq = new Request("http://127.0.0.1:3005/health");
+    const healthRes = await handleRequest(healthReq);
+    expect(healthRes.status).toBe(200);
+  });
+
+  test("7. P1-C Reminder Ledger & Outbound Queue Write Atomicity (R3A-LEDGER-01)", () => {
+    const userId = "test-atomic-actor";
+    const dedupeKey = `${userId}:event:901:test_atomic`;
+
+    // Attempt writing when a failure is triggered during the transaction
+    let threw = false;
+    try {
+      db.transaction(() => {
+        execute(
+          `INSERT INTO reminder_dispatch_ledger(
+             dedupe_key, subscription_id, user_id, target_type, target_id,
+             reminder_stage, event_key, channel, status, payload_json, dispatched_at
+           ) VALUES(?, NULL, ?, 'event', '901', 'test_stage', 'test_key', 'in_app', 'queued', '{}', '2026-11-15T10:00:00Z')`,
+          [dedupeKey, userId],
+        );
+
+        // Inject intentional failure before queue insert commits
+        throw new Error("INTENTIONAL_INJECTED_QUEUE_FAILURE");
+      })();
+    } catch (err: any) {
+      if (err.message === "INTENTIONAL_INJECTED_QUEUE_FAILURE") {
+        threw = true;
+      }
+    }
+    expect(threw).toBe(true);
+
+    // Verify transaction rollback: reminder_dispatch_ledger MUST have 0 rows for this dedupe_key!
+    const ledgerRows = all(
+      `SELECT * FROM reminder_dispatch_ledger WHERE dedupe_key = ?`,
+      [dedupeKey],
+    );
+    expect(ledgerRows.length).toBe(0);
+
+    // Outbound queue also has 0 rows
+    const queueRows = all(
+      `SELECT * FROM outbound_queue WHERE provider_msg_id = ?`,
+      [`first-party:${dedupeKey}`],
+    );
+    expect(queueRows.length).toBe(0);
+
+    // On healthy retry without failure, write succeeds and commits both tables
+    const healthyRec = recordFirstPartyReminderTx({
+      dedupeKey,
+      subscriptionId: null,
+      userId,
+      targetType: "event",
+      targetId: "901",
+      stage: "test_stage",
+      eventKey: "auction.event.FollowConfirmed",
+      params: { title: "Test Event" },
+      deepLink: "http://localhost/event/901",
+      locale: "en",
+      now: "2026-11-15T10:00:00Z",
+    });
+    expect(healthyRec.dispatched).toBe(true);
+    expect(healthyRec.queueId).not.toBeNull();
+
+    // Verify both rows now exist
+    expect(all(`SELECT id FROM reminder_dispatch_ledger WHERE dedupe_key = ?`, [dedupeKey]).length).toBe(1);
+    expect(all(`SELECT id FROM outbound_queue WHERE id = ?`, [healthyRec.queueId!]).length).toBe(1);
+  });
+
+  test("8. P1-D Target Canonicalization & Accessibility Gates (R3A-TARGET-01)", async () => {
+    const userId = "test-target-actor";
+
+    // Non-existent target must reject
+    let notFoundError = false;
+    try {
+      await upsertSubscription(userId, {
+        targetType: "event",
+        targetId: "999999",
+      });
+    } catch {
+      notFoundError = true;
+    }
+    expect(notFoundError).toBe(true);
+
+    // Target in draft/private state must reject
+    setCustomTargetResolver((type, id) => {
+      if (id === "903-draft") return null; // Private draft is not returned by canonical resolver
+      return null;
+    });
+
+    let draftError = false;
+    try {
+      await upsertSubscription(userId, {
+        targetType: "event",
+        targetId: "903-draft",
+      });
+    } catch {
+      draftError = true;
+    }
+    expect(draftError).toBe(true);
+
+    // Valid target derives canonical title, schedule, and IDs
+    setCustomTargetResolver(null); // Return to default seed resolver
+    const validSub = await upsertSubscription(userId, {
+      targetType: "event",
+      targetId: "901",
+    });
+    expect(validSub.subscription.title).toBe("Harare Executive & Utility Fleet Live Auction");
+    expect(validSub.subscription.startsAt).toBe("2026-11-20T10:00:00Z");
+  });
+
+  test("9. External Provider Isolation Gate ($0 External Spend)", () => {
     expect(R3A_EXTERNAL_LOCK).toBe(true);
 
     const labels = providerLabels();
@@ -322,7 +533,7 @@ describe("TENGASELL-LIVE-COMMS-UX-01 R3A First-Party Reminders & Subscriptions",
     expect(nonInApp.length).toBe(0);
   });
 
-  test("6. Database Safety Gate (TrailBase U1..U16 strict frozen count)", () => {
+  test("10. Database Safety Gate (TrailBase U1..U16 strict frozen count)", () => {
     const migrationsDir = path.resolve(
       import.meta.dir,
       "../mini-services/trailbase-db/traildepot/migrations/main",
