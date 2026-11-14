@@ -95,6 +95,7 @@ server.on("upgrade", (req, socket, head) => {
     socket.pipe(upstream);
   });
   upstream.on("error", () => socket.destroy());
+  socket.on("error", () => upstream.destroy());
 });
 
 server.listen(LISTEN, () => {
