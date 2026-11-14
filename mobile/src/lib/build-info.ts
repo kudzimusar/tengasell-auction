@@ -1,10 +1,62 @@
 // Build provenance and diagnostics metadata for TengaSell Mobile.
 // NEVER expose secrets, credentials, or session tokens here.
 
-import { Platform } from "react-native";
-import { getCanonicalBaseUrl } from "./trailbase";
+import { getCanonicalBaseUrl } from "./trailbase.ts";
+
+export interface NativeBinaryIdentity {
+  appName: string;
+  bundleId: string;
+  version: string;
+  buildNumber: string;
+  platform: string;
+}
+
+export interface BundleSourceIdentity {
+  commitSha: string;
+  branch: string;
+  buildTimestamp: string;
+  buildId: string;
+  isKnown: boolean;
+}
+
+export interface MetroServerIdentity {
+  isDevelopment: boolean;
+  devServerUrl?: string;
+}
+
+export interface BackendGatewayIdentity {
+  gatewayUrl: string;
+  isPort8080Conflict: boolean;
+  environment: "development" | "staging" | "production";
+}
+
+export type FeatureParityStatus =
+  | "implemented"
+  | "preview"
+  | "pending_review"
+  | "blocked";
+
+export interface FeatureParityItem {
+  key: string;
+  label: string;
+  status: FeatureParityStatus;
+  prReference?: string;
+  scopeNote?: string;
+}
 
 export interface BuildProvenance {
+  nativeBinary: NativeBinaryIdentity;
+  bundleSource: BundleSourceIdentity;
+  metroServer: MetroServerIdentity;
+  gateway: BackendGatewayIdentity;
+  runtimeEngine: string;
+  networkGuide: {
+    iosSimulator: string;
+    androidEmulator: string;
+    physicalDevice: string;
+  };
+  features: FeatureParityItem[];
+  // Backward compatibility convenience accessors
   appName: string;
   bundleId: string;
   version: string;
@@ -16,97 +68,158 @@ export interface BuildProvenance {
   gatewayUrl: string;
   isPort8080Conflict: boolean;
   platformTarget: string;
-  networkGuide: {
-    iosSimulator: string;
-    androidEmulator: string;
-    physicalDevice: string;
-  };
   environment: "development" | "staging" | "production";
-  features: {
-    key: string;
-    label: string;
-    status: "certified" | "preview" | "blocked";
-    prReference?: string;
-  }[];
 }
 
 const FALLBACK_GATEWAY = "http://127.0.0.1:19080";
 
-export const BUILD_PROVENANCE: BuildProvenance = {
+function resolvePlatformOS(): string {
+  if (typeof process !== "undefined" && process.platform === "darwin") {
+    // In React Native iOS or macOS simulator
+    return "ios";
+  }
+  return "universal";
+}
+
+// Safely load build-time metadata or fail soft with explicit UNKNOWN defaults
+export function resolveBundleSourceIdentity(customMeta?: unknown): BundleSourceIdentity {
+  try {
+    const meta = (customMeta ?? require("./build-meta.json")) as Record<string, unknown>;
+    if (meta && typeof meta.commitSha === "string" && meta.commitSha.length > 0) {
+      return {
+        commitSha: meta.commitSha,
+        branch: typeof meta.branch === "string" ? meta.branch : "unknown",
+        buildTimestamp: typeof meta.buildTimestamp === "string" ? meta.buildTimestamp : "unknown",
+        buildId: typeof meta.buildId === "string" ? meta.buildId : `build-${meta.commitSha.slice(0, 8)}`,
+        isKnown: meta.isKnown !== false && meta.commitSha !== "UNKNOWN_COMMIT",
+      };
+    }
+  } catch {
+    // build-meta.json not present or cannot be read; fail safe
+  }
+
+  return {
+    commitSha: "UNKNOWN_COMMIT",
+    branch: "unknown",
+    buildTimestamp: "unknown",
+    buildId: "unknown-build",
+    isKnown: false,
+  };
+}
+
+const bundleSource = resolveBundleSourceIdentity();
+const platformOS = resolvePlatformOS();
+
+const nativeBinary: NativeBinaryIdentity = {
   appName: "TengaSell",
   bundleId: "com.tengasell.app",
   version: "0.1.0",
   buildNumber: "1",
-  commitSha: "9bd369ad7000c7564195c1249d75759064706068",
-  branch: "feat/tengasell-mobile-ux-parity-01-draft",
-  buildTimestamp: "2026-11-14T05:01:00Z",
-  runtime: `Expo SDK 58 (Hermes / React Native 0.88 / ${Platform.OS})`,
-  get gatewayUrl() {
-    return getCanonicalBaseUrl() ?? FALLBACK_GATEWAY;
+  platform: platformOS,
+};
+
+const metroServer: MetroServerIdentity = {
+  isDevelopment: typeof __DEV__ !== "undefined" ? __DEV__ : false,
+  devServerUrl: typeof __DEV__ !== "undefined" && __DEV__ ? "http://127.0.0.1:8081" : undefined,
+};
+
+const features: FeatureParityItem[] = [
+  {
+    key: "mob01",
+    label: "NXS Foundation & Design Tokens",
+    status: "implemented",
+    prReference: "PR #6",
+    scopeNote: "Local suite passed; merged to parent stack",
   },
-  get isPort8080Conflict() {
-    const url = getCanonicalBaseUrl() ?? "";
-    return url.includes(":8080");
+  {
+    key: "mob02",
+    label: "Marketplace Discovery & Layout",
+    status: "implemented",
+    prReference: "PR #7",
+    scopeNote: "Local suite passed; merged to parent stack",
   },
-  platformTarget: Platform.select({
-    ios: "iOS Simulator / Device",
-    android: "Android Emulator / Device",
-    default: "Web / Universal",
-  }),
+  {
+    key: "mob03",
+    label: "Live Bidding & Socket.IO Authority",
+    status: "implemented",
+    prReference: "PR #9",
+    scopeNote: "Local suite passed; merged to parent stack",
+  },
+  {
+    key: "sec01",
+    label: "Fail-Closed Auth & Revocation Lifecycle",
+    status: "pending_review",
+    prReference: "PR #12",
+    scopeNote: "Client compatibility verified; server authority pending independent review",
+  },
+  {
+    key: "rec01",
+    label: "Intelligent Recommendations Engine",
+    status: "implemented",
+    prReference: "TENGASELL-REC-01",
+    scopeNote: "Client-side category/price clustering verified",
+  },
+  {
+    key: "pi01d",
+    label: "Vehicle Product Intelligence & Reserve Status",
+    status: "preview",
+    prReference: "PR #14 (Draft)",
+    scopeNote: "Draft client preview; non-blocking fail-soft projection",
+  },
+  {
+    key: "pi01e",
+    label: "Structured Discovery, Facets & Comparison",
+    status: "preview",
+    prReference: "PR #15 (Draft)",
+    scopeNote: "Draft client preview",
+  },
+  {
+    key: "ux01",
+    label: "Live Event Discovery & Authoritative Invariants",
+    status: "preview",
+    prReference: "PR #17 (Draft)",
+    scopeNote: "Draft client preview",
+  },
+  {
+    key: "and01",
+    label: "Android Emulator & Hardware Devices",
+    status: "blocked",
+    prReference: "PHYS-UAT",
+    scopeNote: "Blocked — unavailable physical/emulator hardware in current environment",
+  },
+];
+
+export const BUILD_PROVENANCE: BuildProvenance = {
+  nativeBinary,
+  bundleSource,
+  metroServer,
+  get gateway(): BackendGatewayIdentity {
+    const url = getCanonicalBaseUrl() ?? FALLBACK_GATEWAY;
+    return {
+      gatewayUrl: url,
+      isPort8080Conflict: url.includes(":8080"),
+      environment: "development" as const,
+    };
+  },
+  runtimeEngine: `Expo SDK 58 (Hermes / React Native 0.88 / ${platformOS})`,
   networkGuide: {
     iosSimulator: "http://127.0.0.1:19080",
     androidEmulator: "http://10.0.2.2:19080",
     physicalDevice: "http://<LAN-IP>:19080",
   },
+  features,
+
+  // Convenience accessors mirroring previous shape
+  get appName() { return nativeBinary.appName; },
+  get bundleId() { return nativeBinary.bundleId; },
+  get version() { return nativeBinary.version; },
+  get buildNumber() { return nativeBinary.buildNumber; },
+  get commitSha() { return bundleSource.commitSha; },
+  get branch() { return bundleSource.branch; },
+  get buildTimestamp() { return bundleSource.buildTimestamp; },
+  get runtime() { return this.runtimeEngine; },
+  get gatewayUrl() { return this.gateway.gatewayUrl; },
+  get isPort8080Conflict() { return this.gateway.isPort8080Conflict; },
+  platformTarget: "iOS Simulator / Device",
   environment: "development",
-  features: [
-    {
-      key: "mob01",
-      label: "NXS Foundation & Design Tokens",
-      status: "certified",
-      prReference: "PR #6",
-    },
-    {
-      key: "mob02",
-      label: "Marketplace Discovery & Layout",
-      status: "certified",
-      prReference: "PR #7",
-    },
-    {
-      key: "mob03",
-      label: "Live Bidding & Socket.IO Authority",
-      status: "certified",
-      prReference: "PR #9",
-    },
-    {
-      key: "sec01",
-      label: "Fail-Closed Auth & Revocation Lifecycle",
-      status: "certified",
-      prReference: "PR #12",
-    },
-    {
-      key: "rec01",
-      label: "Intelligent Recommendations Engine",
-      status: "certified",
-      prReference: "TENGASELL-REC-01",
-    },
-    {
-      key: "pi01d",
-      label: "Vehicle Product Intelligence & Reserve Status",
-      status: "preview",
-      prReference: "PR #14 (Draft)",
-    },
-    {
-      key: "pi01e",
-      label: "Structured Discovery, Facets & Comparison",
-      status: "preview",
-      prReference: "PR #15 (Draft)",
-    },
-    {
-      key: "ux01",
-      label: "Live Event Discovery & Authoritative Invariants",
-      status: "preview",
-      prReference: "PR #17 (Draft)",
-    },
-  ],
 };

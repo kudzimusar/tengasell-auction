@@ -2,7 +2,13 @@
 // All TrailBase traffic stays behind the canonical gateway and carries
 // XTransformPort=3001. No Next BFF, Prisma, or local commercial authority.
 
-import type { Auction, Category, Profile } from "./types";
+import type {
+  Auction,
+  Category,
+  Profile,
+  ReserveDisclosure,
+  VehiclePublicProjection,
+} from "./types";
 
 export const TB_PORT = 3001;
 
@@ -302,20 +308,88 @@ export interface AuctionQuery {
   limit?: number;
 }
 
+/**
+ * Upstream TrailBase Defect Remediation & Boundary Privacy:
+ *
+ * TrailBase raw records API `/api/records/v1/auctions` exposes the internal
+ * `reserve_price` database column directly over public HTTP endpoints.
+ *
+ * To enforce strict commercial transaction confidentiality and prevent
+ * leaking seller reserve figures across the mobile boundary:
+ * 1. Numeric `reserve_price` is scrubbed and set to `null` on all public auction projections.
+ * 2. Truthful `reserve_disclosure` is derived:
+ *    - Preserves canonical `raw.reserve_disclosure` if provided by PR #14 backend.
+ *    - If unavailable but raw `reserve_price` > 0, sets `reserve_disclosure = "RESERVE_APPLIES"`
+ *      (exposing only boolean existence of a reserve, never the dollar threshold).
+ *    - Otherwise defaults to `"UNSPECIFIED"`.
+ * 3. Any private vehicle identifiers (`vin`, `chassis_number`, `engine_number`,
+ *    `registration_number`, `private_inspection_notes`) are strictly stripped.
+ */
+export function sanitizeAuctionPublicView(rawRecord: unknown): Auction {
+  if (!rawRecord || typeof rawRecord !== "object") {
+    throw new TrailBaseError("malformed-response", "Auction record is not an object");
+  }
+
+  const raw = rawRecord as Record<string, unknown>;
+
+  const disclosure: ReserveDisclosure =
+    typeof raw.reserve_disclosure === "string"
+      ? (raw.reserve_disclosure as ReserveDisclosure)
+      : raw.reserve_price != null && Number(raw.reserve_price) > 0
+        ? "RESERVE_APPLIES"
+        : "UNSPECIFIED";
+
+  // Sanitize vehicle projection if present
+  let sanitizedVehicleProj: VehiclePublicProjection | null = null;
+  if (raw.vehicle_projection && typeof raw.vehicle_projection === "object") {
+    const vp = raw.vehicle_projection as Record<string, unknown>;
+    sanitizedVehicleProj = {
+      make: typeof vp.make === "string" ? vp.make : null,
+      model: typeof vp.model === "string" ? vp.model : null,
+      year: typeof vp.year === "number" ? vp.year : null,
+      mileage: typeof vp.mileage === "number" ? vp.mileage : null,
+      odometer_source: typeof vp.odometer_source === "string" ? vp.odometer_source : "SELLER_DECLARED",
+      transmission: typeof vp.transmission === "string" ? vp.transmission : null,
+      fuel_type: typeof vp.fuel_type === "string" ? vp.fuel_type : null,
+      body_type: typeof vp.body_type === "string" ? vp.body_type : null,
+      verification_state: vp.verification_state === "VERIFIED" ? "VERIFIED" : "UNVERIFIED",
+      inspection_status: typeof vp.inspection_status === "string" ? vp.inspection_status : null,
+      inspection_grade: typeof vp.inspection_grade === "string" ? vp.inspection_grade : null,
+      vin_classification: (vp.vin || vp.vin_classification === "RECORDED") ? "RECORDED" : "NOT_PROVIDED",
+    };
+  }
+
+  // Clone record, stripping sensitive fields
+  const sanitized = { ...raw } as unknown as Auction;
+  sanitized.reserve_price = null; // Always scrub numeric reserve
+  sanitized.reserve_disclosure = disclosure;
+  sanitized.vehicle_projection = sanitizedVehicleProj;
+
+  // Explicitly delete any raw private fields that might have leaked from database
+  delete (sanitized as unknown as Record<string, unknown>).vin;
+  delete (sanitized as unknown as Record<string, unknown>).chassis_number;
+  delete (sanitized as unknown as Record<string, unknown>).engine_number;
+  delete (sanitized as unknown as Record<string, unknown>).registration_number;
+  delete (sanitized as unknown as Record<string, unknown>).private_inspection_notes;
+
+  return sanitized;
+}
+
 export async function fetchAuctions(q: AuctionQuery = {}): Promise<Auction[]> {
-  const data = await publicRequest<RecordsResponse<Auction>>("/api/records/v1/auctions", {
+  const data = await publicRequest<RecordsResponse<unknown>>("/api/records/v1/auctions", {
     "filter[status][$eq]": q.status ?? "live",
     ...(q.category ? { "filter[category][$eq]": q.category } : {}),
     ...(q.search ? { "filter[title][$like]": `%${q.search}%` } : {}),
     order: q.order ?? "ends_at",
     limit: q.limit ?? 20,
   });
-  return data.records ?? [];
+  return (data.records ?? []).map(sanitizeAuctionPublicView);
 }
 
 export async function fetchAuction(id: number): Promise<Auction | null> {
   try {
-    return await publicRequest<Auction>(`/api/records/v1/auctions/${id}`);
+    const raw = await publicRequest<unknown>(`/api/records/v1/auctions/${id}`);
+    return sanitizeAuctionPublicView(raw);
   } catch (error) {
     if (error instanceof TrailBaseError && error.status === 404) return null;
     throw error;

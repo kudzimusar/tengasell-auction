@@ -12,9 +12,31 @@ export function AboutDiagnosticsCard() {
   const [expanded, setExpanded] = useState(true);
   const styles = createStyles(theme, writingDirection);
 
+  const isDev = typeof __DEV__ !== "undefined" ? __DEV__ : false;
   const shortSha = BUILD_PROVENANCE.commitSha.slice(0, 10);
   const isPort8080 = BUILD_PROVENANCE.isPort8080Conflict;
 
+  // Safe production presentation (Directive 6: Never expose internal gateway addresses,
+  // build paths, or internal topology to production customer builds)
+  if (!isDev) {
+    return (
+      <View style={styles.card} testID="about-diagnostics-card">
+        <View style={styles.headerRow}>
+          <View style={styles.flexOne}>
+            <Text style={styles.title}>{BUILD_PROVENANCE.appName}</Text>
+            <Text style={styles.subtitle}>
+              {t("diagnostics.safeVersion", {
+                version: BUILD_PROVENANCE.version,
+                buildNumber: BUILD_PROVENANCE.buildNumber,
+              })}
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  // Development Diagnostics & Verification View
   return (
     <View style={styles.card} testID="about-diagnostics-card">
       <View style={styles.headerRow}>
@@ -81,8 +103,11 @@ export function AboutDiagnosticsCard() {
           <Text style={styles.sectionHeading}>{t("diagnostics.parityHeading")}</Text>
           <View style={styles.featureList}>
             {BUILD_PROVENANCE.features.map((feat) => {
-              const isCertified = feat.status === "certified";
+              const isImplemented = feat.status === "implemented";
+              const isPending = feat.status === "pending_review";
               const isPreview = feat.status === "preview";
+              const isBlocked = feat.status === "blocked";
+
               return (
                 <View key={feat.key} style={styles.featureRow}>
                   <View style={styles.flexOne}>
@@ -94,28 +119,28 @@ export function AboutDiagnosticsCard() {
                   <View
                     style={[
                       styles.statusPill,
-                      isCertified
-                        ? styles.pillCertified
-                        : isPreview
-                          ? styles.pillPreview
-                          : styles.pillBlocked,
+                      isImplemented && styles.pillImplemented,
+                      isPending && styles.pillPending,
+                      isPreview && styles.pillPreview,
+                      isBlocked && styles.pillBlocked,
                     ]}
                   >
                     <Text
                       style={[
                         styles.statusPillText,
-                        isCertified
-                          ? styles.pillTextCertified
-                          : isPreview
-                            ? styles.pillTextPreview
-                            : styles.pillTextBlocked,
+                        isImplemented && styles.pillTextImplemented,
+                        isPending && styles.pillTextPending,
+                        isPreview && styles.pillTextPreview,
+                        isBlocked && styles.pillTextBlocked,
                       ]}
                     >
-                      {isCertified
-                        ? t("diagnostics.certified")
-                        : isPreview
-                          ? t("diagnostics.preview")
-                          : t("diagnostics.blocked")}
+                      {isImplemented
+                        ? t("diagnostics.implemented")
+                        : isPending
+                          ? t("diagnostics.pendingReview")
+                          : isPreview
+                            ? t("diagnostics.preview")
+                            : t("diagnostics.blocked")}
                     </Text>
                   </View>
                 </View>
@@ -263,9 +288,13 @@ function createStyles(theme: NxsTheme, writingDirection: "ltr" | "rtl") {
       borderRadius: nxsTokens.radius.pill,
       borderWidth: 1,
     },
-    pillCertified: {
+    pillImplemented: {
       backgroundColor: theme.surface.canvas,
       borderColor: theme.state.success,
+    },
+    pillPending: {
+      backgroundColor: theme.surface.canvas,
+      borderColor: theme.border.strong,
     },
     pillPreview: {
       backgroundColor: theme.surface.canvas,
@@ -280,8 +309,11 @@ function createStyles(theme: NxsTheme, writingDirection: "ltr" | "rtl") {
       fontWeight: "800",
       letterSpacing: 0.5,
     },
-    pillTextCertified: {
+    pillTextImplemented: {
       color: theme.state.success,
+    },
+    pillTextPending: {
+      color: theme.action.primary,
     },
     pillTextPreview: {
       color: theme.state.warning,
