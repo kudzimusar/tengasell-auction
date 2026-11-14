@@ -344,7 +344,7 @@ function CategoryBar() {
   return (
     <nav
       aria-label="Categories"
-      className="border-b border-border bg-section/95 backdrop-blur supports-[backdrop-filter]:bg-section/80"
+      className="border-b border-border bg-section/95 backdrop-blur supports-[backdrop-filter]:bg-section/80 overflow-hidden"
     >
       <div className="mx-auto max-w-7xl px-2 sm:px-4 flex items-center gap-1 overflow-x-auto ts-scrollbar">
         <div className="relative shrink-0">
@@ -612,8 +612,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       >
         Skip to content
       </a>
-      <header className="sticky top-0 z-30 border-b border-border bg-section/95 backdrop-blur supports-[backdrop-filter]:bg-section/85">
-        <div className="mx-auto max-w-7xl px-2 sm:px-4 flex items-center gap-1 min-h-16">
+      <header className="sticky top-0 z-30 border-b border-border bg-section/95 backdrop-blur supports-[backdrop-filter]:bg-section/85 overflow-x-clip">
+        <div className="mx-auto max-w-7xl px-2 sm:px-4 flex items-center gap-1 min-h-16 overflow-hidden">
           <a
             href="#/"
             className="flex items-center min-h-11 px-1 rounded-control shrink-0"
@@ -621,14 +621,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           >
             <TengaLogo size={34} wordmarkClassName="max-[440px]:hidden" />
           </a>
-          <div className="hidden sm:flex flex-1 min-w-0 justify-center">
+          <div className="hidden min-[840px]:flex flex-1 min-w-0 justify-center">
             <SearchBar />
           </div>
-          <div className="flex-1 sm:hidden" />
+          <div className="flex-1 min-[840px]:hidden" />
           <div className="flex items-center gap-0.5 shrink-0">
             <button
               onClick={() => setMobileSearch(!mobileSearch)}
-              className="sm:hidden size-11 grid place-items-center rounded-control hover:bg-accent/60 transition-colors"
+              className="min-[840px]:hidden size-11 grid place-items-center rounded-control hover:bg-accent/60 transition-colors"
               aria-label="Search"
               aria-expanded={mobileSearch}
             >
@@ -643,7 +643,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         {mobileSearch && (
-          <div className="sm:hidden border-t border-border px-2 py-2">
+          <div className="min-[840px]:hidden border-t border-border px-2 py-2">
             <SearchBar autoFocus />
           </div>
         )}
