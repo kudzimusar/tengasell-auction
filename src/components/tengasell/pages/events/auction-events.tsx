@@ -35,7 +35,7 @@ import type {
   RunListCommandInput,
 } from "@/lib/tengasell/types";
 import { cn } from "@/lib/utils";
-import { AuctionCommsNotice, EmptyState, ErrorState, getLiveEventDisplay, LiveEventStatusBadge, LoadingGrid, StatusPill } from "@/components/tengasell/ui";
+import { AuctionCommsNotice, AuctionFollowButton, EmptyState, ErrorState, getLiveEventDisplay, LiveEventStatusBadge, LoadingGrid, StatusPill } from "@/components/tengasell/ui";
 
 function formatWhen(iso: string | null | undefined) {
   if (!iso) return "—";
@@ -593,10 +593,22 @@ function EventGroup({
                   </p>
                 ) : null}
                 <p className="mt-1 text-caption text-muted-foreground">Host: {event.host_username}</p>
-                <span className="mt-3 inline-flex min-h-11 items-center gap-1 text-label font-bold text-teal">
-                  {display.isAuthoritativeLive ? "Enter live floor & run list" : "Open event & run list"}{" "}
-                  <ArrowRight className="size-4" aria-hidden="true" />
-                </span>
+                <div className="mt-3 flex items-center justify-between gap-2">
+                  <span className="inline-flex min-h-11 items-center gap-1 text-label font-bold text-teal">
+                    {display.isAuthoritativeLive ? "Enter live floor & run list" : "Open event & run list"}{" "}
+                    <ArrowRight className="size-4" aria-hidden="true" />
+                  </span>
+                  <AuctionFollowButton
+                    targetType="event"
+                    targetId={event.id}
+                    eventId={event.id}
+                    sessionId={event.session_id}
+                    title={event.title}
+                    startsAt={event.starts_at}
+                    testId="event-follow-btn"
+                    compact
+                  />
+                </div>
               </a>
             );
           })}
@@ -779,6 +791,17 @@ function EventDetail({ eventId }: { eventId: number }) {
                 : "Open Live Room"}
             </a>
           </Button>
+          <AuctionFollowButton
+            targetType="event"
+            targetId={event.id}
+            eventId={event.id}
+            sessionId={session.id}
+            title={event.title}
+            startsAt={event.starts_at}
+            testId="event-follow-btn"
+            size="default"
+            className="min-h-11"
+          />
           {permissions.operate ? (
             <Button
               variant="outline"

@@ -100,6 +100,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   AuctionCommsNotice,
+  AuctionFollowButton,
   Avatar,
   EmptyState,
   ErrorState,
@@ -948,6 +949,19 @@ function LiveRoom({ sessionId }: { sessionId: number }) {
             </a>
           </Button>
         ) : null}
+        {session.event_id != null ? (
+          <AuctionFollowButton
+            targetType="event"
+            targetId={session.event_id}
+            eventId={session.event_id}
+            sessionId={session.id}
+            title={associatedEvent?.title ?? session.title}
+            startsAt={associatedEvent?.starts_at}
+            testId="live-room-follow-event-btn"
+            size="sm"
+            compact
+          />
+        ) : null}
         <span
           data-testid="live-sync-banner"
           data-sync-state={syncStatus}
@@ -1400,6 +1414,20 @@ function LotStageBody({
                 <StatusPill tone="muted" size="xs">
                   {formatReserveDisclosure(lot)}
                 </StatusPill>
+                <div className="ms-auto">
+                  <AuctionFollowButton
+                    targetType="lot"
+                    targetId={lot.id}
+                    lotId={lot.id}
+                    auctionId={lot.id}
+                    sessionId={session.id}
+                    eventId={session.event_id}
+                    title={lot.title}
+                    testId="live-room-follow-lot-btn"
+                    size="sm"
+                    compact
+                  />
+                </div>
               </div>
               <h2 className="text-lg font-bold leading-snug text-foreground">{vehicleHeading}</h2>
               <a

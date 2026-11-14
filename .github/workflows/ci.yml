@@ -196,6 +196,14 @@ jobs:
           UX01_SCREENSHOT_DIR="${{ github.workspace }}/test-artifacts/screenshots" npm run test:live-comms-ux01-r2
           echo "R2 live room floor runtime UAT satisfied"
 
+      - name: TENGASELL-LIVE-COMMS-UX-01 R3A first-party reminders UAT
+        if: hashFiles('tests/live-comms-ux01-r3a-reminders.test.ts') != ''
+        run: |
+          set -euo pipefail
+          lsof -ti :3000 -ti :3001 -ti :3002 -ti :3005 -ti :3100 | xargs kill -9 2>/dev/null || true
+          UX01_SCREENSHOT_DIR="${{ github.workspace }}/test-artifacts/screenshots" npm run test:live-comms-ux01-r3a
+          echo "R3A reminders runtime UAT satisfied"
+
       - name: Upload test screenshots and UAT artifacts
         if: always()
         uses: actions/upload-artifact@v4

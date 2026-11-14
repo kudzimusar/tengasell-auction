@@ -147,6 +147,44 @@ CREATE TABLE IF NOT EXISTS suppression(
   created_at TEXT DEFAULT (datetime('now')),
   UNIQUE(channel,handle)
 );
+
+-- R3A First-Party Auction Subscriptions & Idempotent Reminder Dispatch Ledger (comms.db only)
+CREATE TABLE IF NOT EXISTS auction_subscriptions(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  target_type TEXT NOT NULL CHECK(target_type IN('event','lot','auction')),
+  target_id TEXT NOT NULL,
+  event_id INTEGER,
+  lot_id INTEGER,
+  session_id INTEGER,
+  auction_id INTEGER,
+  title TEXT NOT NULL DEFAULT '',
+  starts_at TEXT,
+  status TEXT NOT NULL DEFAULT 'active' CHECK(status IN('active','unsubscribed')),
+  channels_json TEXT NOT NULL DEFAULT '["in_app"]',
+  notify_24h INTEGER NOT NULL DEFAULT 1,
+  notify_1h INTEGER NOT NULL DEFAULT 1,
+  notify_live INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(user_id, target_type, target_id)
+);
+CREATE INDEX IF NOT EXISTS idx_auction_subs_user_status ON auction_subscriptions(user_id, status);
+
+CREATE TABLE IF NOT EXISTS reminder_dispatch_ledger(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  dedupe_key TEXT NOT NULL UNIQUE,
+  subscription_id INTEGER,
+  user_id TEXT NOT NULL,
+  target_type TEXT NOT NULL,
+  target_id TEXT NOT NULL,
+  reminder_stage TEXT NOT NULL,
+  event_key TEXT NOT NULL,
+  channel TEXT NOT NULL DEFAULT 'in_app',
+  status TEXT NOT NULL DEFAULT 'dispatched',
+  payload_json TEXT NOT NULL DEFAULT '{}',
+  dispatched_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 `;
 
 db.exec(DDL);
@@ -163,6 +201,18 @@ export function get<T = Record<string, unknown>>(sql: string, params: SqlParam[]
 
 export function run(sql: string, params: SqlParam[] = []): void {
   db.prepare(sql).run(...params);
+}
+
+/** Run INSERT/UPDATE/DELETE and return { changes, lastInsertRowid }. */
+export function execute(
+  sql: string,
+  params: SqlParam[] = [],
+): { changes: number; lastInsertRowid: number } {
+  const res = db.prepare(sql).run(...params) as unknown as {
+    changes: number;
+    lastInsertRowid: number | bigint;
+  };
+  return { changes: Number(res.changes ?? 0), lastInsertRowid: Number(res.lastInsertRowid ?? 0) };
 }
 
 /** INSERT returning the new rowid. */

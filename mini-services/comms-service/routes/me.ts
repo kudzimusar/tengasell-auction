@@ -11,6 +11,20 @@ import type { QueueRow } from "../queue";
 import type { RelayLogRow } from "../relay";
 import { effectivePrefs, marketingOptIn, upsertPrefs } from "../prefs";
 import { linkOut, notificationSnippet, relayOut } from "./serialize";
+import {
+  evaluateDueReminders,
+  listReminderLedger,
+  listSubscriptions,
+  R3A_EXTERNAL_LOCK,
+  unsubscribeTarget,
+  upsertSubscription,
+  type ReminderTargetState,
+  type SubscriptionTargetType,
+} from "../subscriptions";
+
+function isTargetType(v: unknown): v is SubscriptionTargetType {
+  return v === "event" || v === "lot" || v === "auction";
+}
 
 function requireUser(ctx: Ctx): string {
   return ctx.requireUser();
@@ -225,5 +239,79 @@ export function registerMeRoutes(on: AddRoute): void {
           [user, user, limit],
         );
     return { items: rows.map(relayOut) };
+  });
+
+  // ── First-party auction subscriptions & idempotent reminders (UX-01 R3A) ───
+
+  on("GET", "/me/subscriptions", (ctx) => {
+    const user = requireUser(ctx);
+    const includeUnsubscribed = ctx.url.searchParams.get("includeUnsubscribed") === "1";
+    return {
+      ok: true,
+      externalLocked: R3A_EXTERNAL_LOCK,
+      subscriptions: listSubscriptions(user, includeUnsubscribed),
+      ledger: listReminderLedger(user, 20),
+    };
+  });
+
+  on("POST", "/me/subscriptions", async (ctx) => {
+    const user = requireUser(ctx);
+    const targetType = ctx.body?.targetType;
+    if (!isTargetType(targetType)) {
+      throw new HttpError(400, "targetType must be event, lot, or auction", "bad_target_type");
+    }
+    const rawTargetId = ctx.body?.targetId;
+    if (rawTargetId == null || String(rawTargetId).trim() === "") {
+      throw new HttpError(400, "targetId is required", "missing_target_id");
+    }
+    const { subscription, confirmDispatched } = await upsertSubscription(user, {
+      targetType,
+      targetId: String(rawTargetId),
+      notify24h: ctx.body?.notify24h !== false,
+      notify1h: ctx.body?.notify1h !== false,
+      notifyLive: ctx.body?.notifyLive !== false,
+      locale: typeof ctx.body?.locale === "string" ? ctx.body.locale : "en",
+    });
+    return {
+      ok: true,
+      externalLocked: R3A_EXTERNAL_LOCK,
+      subscription,
+      confirmDispatched,
+    };
+  });
+
+  on("DELETE", "/me/subscriptions/:targetType/:targetId", (ctx) => {
+    const user = requireUser(ctx);
+    const targetType = ctx.params.targetType;
+    if (!isTargetType(targetType)) {
+      throw new HttpError(400, "targetType must be event, lot, or auction", "bad_target_type");
+    }
+    return {
+      ...unsubscribeTarget(user, targetType, ctx.params.targetId),
+      externalLocked: R3A_EXTERNAL_LOCK,
+    };
+  });
+
+  on("POST", "/me/subscriptions/unsubscribe", (ctx) => {
+    const user = requireUser(ctx);
+    const targetType = ctx.body?.targetType;
+    if (!isTargetType(targetType)) {
+      throw new HttpError(400, "targetType must be event, lot, or auction", "bad_target_type");
+    }
+    const rawTargetId = ctx.body?.targetId;
+    if (rawTargetId == null || String(rawTargetId).trim() === "") {
+      throw new HttpError(400, "targetId is required", "missing_target_id");
+    }
+    return {
+      ...unsubscribeTarget(user, targetType, String(rawTargetId)),
+      externalLocked: R3A_EXTERNAL_LOCK,
+    };
+  });
+
+  on("POST", "/me/reminders/evaluate", async (ctx) => {
+    const user = requireUser(ctx);
+    const nowIsoParam = typeof ctx.body?.nowIso === "string" ? ctx.body.nowIso : undefined;
+    const locale = typeof ctx.body?.locale === "string" ? ctx.body.locale : "en";
+    return await evaluateDueReminders({ nowIso: nowIsoParam, userId: user, locale });
   });
 }
