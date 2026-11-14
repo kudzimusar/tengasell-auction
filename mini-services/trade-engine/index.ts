@@ -220,34 +220,50 @@ function decodeJwt(token: string): { username?: string; admin?: boolean; sub?: s
   }
 }
 
-async function resolveIdentity(token: unknown): Promise<Identity | null> {
-  if (typeof token !== "string" || !token) return null;
-  if (identityCache.has(token)) return identityCache.get(token)!;
+async function verifyCurrentSession(token: unknown): Promise<{ valid: boolean; identity: Identity | null; code?: string; reason?: string }> {
+  if (typeof token !== "string" || !token) {
+    return { valid: false, identity: null, code: "MISSING_TOKEN", reason: "Authentication token required." };
+  }
   try {
     const res = await fetch(`${TRAILBASE}/api/auth/v1/status`, {
       headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(3000),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      identityCache.delete(token);
+      return { valid: false, identity: null, code: "AUTH_REVOKED", reason: "Session has expired or was revoked." };
+    }
     const data = await res.json();
     const activeToken: string = data.auth_token ?? token;
     const payload = decodeJwt(activeToken);
-    if (!payload.username) return null;
-    // profiles are world-readable → resolve the user id
-    const profiles = await getRecords(
-      "profiles",
-      `filter[username][$eq]=${encodeURIComponent(payload.username)}&limit=1`,
-    );
-    const identity: Identity = {
-      id: profiles[0]?.user ?? "",
-      username: payload.username,
-      admin: !!payload.admin,
-    };
-    identityCache.set(token, identity);
-    if (activeToken !== token) identityCache.set(activeToken, identity);
-    return identity;
-  } catch {
-    return null;
+    if (!payload.username) {
+      identityCache.delete(token);
+      return { valid: false, identity: null, code: "AUTH_REVOKED", reason: "Invalid session payload." };
+    }
+    let identity = identityCache.get(token);
+    if (!identity || identity.username !== payload.username) {
+      const profiles = await getRecords(
+        "profiles",
+        `filter[username][$eq]=${encodeURIComponent(payload.username)}&limit=1`,
+      );
+      identity = {
+        id: profiles[0]?.user ?? "",
+        username: payload.username,
+        admin: Boolean(payload.admin),
+      };
+      identityCache.set(token, identity);
+      if (activeToken !== token) identityCache.set(activeToken, identity);
+    }
+    return { valid: true, identity };
+  } catch (err) {
+    console.warn("[verifyCurrentSession] TrailBase auth unreachable, failing closed:", err);
+    return { valid: false, identity: null, code: "AUTH_UNAVAILABLE", reason: "Authentication authority is temporarily unreachable." };
   }
+}
+
+async function resolveIdentity(token: unknown): Promise<Identity | null> {
+  const check = await verifyCurrentSession(token);
+  return check.valid ? check.identity : null;
 }
 
 // ── notifications + audit ────────────────────────────────────────────
@@ -1028,14 +1044,21 @@ io.on("connection", (socket: Socket) => {
 
   const requireAuth = async (): Promise<Identity | null> => {
     if (!token) return null;
-    if (!me) me = await identityPromise;
+    const check = await verifyCurrentSession(token);
+    if (!check.valid) {
+      if (me?.id) void socket.leave(`user:${me.id}`);
+      me = null;
+      identityCache.delete(token);
+      return null;
+    }
+    me = check.identity;
     return me;
   };
 
   // ── IMP-04: Vehicle / Tengasell Inspection authority ───────────────
   socket.on("vehicle:get", async (data: any, ack?: Ack) => {
     try {
-      const viewer = await identityPromise;
+      const viewer = token ? await requireAuth() : null;
       const auctionId = Number(data?.auctionId);
       if (!Number.isSafeInteger(auctionId) || auctionId <= 0)
         return ack?.({ ok: false, error: "Invalid auction id." });
@@ -1594,10 +1617,42 @@ io.on("connection", (socket: Socket) => {
 
   socket.on("bid:place", async (data: any, ack?: Ack) => {
     try {
-      const user = await requireAuth();
-      if (!user) return ack?.({ ok: false, error: "Sign in to place bids." });
+      if (!token) return ack?.({ ok: false, code: "AUTH_REQUIRED", error: "Sign in to place bids." });
+      const check = await verifyCurrentSession(token);
+      if (!check.valid) {
+        if (me?.id) void socket.leave(`user:${me.id}`);
+        me = null;
+        identityCache.delete(token);
+        return ack?.({
+          ok: false,
+          code: check.code || "AUTH_REVOKED",
+          error: "Your session has expired or been revoked. Please sign in again.",
+        });
+      }
+      const user = check.identity!;
       const auctionId = Number(data?.auctionId);
       const before = await getRecord("auctions", auctionId);
+      if (!before) {
+        return ack?.({ ok: false, code: "AUCTION_NOT_FOUND", error: "Auction not found." });
+      }
+      const statusLower = String(before.status || "").toLowerCase();
+      if (!["live", "active", "running", "extended"].includes(statusLower)) {
+        return ack?.({
+          ok: false,
+          code: "LOT_NOT_ACTIVE",
+          error: `Auction is currently ${before.status}. Bids cannot be placed.`,
+        });
+      }
+      if (before.live_session_id) {
+        const session = await getRecord("live_sessions", Number(before.live_session_id));
+        if (session && session.current_lot_id != null && Number(session.current_lot_id) !== auctionId) {
+          return ack?.({
+            ok: false,
+            code: "LOT_NOT_ACTIVE",
+            error: "This lot is not currently open for live bidding on the floor.",
+          });
+        }
+      }
       const result = await placeBid(
         user,
         auctionId,

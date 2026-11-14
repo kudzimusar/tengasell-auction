@@ -10,7 +10,7 @@ const TRAILBASE_URL = "http://127.0.0.1:3001";
 const ENGINE_URL = "http://127.0.0.1:3002";
 const SCREENSHOT_DIR =
   process.env.UX01_SCREENSHOT_DIR ||
-  "/Users/shadreckmusarurwa/.gemini/antigravity/brain/73d48699-8558-414e-b7e2-e4f4b6c620a9";
+  path.join(process.cwd(), "test-artifacts/screenshots");
 
 const VIEWPORTS = [
   { name: "mobile-390", width: 390, height: 844 },
@@ -477,5 +477,146 @@ test("LIVE-18..LIVE-20: sync degradation/recovery, console cleanliness, and erro
   await expect(page.getByRole("heading", { name: /2021 Toyota Hilux/i })).toBeVisible({ timeout: 10000 });
   await assertNoHorizontalOverflow(page);
   expect(pageErrors).toEqual([]);
+  await context.close();
+});
+
+test("LIVE-21..LIVE-27: P0/P1 security convergence: dossier privacy, session revocation fail-closed, stale lot rejection, and accessibility", async ({
+  browser,
+}) => {
+  await resetBackend();
+
+  // LIVE-21: Anonymous viewer public vehicle dossier redaction
+  const anonBundleRes = await socketRpc(null, "vehicle:get", { auctionId: 9101 });
+  expect(anonBundleRes.ok).toBe(true);
+  const anonV = anonBundleRes.bundle.vehicle;
+  expect(anonV).toBeTruthy();
+  expect(anonV.make).toBe("Toyota");
+  expect(anonV.model).toBe("Hilux");
+  expect(anonV.has_vin).toBe(true);
+  expect(typeof anonV.vin_masked).toBe("string");
+  expect(anonV.vin_masked).toMatch(/^[A-Z0-9]{3}\*\*\*[A-Z0-9]{4}$/);
+  expect(anonV.has_registration).toBe(true);
+  // Assert sensitive fields are completely stripped from network response:
+  expect(anonV.vin).toBeUndefined();
+  expect(anonV.chassis_number).toBeUndefined();
+  expect(anonV.engine_number).toBeUndefined();
+  expect(anonV.registration_number).toBeUndefined();
+  expect(anonV.seller_user).toBeUndefined();
+  expect(anonV.internal_notes).toBeUndefined();
+  expect(anonV.ownership_status).toBeUndefined();
+  expect(anonV.customs_status).toBeUndefined();
+
+  // Documents: only VERIFIED documents, and document_ref + rejection_reason must be stripped
+  expect(anonBundleRes.bundle.documents.length).toBeGreaterThan(0);
+  for (const doc of anonBundleRes.bundle.documents) {
+    expect(doc.status).toBe("VERIFIED");
+    expect(doc.document_ref).toBeUndefined();
+    expect(doc.rejection_reason).toBeUndefined();
+  }
+  // Inspection: inspector_user stripped
+  if (anonBundleRes.bundle.inspection) {
+    expect(anonBundleRes.bundle.inspection.inspector_user).toBeUndefined();
+    expect(anonBundleRes.bundle.inspection.internal_notes).toBeUndefined();
+  }
+  // Findings: evidence_document_id stripped
+  for (const f of anonBundleRes.bundle.findings) {
+    expect(f.evidence_document_id).toBeUndefined();
+    expect(f.created_by).toBeUndefined();
+  }
+  expect(anonBundleRes.bundle.eligibility).toBeNull();
+
+  // LIVE-22: Authenticated non-seller bidder (simba) also receives projected bundle
+  const simbaBundleRes = await socketRpc(tokens.simba.token, "vehicle:get", { auctionId: 9101 });
+  expect(simbaBundleRes.ok).toBe(true);
+  const simbaV = simbaBundleRes.bundle.vehicle;
+  expect(simbaV.vin).toBeUndefined();
+  expect(simbaV.registration_number).toBeUndefined();
+  expect(simbaV.vin_masked).toBeTruthy();
+  for (const doc of simbaBundleRes.bundle.documents) {
+    expect(doc.document_ref).toBeUndefined();
+  }
+
+  // LIVE-23: Authenticated seller (takudzwa) receives full unredacted dossier
+  const takudzwaBundleRes = await socketRpc(tokens.takudzwa.token, "vehicle:get", { auctionId: 9101 });
+  expect(takudzwaBundleRes.ok).toBe(true);
+  const takudzwaV = takudzwaBundleRes.bundle.vehicle;
+  expect(takudzwaV.vin).toBeTruthy();
+  expect(takudzwaV.registration_number).toBeTruthy();
+  const verifiedDoc = takudzwaBundleRes.bundle.documents.find((d) => d.status === "VERIFIED");
+  if (verifiedDoc) {
+    expect(verifiedDoc.document_ref).toBeTruthy();
+  }
+
+  // Also verify admin receives full unredacted dossier
+  const adminBundleRes = await socketRpc(tokens.admin.token, "vehicle:get", { auctionId: 9101 });
+  expect(adminBundleRes.ok).toBe(true);
+  expect(adminBundleRes.bundle.vehicle.vin).toBeTruthy();
+
+  // LIVE-24: Session revocation fail-closed on already-connected socket (R2-AUTH-01)
+  const connectedSocket = io(ENGINE_URL, {
+    auth: { token: tokens.nyasha.token },
+    transports: ["websocket"],
+    forceNew: true,
+  });
+  await new Promise((resolve) => connectedSocket.on("connect", resolve));
+
+  // Revoke Nyasha's token on TrailBase
+  const revokeRes = await fetch(`${TRAILBASE_URL}/__test/revoke`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: tokens.nyasha.token }),
+  });
+  expect(revokeRes.ok).toBe(true);
+
+  // Attempt to place bid on the already-connected socket
+  const revokedBidAck = await new Promise((resolve) => {
+    connectedSocket.emit(
+      "bid:place",
+      {
+        auctionId: 9101,
+        maxAmount: 48000,
+        commandId: "cmd-revoked-test-01",
+      },
+      resolve,
+    );
+  });
+  expect(revokedBidAck.ok).toBe(false);
+  expect(revokedBidAck.code).toBe("AUTH_REVOKED");
+  connectedSocket.close();
+
+  // LIVE-25: Conflicting / stale lot state rejection
+  // Auction 9102 is currently PAUSED or PENDING (not RUNNING)
+  const staleAck = await socketRpc(tokens.takudzwa.token, "bid:place", {
+    auctionId: 9102,
+    maxAmount: 22000,
+  });
+  expect(staleAck.ok).toBe(false);
+  expect(staleAck.code).toBe("LOT_NOT_ACTIVE");
+
+  // LIVE-26: Nonexistent auction rejection
+  const notFoundAck = await socketRpc(tokens.takudzwa.token, "bid:place", {
+    auctionId: 999999,
+    maxAmount: 10000,
+  });
+  expect(notFoundAck.ok).toBe(false);
+  expect(notFoundAck.code).toBe("AUCTION_NOT_FOUND");
+
+  // LIVE-27: Keyboard navigation and accessibility attributes in live room UI
+  const { context, page } = await createActorContext(
+    browser,
+    { width: 1280, height: 800 },
+    tokens.takudzwa,
+  );
+  await page.goto(`${BASE}/#/live/1`);
+  await expect(page.getByRole("heading", { name: /2021 Toyota Hilux/i })).toBeVisible({ timeout: 10000 });
+
+  // Tab through vehicle collapsible details trigger
+  const detailsTrigger = page.getByTestId("live-vehicle-details-collapsible").locator("button").first();
+  await expect(detailsTrigger).toBeVisible();
+  await expect(detailsTrigger).toHaveAttribute("aria-expanded");
+  await detailsTrigger.focus();
+  await page.keyboard.press("Enter");
+  await expect(detailsTrigger).toHaveAttribute("aria-expanded", "true");
+
   await context.close();
 });
