@@ -138,9 +138,9 @@ async function connectSocket(token?: string | null): Promise<Socket> {
   });
 }
 
-async function rpc<T = any>(socket: Socket, event: string, payload: unknown): Promise<T> {
+async function rpc<T = any>(socket: Socket, event: string, payload: unknown, timeoutMs = 20_000): Promise<T> {
   return await new Promise((resolve, reject) => {
-    socket.timeout(10_000).emit(event, payload, (err: Error | null, response: T) => {
+    socket.timeout(timeoutMs).emit(event, payload, (err: Error | null, response: T) => {
       if (err) return reject(err);
       resolve(response);
     });

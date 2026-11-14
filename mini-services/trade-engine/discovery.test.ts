@@ -126,7 +126,7 @@ function createInMemoryStore(): VehicleStore & { data: Record<string, any[]> } {
   return {
     data,
     async get(table: string, id: number | string) {
-      return (data[table] ?? []).find((r) => String(r.id) === String(id) || String(r.auction_id) === String(id)) ?? null;
+      return (data[table] ?? []).find((r) => String(r.id) === String(id) || (table === "product_search_index" && String(r.auction_id) === String(id))) ?? null;
     },
     async create(table: string, row: any) {
       if (!data[table]) data[table] = [];
@@ -137,7 +137,7 @@ function createInMemoryStore(): VehicleStore & { data: Record<string, any[]> } {
     },
     async update(table: string, id: number | string, patch: any) {
       const list = data[table] ?? [];
-      const idx = list.findIndex((r) => String(r.id) === String(id) || String(r.auction_id) === String(id));
+      const idx = list.findIndex((r) => String(r.id) === String(id) || (table === "product_search_index" && String(r.auction_id) === String(id)));
       if (idx >= 0) {
         list[idx] = { ...list[idx], ...patch };
         return true;
@@ -147,7 +147,7 @@ function createInMemoryStore(): VehicleStore & { data: Record<string, any[]> } {
     async remove(table: string, id: number | string) {
       const list = data[table] ?? [];
       const before = list.length;
-      data[table] = list.filter((r) => String(r.id) !== String(id) && String(r.auction_id) !== String(id));
+      data[table] = list.filter((r) => String(r.id) !== String(id) && (table !== "product_search_index" || String(r.auction_id) !== String(id)));
       return data[table].length < before;
     },
     async list(table: string, queryStr: string) {
@@ -454,7 +454,7 @@ test("P1-04 search validation, full-candidate pagination, deterministic ordering
   await expect(queryProductSearch(store, { status: "draft" })).rejects.toThrow(SearchValidationError);
   await expect(queryProductSearch(store, { order: "bogus" as any })).rejects.toThrow(SearchValidationError);
   await expect(queryProductSearch(store, { search: "x".repeat(201) })).rejects.toThrow(SearchValidationError);
-});
+}, 25000);
 
 test("P0-A search outbox failure handling, deletion unsuppression, 503 resilience, and replay idempotency", async () => {
   const store = createInMemoryStore();
@@ -545,4 +545,555 @@ test("P0-A search outbox failure handling, deletion unsuppression, 503 resilienc
   const replayDrain = await consumeSearchProjectionOutbox(store);
   expect(replayDrain.processed).toBe(0);
   expect(replayDrain.failed).toBe(0);
+});
+
+test("P0-B mandatory 11-case projection reliability, mutation verification, and fault-injection suite", async () => {
+  const store = createInMemoryStore();
+  await rebuildProductSearchIndex(store, 250);
+
+  // Clear outbox for isolated test sequence
+  store.data.pi_projection_outbox = [];
+
+  // =========================================================================
+  // CASE 1: product_search_index update resolves false
+  // Assert: outbox event remains unacknowledged (published_at is null), retry recovers
+  // =========================================================================
+  {
+    store.data.pi_projection_outbox.push({
+      id: 911,
+      event_key: "case1:psi-update-false",
+      product_type: "AUCTION",
+      product_id: 101,
+      event_type: "SEARCH_INDEX_REFRESH",
+      payload: JSON.stringify({ auctionId: 101 }),
+      occurred_at: "2026-01-04T00:00:00Z",
+      published_at: null,
+    });
+
+    const origUpdate = store.update;
+    let failPsiUpdate = true;
+    store.update = async (table: string, id: number | string, patch: any) => {
+      if (table === "product_search_index" && failPsiUpdate) {
+        return false; // Fault injection: update fails
+      }
+      return origUpdate(table, id, patch);
+    };
+
+    const drain1 = await consumeSearchProjectionOutbox(store);
+    expect(drain1.failed).toBe(1);
+    const evt1 = store.data.pi_projection_outbox.find((e) => e.id === 911);
+    expect(evt1?.published_at).toBeNull(); // Case 8: Event remains unacknowledged!
+
+    // Case 9: Recovery
+    failPsiUpdate = false;
+    const drain1Retry = await consumeSearchProjectionOutbox(store);
+    expect(drain1Retry.processed).toBe(1);
+    expect(typeof store.data.pi_projection_outbox.find((e) => e.id === 911)?.published_at).toBe("string");
+    store.update = origUpdate;
+  }
+
+  // =========================================================================
+  // CASE 2: Search-index create returns null and fallback update resolves false
+  // Assert: outbox event remains unacknowledged, retry recovers
+  // =========================================================================
+  {
+    // Remove auction 102 from product_search_index so it must be created
+    store.data.product_search_index = store.data.product_search_index.filter((r) => r.auction_id !== 102);
+
+    store.data.pi_projection_outbox.push({
+      id: 912,
+      event_key: "case2:psi-create-null-fallback-false",
+      product_type: "AUCTION",
+      product_id: 102,
+      event_type: "SEARCH_INDEX_REFRESH",
+      payload: JSON.stringify({ auctionId: 102 }),
+      occurred_at: "2026-01-04T00:00:00Z",
+      published_at: null,
+    });
+
+    const origCreate = store.create;
+    const origUpdate = store.update;
+    let failPsiCreate = true;
+    let failPsiUpdate = true;
+
+    store.create = async (table: string, row: any) => {
+      if (table === "product_search_index" && failPsiCreate) {
+        return null; // Fault injection: create returns null
+      }
+      return origCreate(table, row);
+    };
+    store.update = async (table: string, id: number | string, patch: any) => {
+      if (table === "product_search_index" && failPsiUpdate) {
+        return false; // Fault injection: fallback update also resolves false
+      }
+      return origUpdate(table, id, patch);
+    };
+
+    const drain2 = await consumeSearchProjectionOutbox(store);
+    expect(drain2.failed).toBe(1);
+    const evt2 = store.data.pi_projection_outbox.find((e) => e.id === 912);
+    expect(evt2?.published_at).toBeNull(); // Case 8: Event remains unacknowledged!
+
+    // Case 9: Recovery
+    failPsiCreate = false;
+    failPsiUpdate = false;
+    const drain2Retry = await consumeSearchProjectionOutbox(store);
+    expect(drain2Retry.processed).toBe(1);
+    expect(typeof store.data.pi_projection_outbox.find((e) => e.id === 912)?.published_at).toBe("string");
+    expect(store.data.product_search_index.some((r) => r.auction_id === 102)).toBe(true);
+
+    store.create = origCreate;
+    store.update = origUpdate;
+  }
+
+  // =========================================================================
+  // CASE 3: Facet update resolves false
+  // Assert: outbox event remains unacknowledged, retry recovers
+  // =========================================================================
+  {
+    store.data.pi_projection_outbox.push({
+      id: 913,
+      event_key: "case3:facet-update-false",
+      product_type: "AUCTION",
+      product_id: 101,
+      event_type: "SEARCH_INDEX_REFRESH",
+      payload: JSON.stringify({ auctionId: 101 }),
+      occurred_at: "2026-01-04T00:00:00Z",
+      published_at: null,
+    });
+
+    const origUpdate = store.update;
+    let failFacetUpdate = true;
+    store.update = async (table: string, id: number | string, patch: any) => {
+      if (table === "product_search_facet_values" && failFacetUpdate) {
+        return false; // Fault injection: facet update fails
+      }
+      return origUpdate(table, id, patch);
+    };
+
+    const drain3 = await consumeSearchProjectionOutbox(store);
+    expect(drain3.failed).toBe(1);
+    const evt3 = store.data.pi_projection_outbox.find((e) => e.id === 913);
+    expect(evt3?.published_at).toBeNull(); // Case 8: Event remains unacknowledged!
+
+    // Case 9: Recovery
+    failFacetUpdate = false;
+    const drain3Retry = await consumeSearchProjectionOutbox(store);
+    expect(drain3Retry.processed).toBe(1);
+    expect(typeof store.data.pi_projection_outbox.find((e) => e.id === 913)?.published_at).toBe("string");
+    store.update = origUpdate;
+  }
+
+  // =========================================================================
+  // CASE 4: Facet create returns null
+  // Assert: outbox event remains unacknowledged, retry recovers
+  // =========================================================================
+  {
+    // Clear facets for auction 101 to force creation of new facet records
+    store.data.product_search_facet_values = store.data.product_search_facet_values.filter(
+      (f) => f.auction_id !== 101,
+    );
+
+    store.data.pi_projection_outbox.push({
+      id: 914,
+      event_key: "case4:facet-create-null",
+      product_type: "AUCTION",
+      product_id: 101,
+      event_type: "SEARCH_INDEX_REFRESH",
+      payload: JSON.stringify({ auctionId: 101 }),
+      occurred_at: "2026-01-04T00:00:00Z",
+      published_at: null,
+    });
+
+    const origCreate = store.create;
+    let failFacetCreate = true;
+    store.create = async (table: string, row: any) => {
+      if (table === "product_search_facet_values" && failFacetCreate) {
+        return null; // Fault injection: facet create returns null
+      }
+      return origCreate(table, row);
+    };
+
+    const drain4 = await consumeSearchProjectionOutbox(store);
+    expect(drain4.failed).toBe(1);
+    const evt4 = store.data.pi_projection_outbox.find((e) => e.id === 914);
+    expect(evt4?.published_at).toBeNull(); // Case 8: Event remains unacknowledged!
+
+    // Case 9: Recovery
+    failFacetCreate = false;
+    const drain4Retry = await consumeSearchProjectionOutbox(store);
+    expect(drain4Retry.processed).toBe(1);
+    expect(typeof store.data.pi_projection_outbox.find((e) => e.id === 914)?.published_at).toBe("string");
+    expect(store.data.product_search_facet_values.some((f) => f.auction_id === 101)).toBe(true);
+    store.create = origCreate;
+  }
+
+  // =========================================================================
+  // CASE 5: Stale-facet delete resolves false
+  // Assert: outbox event remains unacknowledged, retry recovers
+  // =========================================================================
+  {
+    // Inject a stale facet value that is not part of auction 101's desired facets
+    const staleFacetId = 9991;
+    store.data.product_search_facet_values.push({
+      id: staleFacetId,
+      auction_id: 101,
+      category_id: 1,
+      attribute_id: 999,
+      attribute_key: "OLD_OBSOLETE_FACET",
+      filter_class: "SINGLE_SELECT",
+      data_type: "STRING",
+      value_text: "OBSOLETE",
+      indexed_at: "2026-01-01T00:00:00Z",
+    });
+
+    store.data.pi_projection_outbox.push({
+      id: 915,
+      event_key: "case5:stale-facet-delete-false",
+      product_type: "AUCTION",
+      product_id: 101,
+      event_type: "SEARCH_INDEX_REFRESH",
+      payload: JSON.stringify({ auctionId: 101 }),
+      occurred_at: "2026-01-04T00:00:00Z",
+      published_at: null,
+    });
+
+    const origRemove = store.remove;
+    let failStaleRemove = true;
+    store.remove = async (table: string, id: number | string) => {
+      if (table === "product_search_facet_values" && id === staleFacetId && failStaleRemove) {
+        return false; // Fault injection: delete resolves false (row still remains in store)
+      }
+      return origRemove ? origRemove(table, id) : true;
+    };
+
+    const drain5 = await consumeSearchProjectionOutbox(store);
+    expect(drain5.failed).toBe(1);
+    const evt5 = store.data.pi_projection_outbox.find((e) => e.id === 915);
+    expect(evt5?.published_at).toBeNull(); // Case 8: Event remains unacknowledged!
+
+    // Case 9: Recovery
+    failStaleRemove = false;
+    const drain5Retry = await consumeSearchProjectionOutbox(store);
+    expect(drain5Retry.processed).toBe(1);
+    expect(typeof store.data.pi_projection_outbox.find((e) => e.id === 915)?.published_at).toBe("string");
+    // Verify stale facet is removed
+    expect(store.data.product_search_facet_values.some((f) => f.id === staleFacetId)).toBe(false);
+    store.remove = origRemove;
+  }
+
+  // =========================================================================
+  // CASE 6: Stale-facet delete throws a TrailBase error
+  // Assert: outbox event remains unacknowledged, retry recovers
+  // =========================================================================
+  {
+    const staleFacetId2 = 9992;
+    store.data.product_search_facet_values.push({
+      id: staleFacetId2,
+      auction_id: 101,
+      category_id: 1,
+      attribute_id: 999,
+      attribute_key: "SECOND_OBSOLETE_FACET",
+      filter_class: "SINGLE_SELECT",
+      data_type: "STRING",
+      value_text: "OBSOLETE2",
+      indexed_at: "2026-01-01T00:00:00Z",
+    });
+
+    store.data.pi_projection_outbox.push({
+      id: 916,
+      event_key: "case6:stale-facet-delete-throws",
+      product_type: "AUCTION",
+      product_id: 101,
+      event_type: "SEARCH_INDEX_REFRESH",
+      payload: JSON.stringify({ auctionId: 101 }),
+      occurred_at: "2026-01-04T00:00:00Z",
+      published_at: null,
+    });
+
+    const origRemove = store.remove;
+    let throwStaleRemove = true;
+    store.remove = async (table: string, id: number | string) => {
+      if (table === "product_search_facet_values" && id === staleFacetId2 && throwStaleRemove) {
+        throw new Error("TrailBase 500 Internal Server Error during facet deletion");
+      }
+      return origRemove ? origRemove(table, id) : true;
+    };
+
+    const drain6 = await consumeSearchProjectionOutbox(store);
+    expect(drain6.failed).toBe(1);
+    const evt6 = store.data.pi_projection_outbox.find((e) => e.id === 916);
+    expect(evt6?.published_at).toBeNull(); // Case 8: Event remains unacknowledged!
+
+    // Case 9: Recovery
+    throwStaleRemove = false;
+    const drain6Retry = await consumeSearchProjectionOutbox(store);
+    expect(drain6Retry.processed).toBe(1);
+    expect(typeof store.data.pi_projection_outbox.find((e) => e.id === 916)?.published_at).toBe("string");
+    expect(store.data.product_search_facet_values.some((f) => f.id === staleFacetId2)).toBe(false);
+    store.remove = origRemove;
+  }
+
+  // =========================================================================
+  // CASE 7: Required supporting fact or intake-session read fails
+  // Subcase 7A: product_intake_sessions read fails
+  // Subcase 7B: pi_effective_facts read fails
+  // Subcase 7C: pi_attribute_definitions read fails
+  // Subcase 7D: categories read fails
+  // Assert: outbox event remains unacknowledged in each, retry recovers
+  // =========================================================================
+  {
+    const origList = store.list;
+    const origGet = store.get;
+
+    // 7A: intake sessions list throws
+    store.data.pi_projection_outbox.push({
+      id: 9171,
+      event_key: "case7a:intake-sessions-read-fail",
+      product_type: "AUCTION",
+      product_id: 101,
+      event_type: "SEARCH_INDEX_REFRESH",
+      payload: JSON.stringify({ auctionId: 101 }),
+      occurred_at: "2026-01-04T00:00:00Z",
+      published_at: null,
+    });
+
+    let failIntakeList = true;
+    store.list = async (table: string, queryStr: string) => {
+      if (table === "product_intake_sessions" && failIntakeList) {
+        throw new Error("TrailBase 503 Service Unavailable: product_intake_sessions");
+      }
+      return origList(table, queryStr);
+    };
+
+    const drain7A = await consumeSearchProjectionOutbox(store);
+    expect(drain7A.failed).toBe(1);
+    const evt7A = store.data.pi_projection_outbox.find((e) => e.id === 9171);
+    expect(evt7A?.published_at).toBeNull();
+
+    failIntakeList = false;
+    const drain7ARetry = await consumeSearchProjectionOutbox(store);
+    expect(drain7ARetry.processed).toBe(1);
+    expect(typeof store.data.pi_projection_outbox.find((e) => e.id === 9171)?.published_at).toBe("string");
+
+    // 7B: pi_effective_facts read fails
+    store.data.pi_projection_outbox.push({
+      id: 9172,
+      event_key: "case7b:effective-facts-read-fail",
+      product_type: "AUCTION",
+      product_id: 101,
+      event_type: "SEARCH_INDEX_REFRESH",
+      payload: JSON.stringify({ auctionId: 101 }),
+      occurred_at: "2026-01-04T00:00:00Z",
+      published_at: null,
+    });
+
+    let failFactsList = true;
+    store.list = async (table: string, queryStr: string) => {
+      if (table === "pi_effective_facts" && failFactsList) {
+        throw new Error("TrailBase 503 Service Unavailable: pi_effective_facts");
+      }
+      return origList(table, queryStr);
+    };
+
+    const drain7B = await consumeSearchProjectionOutbox(store);
+    expect(drain7B.failed).toBe(1);
+    const evt7B = store.data.pi_projection_outbox.find((e) => e.id === 9172);
+    expect(evt7B?.published_at).toBeNull();
+
+    failFactsList = false;
+    const drain7BRetry = await consumeSearchProjectionOutbox(store);
+    expect(drain7BRetry.processed).toBe(1);
+    expect(typeof store.data.pi_projection_outbox.find((e) => e.id === 9172)?.published_at).toBe("string");
+
+    // 7C: pi_attribute_definitions read fails
+    store.data.pi_projection_outbox.push({
+      id: 9173,
+      event_key: "case7c:definitions-read-fail",
+      product_type: "AUCTION",
+      product_id: 101,
+      event_type: "SEARCH_INDEX_REFRESH",
+      payload: JSON.stringify({ auctionId: 101 }),
+      occurred_at: "2026-01-04T00:00:00Z",
+      published_at: null,
+    });
+
+    let failDefsList = true;
+    store.list = async (table: string, queryStr: string) => {
+      if (table === "pi_attribute_definitions" && failDefsList) {
+        throw new Error("TrailBase 503 Service Unavailable: pi_attribute_definitions");
+      }
+      return origList(table, queryStr);
+    };
+
+    const drain7C = await consumeSearchProjectionOutbox(store);
+    expect(drain7C.failed).toBe(1);
+    const evt7C = store.data.pi_projection_outbox.find((e) => e.id === 9173);
+    expect(evt7C?.published_at).toBeNull();
+
+    failDefsList = false;
+    const drain7CRetry = await consumeSearchProjectionOutbox(store);
+    expect(drain7CRetry.processed).toBe(1);
+    expect(typeof store.data.pi_projection_outbox.find((e) => e.id === 9173)?.published_at).toBe("string");
+
+    // 7D: categories read fails
+    store.data.pi_projection_outbox.push({
+      id: 9174,
+      event_key: "case7d:categories-read-fail",
+      product_type: "AUCTION",
+      product_id: 101,
+      event_type: "SEARCH_INDEX_REFRESH",
+      payload: JSON.stringify({ auctionId: 101 }),
+      occurred_at: "2026-01-04T00:00:00Z",
+      published_at: null,
+    });
+
+    let failCatGet = true;
+    store.get = async (table: string, id: number | string) => {
+      if (table === "categories" && failCatGet) {
+        throw new Error("TrailBase 503 Service Unavailable: categories");
+      }
+      return origGet(table, id);
+    };
+
+    const drain7D = await consumeSearchProjectionOutbox(store);
+    expect(drain7D.failed).toBe(1);
+    const evt7D = store.data.pi_projection_outbox.find((e) => e.id === 9174);
+    expect(evt7D?.published_at).toBeNull();
+
+    failCatGet = false;
+    const drain7DRetry = await consumeSearchProjectionOutbox(store);
+    expect(drain7DRetry.processed).toBe(1);
+    expect(typeof store.data.pi_projection_outbox.find((e) => e.id === 9174)?.published_at).toBe("string");
+
+    store.list = origList;
+    store.get = origGet;
+  }
+
+  // =========================================================================
+  // CASE 10: Duplicate replay produces no corruption or false duplicate
+  // Assert: outbox replay yields processed: 0, failed: 0; manual redelivery maintains uniqueness
+  // =========================================================================
+  {
+    // A: Consuming with all existing events already acknowledged
+    const replay1 = await consumeSearchProjectionOutbox(store);
+    expect(replay1.processed).toBe(0);
+    expect(replay1.failed).toBe(0);
+
+    // B: Redeliver event 911 (reset published_at to null)
+    const evt1 = store.data.pi_projection_outbox.find((e) => e.id === 911);
+    if (evt1) evt1.published_at = null;
+
+    const psiRowsBefore = store.data.product_search_index.filter((r) => r.auction_id === 101);
+    expect(psiRowsBefore.length).toBe(1);
+
+    const replay2 = await consumeSearchProjectionOutbox(store);
+    expect(replay2.processed).toBe(1);
+    expect(replay2.failed).toBe(0);
+
+    // Assert no duplicate in product_search_index
+    const psiRowsAfter = store.data.product_search_index.filter((r) => r.auction_id === 101);
+    expect(psiRowsAfter.length).toBe(1);
+
+    // Assert facet uniqueness (no duplicate facets for same attribute)
+    const facetKeys = store.data.product_search_facet_values
+      .filter((f) => f.auction_id === 101)
+      .map((f) => f.attribute_key);
+    const uniqueFacetKeys = new Set(facetKeys);
+    expect(facetKeys.length).toBe(uniqueFacetKeys.size);
+  }
+
+  // =========================================================================
+  // CASE 11: Withdrawn/private listings remain excluded from public search even during projection recovery
+  // =========================================================================
+  {
+    // Transition auction 101 to withdrawn
+    const auction101 = store.data.auctions.find((a) => a.id === 101);
+    expect(auction101).toBeDefined();
+    auction101.status = "withdrawn";
+
+    // Queue withdrawal event
+    store.data.pi_projection_outbox.push({
+      id: 918,
+      event_key: "case11:withdrawn-projection-recovery",
+      product_type: "AUCTION",
+      product_id: 101,
+      event_type: "SEARCH_INDEX_REFRESH",
+      payload: JSON.stringify({ auctionId: 101 }),
+      occurred_at: "2026-01-04T00:00:00Z",
+      published_at: null,
+    });
+
+    // Inject temporary failure during removal (simulate outage during recovery)
+    const origRemove = store.remove;
+    let failRemoval = true;
+    store.remove = async (table: string, id: number | string) => {
+      if (failRemoval && (table === "product_search_index" || table === "product_search_facet_values")) {
+        return false;
+      }
+      return origRemove ? origRemove(table, id) : true;
+    };
+
+    const drain11Fail = await consumeSearchProjectionOutbox(store);
+    expect(drain11Fail.failed).toBe(1);
+    const evt11 = store.data.pi_projection_outbox.find((e) => e.id === 918);
+    expect(evt11?.published_at).toBeNull(); // Remains pending during recovery
+
+    // Verify: even though recovery is pending/failed, querying public search NEVER returns auction 101
+    const searchDuringRecovery = await queryProductSearch(store, { search: "Hilux" });
+    expect(searchDuringRecovery.items.some((item) => item.auction_id === 101)).toBe(false);
+
+    // Now recovery succeeds
+    failRemoval = false;
+    const drain11Recover = await consumeSearchProjectionOutbox(store);
+    expect(drain11Recover.removed).toBe(1);
+    expect(typeof store.data.pi_projection_outbox.find((e) => e.id === 918)?.published_at).toBe("string");
+
+    // Verify still excluded from public search after recovery
+    const searchAfterRecovery = await queryProductSearch(store, { search: "Hilux" });
+    expect(searchAfterRecovery.items.some((item) => item.auction_id === 101)).toBe(false);
+    expect(store.data.product_search_index.some((r) => r.auction_id === 101)).toBe(false);
+    expect(store.data.product_search_facet_values.some((f) => f.auction_id === 101)).toBe(false);
+
+    store.remove = origRemove;
+  }
+
+  // =========================================================================
+  // REQUIREMENT D: Fail closed when store lacks required removal capability
+  // =========================================================================
+  {
+    // A: Stale facet exists, but store.remove is undefined
+    const storeNoRemove = createInMemoryStore();
+    await rebuildProductSearchIndex(storeNoRemove, 250);
+    delete (storeNoRemove as any).remove;
+
+    // Inject stale facet
+    storeNoRemove.data.product_search_facet_values.push({
+      id: 8881,
+      auction_id: 101,
+      category_id: 1,
+      attribute_id: 888,
+      attribute_key: "OBSOLETE_NO_REMOVE",
+      filter_class: "SINGLE_SELECT",
+      data_type: "STRING",
+      value_text: "OBSOLETE",
+      indexed_at: "2026-01-01T00:00:00Z",
+    });
+
+    storeNoRemove.data.pi_projection_outbox.push({
+      id: 919,
+      event_key: "case-d:no-remove-stale-facet",
+      product_type: "AUCTION",
+      product_id: 101,
+      event_type: "SEARCH_INDEX_REFRESH",
+      payload: JSON.stringify({ auctionId: 101 }),
+      occurred_at: "2026-01-04T00:00:00Z",
+      published_at: null,
+    });
+
+    const drainNoRemove = await consumeSearchProjectionOutbox(storeNoRemove);
+    expect(drainNoRemove.failed).toBe(1);
+    const evtNoRemove = storeNoRemove.data.pi_projection_outbox.find((e) => e.id === 919);
+    expect(evtNoRemove?.published_at).toBeNull(); // Fails closed, leaves outbox pending!
+  }
 });

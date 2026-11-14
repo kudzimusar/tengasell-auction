@@ -248,31 +248,75 @@ async function listAllPages(
 }
 
 export async function removeAuctionFromSearch(store: VehicleStore, auctionId: number): Promise<boolean> {
-  const existingFacets = await listAllPages(store, "product_search_facet_values", {
-    "filter[auction_id][$eq]": auctionId,
-  });
-  for (const facet of existingFacets) {
-    if (store.remove && facet?.id != null) {
-      const ok = await store.remove("product_search_facet_values", facet.id);
-      if (!ok) return false;
-    }
-  }
-
   const existing = (
     await store.list("product_search_index", params({ "filter[auction_id][$eq]": auctionId, limit: 1 }))
   )[0];
 
+  // Immediately invalidate visibility in search index so public search never serves it during recovery
   if (existing) {
+    const targetId = existing.id ?? auctionId;
+    await store.update("product_search_index", targetId, {
+      auction_status: "deleted",
+      updated_at: nowIso(),
+      indexed_at: nowIso(),
+    });
+  }
+
+  const existingFacets = await listAllPages(store, "product_search_facet_values", {
+    "filter[auction_id][$eq]": auctionId,
+  });
+  if (existingFacets.length > 0 && !store.remove) {
+    throw new Error(`Store lacks remove capability to delete ${existingFacets.length} facet values for auction ${auctionId}`);
+  }
+  for (const facet of existingFacets) {
+    if (facet?.id != null) {
+      if (!store.remove) {
+        throw new Error(`Store lacks remove capability to delete facet values for auction ${auctionId}`);
+      }
+      let removeOk = false;
+      try {
+        removeOk = await store.remove("product_search_facet_values", facet.id);
+      } catch (err: any) {
+        let stillThere: any = null;
+        try {
+          stillThere = await store.get("product_search_facet_values", facet.id);
+        } catch {
+          throw err;
+        }
+        if (stillThere != null) throw err;
+        removeOk = true;
+      }
+      if (!removeOk) {
+        const stillThere = await store.get("product_search_facet_values", facet.id);
+        if (stillThere != null) {
+          throw new Error(`Failed to remove facet value ${facet.id} for auction ${auctionId}`);
+        }
+      }
+    }
+  }
+
+  if (existing) {
+    const targetId = existing.id ?? auctionId;
     if (store.remove) {
-      const ok = await store.remove("product_search_index", existing.id ?? auctionId);
-      if (!ok) return false;
-    } else {
-      const ok = await store.update("product_search_index", auctionId, {
-        auction_status: "deleted",
-        updated_at: nowIso(),
-        indexed_at: nowIso(),
-      });
-      if (!ok) return false;
+      let removeOk = false;
+      try {
+        removeOk = await store.remove("product_search_index", targetId);
+      } catch (err: any) {
+        let stillThere: any = null;
+        try {
+          stillThere = await store.get("product_search_index", targetId);
+        } catch {
+          throw err;
+        }
+        if (stillThere != null) throw err;
+        removeOk = true;
+      }
+      if (!removeOk) {
+        const stillThere = await store.get("product_search_index", targetId);
+        if (stillThere != null) {
+          throw new Error(`Failed to remove product_search_index for auction ${auctionId}`);
+        }
+      }
     }
   }
 
@@ -284,7 +328,7 @@ export async function refreshAuctionSearch(store: VehicleStore, auctionId: numbe
 
   const auction = await store.get("auctions", auctionId);
   const intakeSessions = auction
-    ? await store.list("product_intake_sessions", params({ "filter[auction_id][$eq]": auctionId, limit: 20 })).catch(() => [])
+    ? await store.list("product_intake_sessions", params({ "filter[auction_id][$eq]": auctionId, limit: 20 }))
     : [];
 
   if (!auction || !isPubliclyVisibleAuction(auction, intakeSessions)) {
@@ -302,7 +346,7 @@ export async function refreshAuctionSearch(store: VehicleStore, auctionId: numbe
   // Read category and schema
   let cat: any = null;
   if (auction.product_category_id != null) {
-    cat = await store.get("categories", auction.product_category_id).catch(() => null);
+    cat = await store.get("categories", auction.product_category_id);
     if (!cat) {
       cat = (await store.list("categories", params({ "filter[id][$eq]": auction.product_category_id, limit: 1 })))[0] ?? null;
     }
@@ -315,17 +359,15 @@ export async function refreshAuctionSearch(store: VehicleStore, auctionId: numbe
   const factTargetType = v?.id ? "VEHICLE" : "AUCTION";
   const factTargetId = v?.id ? Number(v.id) : auctionId;
   const [effectiveFacts, definitions] = await Promise.all([
-    store
-      .list(
-        "pi_effective_facts",
-        params({
-          "filter[product_type][$eq]": factTargetType,
-          "filter[product_id][$eq]": factTargetId,
-          limit: 300,
-        }),
-      )
-      .catch(() => []),
-    store.list("pi_attribute_definitions", params({ limit: 300 })).catch(() => []),
+    store.list(
+      "pi_effective_facts",
+      params({
+        "filter[product_type][$eq]": factTargetType,
+        "filter[product_id][$eq]": factTargetId,
+        limit: 300,
+      }),
+    ),
+    store.list("pi_attribute_definitions", params({ limit: 300 })),
   ]);
   for (const ef of effectiveFacts) {
     const def = definitions.find((d: any) => Number(d.id) === Number(ef.attribute_id));
@@ -414,11 +456,18 @@ export async function refreshAuctionSearch(store: VehicleStore, auctionId: numbe
     await store.list("product_search_index", params({ "filter[auction_id][$eq]": auctionId, limit: 1 }))
   )[0];
   if (existing) {
-    await store.update("product_search_index", auctionId, row);
+    const targetId = existing.id ?? auctionId;
+    const ok = await store.update("product_search_index", targetId, row);
+    if (!ok) {
+      throw new Error(`Failed to update product_search_index for auction ${auctionId}`);
+    }
   } else {
     const created = await store.create("product_search_index", row);
     if (created == null) {
-      await store.update("product_search_index", auctionId, row).catch(() => false);
+      const ok = await store.update("product_search_index", auctionId, row);
+      if (!ok) {
+        throw new Error(`Failed to create or update product_search_index for auction ${auctionId}`);
+      }
     }
   }
 
@@ -512,17 +561,53 @@ async function refreshAuctionFacets(
 
     const existing = existingByKey.get(key);
     if (existing?.id != null) {
-      await store.update("product_search_facet_values", existing.id, row);
+      const ok = await store.update("product_search_facet_values", existing.id, row);
+      if (!ok) {
+        throw new Error(
+          `Failed to update facet ${key} (id: ${existing.id}) for auction ${psi.auction_id}`,
+        );
+      }
     } else {
-      await store.create("product_search_facet_values", row);
+      const created = await store.create("product_search_facet_values", row);
+      if (created == null) {
+        throw new Error(`Failed to create facet ${key} for auction ${psi.auction_id}`);
+      }
     }
   }
 
   // Delete stale facets removed by later edits
-  if (store.remove) {
-    for (const [key, existing] of existingByKey.entries()) {
-      if (!desiredKeys.has(key) && existing?.id != null) {
-        await store.remove("product_search_facet_values", existing.id).catch(() => false);
+  const staleFacets = Array.from(existingByKey.entries()).filter(
+    ([key, existing]) => !desiredKeys.has(key) && existing?.id != null,
+  );
+  if (staleFacets.length > 0) {
+    if (!store.remove) {
+      throw new Error(
+        `Store lacks remove capability to delete ${staleFacets.length} stale facets for auction ${psi.auction_id}`,
+      );
+    }
+    for (const [key, existing] of staleFacets) {
+      let removeOk = false;
+      try {
+        removeOk = await store.remove("product_search_facet_values", existing.id);
+      } catch (err: any) {
+        let stillThere: any = null;
+        try {
+          stillThere = await store.get("product_search_facet_values", existing.id);
+        } catch {
+          throw err;
+        }
+        if (stillThere != null) {
+          throw err;
+        }
+        removeOk = true;
+      }
+      if (!removeOk) {
+        const stillThere = await store.get("product_search_facet_values", existing.id);
+        if (stillThere != null) {
+          throw new Error(
+            `Failed to remove stale facet ${existing.id} (${key}) for auction ${psi.auction_id}`,
+          );
+        }
       }
     }
   }
