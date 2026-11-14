@@ -716,7 +716,7 @@ export async function publicProductBundle(store: VehicleStore, auctionId: number
     store.list("pi_effective_facts", params({ "filter[product_type][$eq]": "VEHICLE", "filter[product_id][$eq]": product.vehicle_id as number, limit: 300 })),
     store.list("pi_attribute_definitions", params({ "filter[active][$eq]": 1, limit: 300 })),
     resolvePublicVehicleDocuments(store, Number(product.vehicle_id)),
-    store.list("vehicle_history_events", params({ "filter[vehicle_id][$eq]": product.vehicle_id as number, order: "-occurred_at", limit: 100 })),
+    store.list("vehicle_history_events", params({ "filter[vehicle_id][$eq]": product.vehicle_id as number, order: "-occurred_on", limit: 100 })),
     store.list("vehicle_modifications", params({ "filter[vehicle_id][$eq]": product.vehicle_id as number, order: "id", limit: 100 })),
     store.list("vehicle_equipment", params({ "filter[vehicle_id][$eq]": product.vehicle_id as number, order: "id", limit: 200 })),
     resolveVehicleInspectionProjection(store, Number(product.vehicle_id), auctionId),
@@ -753,3 +753,818 @@ export async function publicProductBundle(store: VehicleStore, auctionId: number
     findings: findings.map(({ created_by: _actor, evidence_document_id: _evidence, ...row }) => row),
   };
 }
+
+export type FilterClass = "PRIMARY" | "SECONDARY" | "ADVANCED" | "DISPLAY_ONLY" | "NONE";
+
+export interface CategoryFilterItem {
+  attributeKey: string;
+  label: string;
+  dataType: string;
+  filterClass: FilterClass;
+  unit: string | null;
+  displayGroup: string;
+  displayOrder: number;
+  options: { key: string; label: string }[];
+  range: { min?: number; max?: number } | null;
+  operators: string[];
+}
+
+export async function categoryFilterMetadata(
+  store: VehicleStore,
+  categoryKey?: string | null,
+): Promise<{
+  category: { id: number; key: string; name: string } | null;
+  schemaVersion: { id: number; key: string; version: number } | null;
+  categoryKey?: string;
+  categoryId?: number;
+  schemaVersionId?: number;
+  filters: CategoryFilterItem[];
+}> {
+  const categories = await store.list("categories", params({ "filter[active][$eq]": 1, limit: 300 }));
+  const normalizedKey = categoryKey ? String(categoryKey).trim() : "";
+  const lowerKey = normalizedKey.toLowerCase();
+
+  let cat = (normalizedKey
+    ? categories.find((c: any) => String(c.category_key ?? "") === normalizedKey) ??
+      categories.find((c: any) => !String(c.category_key ?? "").startsWith("LEGACY_") && String(c.node_kind ?? "") === "LEAF" && (String(c.slug ?? "") === normalizedKey || String(c.legacy_slug ?? "") === normalizedKey)) ??
+      categories.find((c: any) => !String(c.category_key ?? "").startsWith("LEGACY_") && (String(c.slug ?? "") === normalizedKey || String(c.legacy_slug ?? "") === normalizedKey)) ??
+      categories.find((c: any) => String(c.slug ?? "") === normalizedKey || String(c.legacy_slug ?? "") === normalizedKey)
+    : null) ?? categories.find((c: any) => c.category_key === "VEHICLE_PASSENGER_CAR") ?? categories[0];
+
+  if (!cat) return { category: null, schemaVersion: null, filters: [] };
+
+  let schemas = await store.list("pi_category_schema_versions", params({
+    "filter[category_id][$eq]": cat.id,
+    "filter[status][$eq]": "ACTIVE",
+    limit: 1,
+  }));
+  if (!schemas[0] || String(cat.category_key ?? "").startsWith("LEGACY_")) {
+    const isPhoneAlias =
+      lowerKey === "phones" ||
+      lowerKey === "phone-smartphone" ||
+      lowerKey === "electronics" ||
+      String(cat.legacy_slug ?? "").toLowerCase() === "phones" ||
+      String(cat.category_key ?? "").toUpperCase().startsWith("PHONE");
+    const isVehicleAlias =
+      lowerKey === "vehicles" ||
+      lowerKey === "cars" ||
+      String(cat.category_key ?? "") === "VEHICLES_MOBILITY" ||
+      String(cat.category_key ?? "").toUpperCase().startsWith("VEHICLE");
+
+    const fallbackCat = isPhoneAlias
+      ? categories.find((c: any) => c.category_key === "PHONE_SMARTPHONE")
+      : isVehicleAlias
+        ? categories.find((c: any) => c.category_key === "VEHICLE_PASSENGER_CAR")
+        : null;
+    if (fallbackCat && Number(fallbackCat.id) !== Number(cat.id)) {
+      cat = fallbackCat;
+      schemas = await store.list("pi_category_schema_versions", params({
+        "filter[category_id][$eq]": cat.id,
+        "filter[status][$eq]": "ACTIVE",
+        limit: 1,
+      }));
+    }
+  }
+  const schema = schemas[0] ?? null;
+  if (!schema) {
+    return {
+      category: { id: cat.id, key: cat.category_key, name: cat.name },
+      schemaVersion: null,
+      filters: [],
+    };
+  }
+
+  const [bindings, definitions, versions, labels, options, optionLabels] = await Promise.all([
+    store.list("pi_category_attributes", params({ "filter[schema_version_id][$eq]": schema.id, limit: 300 })),
+    store.list("pi_attribute_definitions", params({ "filter[active][$eq]": 1, limit: 300 })),
+    store.list("pi_attribute_definition_versions", params({ limit: 300 })),
+    store.list("pi_attribute_labels", params({ "filter[locale][$eq]": "en", limit: 300 })),
+    store.list("pi_attribute_options", params({ "filter[active][$eq]": 1, order: "sort_order", limit: 1000 })),
+    store.list("pi_attribute_option_labels", params({ "filter[locale][$eq]": "en", limit: 1000 })),
+  ]);
+
+  const filters: CategoryFilterItem[] = [];
+
+  for (const binding of bindings) {
+    const def = definitions.find((d: any) => Number(d.id) === Number(binding.attribute_id));
+    if (!def) continue;
+
+    const filterClass = (binding.filter_class ?? def.filter_class ?? "NONE") as FilterClass;
+    if (filterClass === "NONE" || filterClass === "DISPLAY_ONLY") continue;
+
+    const ver = versions.find((v: any) => Number(v.id) === Number(binding.attribute_version_id));
+    const label = labels.find((l: any) => Number(l.attribute_id) === Number(def.id))?.label ?? def.attribute_key;
+
+    let range: { min?: number; max?: number } | null = null;
+    if (ver?.validation_json) {
+      try {
+        const parsed = JSON.parse(ver.validation_json);
+        if (parsed.minimum != null || parsed.maximum != null) {
+          range = { min: parsed.minimum, max: parsed.maximum };
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
+    const attributeOptions = options
+      .filter((o: any) => Number(o.attribute_id) === Number(def.id))
+      .map((o: any) => ({
+        key: o.option_key,
+        label: optionLabels.find((ol: any) => Number(ol.option_id) === Number(o.id))?.label ?? o.option_key,
+      }));
+
+    let operators = ["EQ"];
+    switch (def.data_type) {
+      case "ENUM":
+      case "MULTI_ENUM":
+        operators = ["EQ", "IN"];
+        break;
+      case "INTEGER":
+      case "DECIMAL":
+      case "MEASUREMENT":
+        operators = ["MIN", "MAX", "BETWEEN", "EQ"];
+        break;
+      case "BOOLEAN":
+        operators = ["EQ"];
+        break;
+      case "DATE":
+        operators = ["MIN", "MAX", "BETWEEN", "EQ"];
+        break;
+      default:
+        operators = ["EQ", "IN", "EXISTS"];
+    }
+
+    filters.push({
+      attributeKey: def.attribute_key,
+      label,
+      dataType: def.data_type,
+      filterClass,
+      unit: ver?.canonical_unit ?? null,
+      displayGroup: binding.display_group ?? def.display_group,
+      displayOrder: binding.display_order ?? def.display_order,
+      options: attributeOptions,
+      range,
+      operators,
+    });
+  }
+
+  filters.sort((a, b) => {
+    const rank: Record<FilterClass, number> = { PRIMARY: 1, SECONDARY: 2, ADVANCED: 3, DISPLAY_ONLY: 4, NONE: 5 };
+    if (rank[a.filterClass] !== rank[b.filterClass]) return rank[a.filterClass] - rank[b.filterClass];
+    return a.displayOrder - b.displayOrder;
+  });
+
+  return {
+    category: { id: cat.id, key: cat.category_key, name: cat.name },
+    schemaVersion: { id: schema.id, key: schema.schema_key, version: schema.version },
+    categoryKey: cat.category_key,
+    categoryId: cat.id,
+    schemaVersionId: schema.id,
+    filters,
+  };
+}
+
+export type ComparisonState = "KNOWN" | "UNKNOWN" | "CONFLICTED" | "REDACTED" | "NOT_APPLICABLE";
+
+export interface ComparisonCell {
+  auctionId?: number;
+  state: ComparisonState;
+  status?: ComparisonState;
+  rawValue: unknown;
+  displayValue: string;
+  unit: string | null;
+  provenance?: string;
+  conflictState?: string;
+}
+
+export interface ComparisonRow {
+  attributeKey: string;
+  key?: string;
+  label: string;
+  section: string;
+  dataType?: string;
+  unit: string | null;
+  values: ComparisonCell[];
+  cells?: ComparisonCell[];
+}
+
+export interface ProductComparisonResponse {
+  items: Array<{
+    auctionId: number;
+    title: string;
+    currentPrice: number;
+    buyNowPrice: number | null;
+    condition: string;
+    location: string;
+    thumbnail: string | null;
+    imageUrl: string | null;
+    categoryKey: string;
+    productType: string;
+    categoryTitle: string;
+    reserveDisclosure: string;
+    endsAt: string;
+    status: string;
+  }>;
+  categoryRelationship: "SAME_LEAF" | "RELATED_FAMILY" | "UNRELATED";
+  scope?: "SAME_LEAF" | "RELATED_FAMILY" | "UNRELATED";
+  sections: Array<{
+    title: string;
+    name?: string;
+    rows: ComparisonRow[];
+  }>;
+}
+
+export async function productCompare(
+  store: VehicleStore,
+  auctionIds: number[],
+): Promise<ProductComparisonResponse> {
+  if (!Array.isArray(auctionIds)) {
+    throw new ProductIntelligenceError("COMPARE_INVALID_INPUT", "auctionIds must be an array of listing IDs.");
+  }
+
+  const parsedIds = auctionIds.map((raw) => Number(raw));
+  if (parsedIds.some((id) => !Number.isSafeInteger(id) || id <= 0)) {
+    throw new ProductIntelligenceError("COMPARE_INVALID_ID", "All compared listing IDs must be positive integers.");
+  }
+  if (parsedIds.length < 2) {
+    throw new ProductIntelligenceError("COMPARE_MIN_ITEMS", "Select at least 2 listings to compare.");
+  }
+  if (parsedIds.length > 3) {
+    throw new ProductIntelligenceError("COMPARE_MAX_ITEMS", "You can compare at most 3 listings at a time.");
+  }
+  if (new Set(parsedIds).size !== parsedIds.length) {
+    throw new ProductIntelligenceError("COMPARE_DUPLICATE_ITEMS", "Select distinct listings to compare.");
+  }
+
+  const bundles = await Promise.all(
+    parsedIds.map(async (id) => {
+      const [auction, intakeSessions, psi] = await Promise.all([
+        store.get("auctions", id),
+        store.list("product_intake_sessions", params({ "filter[auction_id][$eq]": id, limit: 20 })),
+        store
+          .list("product_search_index", params({ "filter[auction_id][$eq]": id, limit: 1 }))
+          .then((r) => r[0] ?? null),
+      ]);
+
+      if (!auction) {
+        throw new ProductIntelligenceError("COMPARE_LISTING_NOT_FOUND", `Listing #${id} was not found.`);
+      }
+      if (!isPubliclyVisibleAuction(auction, intakeSessions)) {
+        throw new ProductIntelligenceError(
+          "COMPARE_LISTING_NOT_PUBLIC",
+          `Listing #${id} is not publicly available for comparison.`,
+        );
+      }
+
+      const [bundle, category] = await Promise.all([
+        publicProductBundle(store, id),
+        auction.product_category_id != null
+          ? store.get("categories", auction.product_category_id)
+          : Promise.resolve(null),
+      ]);
+
+      return { auctionId: id, auction, bundle, psi, category };
+    }),
+  );
+
+  const items = bundles.map((b) => {
+    const a = b.auction;
+    let thumbnail: string | null = null;
+    try {
+      const imgs = Array.isArray(a.images) ? a.images : JSON.parse(a.images || "[]");
+      if (Array.isArray(imgs) && imgs[0]) thumbnail = String(imgs[0]);
+    } catch {
+      /* ignore */
+    }
+    const catKey = b.bundle?.product?.category_key ?? b.psi?.category_key ?? b.category?.category_key ?? "GENERAL";
+    const prodType = b.bundle?.product?.product_type ?? b.category?.name ?? "General Item";
+    return {
+      auctionId: b.auctionId,
+      title: String(a.title ?? b.psi?.title ?? `Auction #${b.auctionId}`),
+      currentPrice: Number(a.current_price ?? a.start_price ?? b.psi?.price ?? 0),
+      buyNowPrice: a.buy_now_price != null ? Number(a.buy_now_price) : null,
+      condition: clean(a.condition ?? b.psi?.sale_condition, 80),
+      location: clean(a.city ?? b.psi?.location, 120) || "Zimbabwe",
+      thumbnail,
+      imageUrl: thumbnail,
+      categoryKey: String(catKey),
+      productType: String(prodType),
+      categoryTitle: String(prodType),
+      reserveDisclosure: String(a.reserve_disclosure ?? b.psi?.reserve_disclosure ?? "UNSPECIFIED"),
+      endsAt: String(a.ends_at ?? b.psi?.ending_time ?? ""),
+      status: String(a.status ?? b.psi?.auction_status ?? "live"),
+    };
+  });
+
+  const catKeys = items.map((i) => i.categoryKey);
+  const allSameLeaf = catKeys.every((k) => k === catKeys[0]);
+  const allVehicle = catKeys.every((k) => k.startsWith("VEHICLE_"));
+  const categoryRelationship: "SAME_LEAF" | "RELATED_FAMILY" | "UNRELATED" = allSameLeaf
+    ? "SAME_LEAF"
+    : allVehicle
+      ? "RELATED_FAMILY"
+      : "UNRELATED";
+
+  const rows: ComparisonRow[] = [];
+
+  const addRow = (
+    attributeKey: string,
+    label: string,
+    section: string,
+    unit: string | null,
+    extractor: (b: typeof bundles[0]) => { value: unknown; state?: ComparisonState; unit?: string | null; provenance?: string; conflict?: string },
+  ) => {
+    const values: ComparisonCell[] = bundles.map((b) => {
+      const ext = extractor(b);
+      const state = ext.state ?? (ext.value != null && ext.value !== "" ? "KNOWN" : "UNKNOWN");
+      const rawValue = state === "REDACTED" ? null : ext.value ?? null;
+      let displayValue = "Not provided";
+      if (state === "KNOWN") {
+        if (typeof ext.value === "boolean") {
+          displayValue = ext.value ? "Yes" : "No";
+        } else if (typeof ext.value === "number") {
+          displayValue = unit ? `${ext.value.toLocaleString()} ${unit}` : ext.value.toLocaleString();
+        } else {
+          displayValue = String(ext.value);
+        }
+      } else if (state === "UNKNOWN") {
+        displayValue = "Not provided";
+      } else if (state === "CONFLICTED") {
+        displayValue = `Conflicted (${ext.conflict || "Disputed"})`;
+      } else if (state === "REDACTED") {
+        displayValue = "Recorded privately";
+      } else if (state === "NOT_APPLICABLE") {
+        displayValue = "N/A";
+      }
+      return {
+        auctionId: b.auctionId,
+        state,
+        status: state,
+        rawValue,
+        displayValue,
+        unit: ext.unit ?? unit,
+        provenance: ext.provenance,
+        conflictState: ext.conflict,
+      };
+    });
+    rows.push({
+      attributeKey,
+      key: attributeKey,
+      label,
+      section,
+      unit,
+      values,
+      cells: values,
+    });
+  };
+
+  // 1. Identity section
+  addRow("MODEL_YEAR", "Year", "Identity", null, (b) => ({
+    value: b.bundle?.product?.model_year ?? b.psi?.year ?? null,
+  }));
+  addRow("MAKE", "Make", "Identity", null, (b) => ({
+    value: b.bundle?.product?.make ?? b.psi?.make ?? null,
+  }));
+  addRow("MODEL", "Model", "Identity", null, (b) => ({
+    value: b.bundle?.product?.model ?? b.psi?.model ?? null,
+  }));
+  if (categoryRelationship !== "UNRELATED") {
+    addRow("GENERATION", "Generation", "Identity", null, (b) => ({
+      value: b.bundle?.product?.generation_series ?? b.psi?.generation ?? null,
+    }));
+    addRow("VARIANT", "Variant", "Identity", null, (b) => ({
+      value: b.bundle?.product?.variant ?? b.psi?.variant ?? null,
+    }));
+    addRow("TRIM", "Trim", "Identity", null, (b) => ({
+      value: b.bundle?.product?.trim ?? b.psi?.trim ?? null,
+    }));
+    addRow("MODEL_CODE", "Model Code", "Identity", null, (b) => ({
+      value: b.bundle?.product?.model_code ?? b.psi?.model_code ?? null,
+    }));
+
+    // 2. Configuration section
+    addRow("VEHICLE_CLASS", "Vehicle Class", "Configuration", null, (b) => ({
+      value: b.bundle?.product?.vehicle_class ?? b.psi?.vehicle_class ?? null,
+    }));
+    addRow("BODY_TYPE", "Body Type", "Configuration", null, (b) => ({
+      value: b.bundle?.product?.body_type ?? b.psi?.body_type ?? null,
+    }));
+    addRow("CAB_TYPE", "Cab Type", "Configuration", null, (b) => {
+      const val = b.bundle?.product?.cab_type ?? null;
+      const catKey = b.bundle?.product?.category_key ?? b.psi?.category_key ?? b.category?.category_key;
+      return {
+        value: val,
+        state: val != null && val !== "" ? "KNOWN" : catKey === "VEHICLE_PASSENGER_CAR" ? "NOT_APPLICABLE" : "UNKNOWN",
+      };
+    });
+    addRow("DOORS", "Doors", "Configuration", null, (b) => ({
+      value: b.bundle?.product?.doors ?? null,
+    }));
+    addRow("SEATS", "Seats", "Configuration", null, (b) => ({
+      value: b.bundle?.product?.seats ?? null,
+    }));
+
+    // 3. Usage section
+    addRow("ODOMETER_KM", "Mileage", "Usage", "km", (b) => {
+      const p = b.bundle?.product as Record<string, unknown> | null | undefined;
+      const km = p?.effective_odometer_km ?? b.psi?.mileage ?? null;
+      const conflictStr = p?.odometer_conflict != null ? String(p.odometer_conflict) : undefined;
+      const isConflict = Boolean(conflictStr && conflictStr !== "NONE");
+      return {
+        value: km,
+        state: isConflict ? ("CONFLICTED" as ComparisonState) : km != null ? ("KNOWN" as ComparisonState) : ("UNKNOWN" as ComparisonState),
+        conflict: conflictStr,
+        provenance: p?.odometer_source != null ? String(p.odometer_source) : undefined,
+      };
+    });
+
+    // 4. Powertrain section
+    addRow("FUEL_TYPE", "Fuel", "Powertrain", null, (b) => ({
+      value: b.bundle?.product?.fuel_type ?? b.psi?.fuel ?? null,
+    }));
+    addRow("ENGINE_DISPLACEMENT_CC", "Engine Displacement", "Powertrain", "cc", (b) => ({
+      value: b.bundle?.product?.engine_displacement_cc ?? null,
+    }));
+    addRow("POWER_KW", "Power", "Powertrain", "kW", (b) => ({
+      value: b.bundle?.product?.power_kw ?? null,
+    }));
+    addRow("TORQUE_NM", "Torque", "Powertrain", "Nm", (b) => ({
+      value: b.bundle?.product?.torque_nm ?? null,
+    }));
+    addRow("TRANSMISSION", "Transmission", "Powertrain", null, (b) => ({
+      value: b.bundle?.product?.transmission ?? b.psi?.transmission ?? null,
+    }));
+    addRow("GEAR_COUNT", "Gears", "Powertrain", null, (b) => ({
+      value: b.bundle?.product?.gear_count ?? null,
+    }));
+    addRow("DRIVETRAIN", "Drivetrain", "Powertrain", null, (b) => ({
+      value: b.bundle?.product?.drivetrain ?? b.psi?.drivetrain ?? null,
+    }));
+
+    // 5. Physical section
+    addRow("EXTERIOR_COLOUR", "Exterior Colour", "Physical", null, (b) => ({
+      value: b.bundle?.product?.primary_exterior_colour ?? b.psi?.exterior_colour ?? null,
+    }));
+    addRow("STEERING_SIDE", "Steering Side", "Physical", null, (b) => ({
+      value: b.bundle?.product?.steering_side ?? b.psi?.steering_side ?? null,
+    }));
+
+    // 6. History section
+    addRow("SERVICE_HISTORY_CLASS", "Service History", "History", null, (b) => ({
+      value: b.bundle?.product?.service_history_class ?? b.psi?.service_history_class ?? null,
+    }));
+    addRow("ACCIDENT_HISTORY", "Accident History", "History", null, (b) => ({
+      value: b.bundle?.product?.accident_history ?? b.psi?.accident_history ?? null,
+    }));
+    addRow("REPAIR_HISTORY", "Repair History", "History", null, (b) => ({
+      value: b.bundle?.product?.repair_history ?? b.psi?.repair_history ?? null,
+    }));
+    addRow("MODIFICATION_STATUS", "Modification Status", "History", null, (b) => ({
+      value: b.bundle?.product?.modification_status ?? b.psi?.modification_status ?? null,
+    }));
+    addRow("CUSTOMS_STATUS", "Customs Status", "History", null, (b) => ({
+      value: b.bundle?.product?.customs_status ?? b.psi?.customs_status ?? null,
+    }));
+
+    // 7. Condition section
+    addRow("INSPECTION_GRADE", "Inspection Grade", "Condition", null, (b) => ({
+      value: b.bundle?.product?.inspection_grade ?? b.psi?.inspection_grade ?? null,
+    }));
+    addRow("ROADWORTHY", "Roadworthy", "Condition", null, (b) => {
+      const rw = b.bundle?.product?.roadworthy ?? b.psi?.roadworthy;
+      return { value: rw != null ? Boolean(rw) : null };
+    });
+    addRow("MAJOR_DEFECT_COUNT", "Major Defects", "Condition", null, (b) => ({
+      value: b.bundle?.product?.major_defect_count ?? null,
+    }));
+
+    // 8. Provenance section
+    addRow("VIN_CLASSIFICATION", "VIN Status", "Provenance", null, () => ({
+      value: "RECORDED",
+      state: "REDACTED",
+    }));
+
+    // 9. Equipment section
+    addRow("NUMBER_OF_KEYS", "Keys", "Equipment", null, (b) => ({
+      value: b.bundle?.product?.number_of_keys ?? null,
+    }));
+    addRow("SPARE_WHEEL", "Spare Wheel", "Equipment", null, (b) => {
+      const sw = b.bundle?.product?.spare_wheel;
+      return { value: sw != null ? Boolean(sw) : null };
+    });
+  }
+
+  // 10. Commercial section (always present for all comparisons)
+  addRow("LOCATION", "Location", "Commercial", null, (b) => ({
+    value: b.auction?.city ?? b.psi?.location ?? null,
+  }));
+  addRow("CURRENT_PRICE", "Current Price", "Commercial", "USD", (b) => ({
+    value: Number(b.auction?.current_price ?? b.auction?.start_price ?? b.psi?.price ?? 0),
+  }));
+  addRow("RESERVE_DISCLOSURE", "Reserve", "Commercial", null, (b) => ({
+    value: b.auction?.reserve_disclosure ?? b.psi?.reserve_disclosure ?? "UNSPECIFIED",
+  }));
+  addRow("ENDS_AT", "Auction Ends", "Commercial", null, (b) => ({
+    value: b.auction?.ends_at ?? b.psi?.ending_time ?? null,
+  }));
+
+  const sectionMap = new Map<string, ComparisonRow[]>();
+  for (const r of rows) {
+    const list = sectionMap.get(r.section) ?? [];
+    list.push(r);
+    sectionMap.set(r.section, list);
+  }
+
+  return {
+    items,
+    categoryRelationship,
+    scope: categoryRelationship,
+    sections: Array.from(sectionMap.entries()).map(([title, srows]) => ({
+      title,
+      name: title,
+      rows: srows,
+    })),
+  };
+}
+
+// ── Saved Search Ownership & Structured Facet Governance (P0-02) ────────
+
+const ALLOWED_SAVED_SEARCH_OPERATORS = new Set(["EQ", "IN", "MIN", "MAX", "BETWEEN", "EXISTS"]);
+
+export type NormalizedSavedFacet = {
+  attribute_key: string;
+  operator: "EQ" | "IN" | "MIN" | "MAX" | "BETWEEN" | "EXISTS";
+  value_text: string | null;
+  value_number: number | null;
+  value_boolean: number | null;
+  value_min: number | null;
+  value_max: number | null;
+  value_json: string;
+};
+
+export function normalizeSavedSearchFacetInput(raw: Record<string, unknown>): NormalizedSavedFacet {
+  const rawKey = clean(raw.attributeKey ?? raw.attribute_key, 80).toUpperCase();
+  if (!rawKey) {
+    throw new ProductIntelligenceError("SAVED_SEARCH_INVALID_FACET", "Facet attributeKey is required.");
+  }
+  const attribute_key = rawKey === "YEAR" ? "MODEL_YEAR" : rawKey;
+  const op = clean(raw.operator, 20).toUpperCase() as NormalizedSavedFacet["operator"];
+  if (!ALLOWED_SAVED_SEARCH_OPERATORS.has(op)) {
+    throw new ProductIntelligenceError("SAVED_SEARCH_INVALID_OPERATOR", `Unsupported facet operator: ${op || "(empty)"}`);
+  }
+
+  const rawText = raw.valueText ?? raw.value_text ?? raw.optionValue ?? raw.option_value ?? raw.textValue ?? raw.text_value;
+  const value_text = rawText != null && String(rawText).trim() !== "" ? clean(rawText, 200) : null;
+
+  const parseOptNum = (v: unknown, label: string): number | null => {
+    if (v === undefined || v === null || v === "") return null;
+    const n = Number(v);
+    if (!Number.isFinite(n)) {
+      throw new ProductIntelligenceError("SAVED_SEARCH_INVALID_NUMBER", `${label} must be a finite number.`);
+    }
+    return n;
+  };
+
+  let value_number = parseOptNum(raw.valueNumber ?? raw.value_number, "valueNumber");
+  const rawBool = raw.valueBoolean ?? raw.value_boolean ?? raw.booleanValue ?? raw.boolean_value;
+  const value_boolean = rawBool == null || rawBool === "" ? null : rawBool === true || Number(rawBool) === 1 || rawBool === "true" ? 1 : 0;
+  let value_min = parseOptNum(raw.valueMin ?? raw.value_min ?? raw.minNumeric ?? raw.min_numeric, "valueMin");
+  let value_max = parseOptNum(raw.valueMax ?? raw.value_max ?? raw.maxNumeric ?? raw.max_numeric, "valueMax");
+
+  if (op === "MIN" && value_min == null && value_number != null) value_min = value_number;
+  if (op === "MIN" && value_number == null && value_min != null) value_number = value_min;
+  if (op === "MAX" && value_max == null && value_number != null) value_max = value_number;
+  if (op === "MAX" && value_number == null && value_max != null) value_number = value_max;
+
+  if (op === "BETWEEN") {
+    if (value_min == null || value_max == null) {
+      throw new ProductIntelligenceError("SAVED_SEARCH_INVALID_RANGE", "BETWEEN operator requires both valueMin and valueMax.");
+    }
+    if (value_min > value_max) {
+      throw new ProductIntelligenceError("SAVED_SEARCH_INVALID_RANGE", "Facet valueMin cannot exceed valueMax.");
+    }
+  } else if (op === "MIN" && value_min == null) {
+    throw new ProductIntelligenceError("SAVED_SEARCH_INVALID_FACET", "MIN operator requires valueMin or valueNumber.");
+  } else if (op === "MAX" && value_max == null) {
+    throw new ProductIntelligenceError("SAVED_SEARCH_INVALID_FACET", "MAX operator requires valueMax or valueNumber.");
+  } else if ((op === "EQ" || op === "IN") && value_text == null && value_number == null && value_boolean == null) {
+    throw new ProductIntelligenceError("SAVED_SEARCH_INVALID_FACET", `${op} operator requires a comparison value.`);
+  }
+
+  let value_json = "{}";
+  if (raw.valueJson != null || raw.value_json != null) {
+    const vj = raw.valueJson ?? raw.value_json;
+    value_json = typeof vj === "string" ? vj : JSON.stringify(vj);
+    try {
+      JSON.parse(value_json);
+    } catch {
+      throw new ProductIntelligenceError("SAVED_SEARCH_INVALID_JSON", "Facet valueJson must be valid JSON.");
+    }
+  }
+
+  return {
+    attribute_key,
+    operator: op,
+    value_text,
+    value_number,
+    value_boolean,
+    value_min,
+    value_max,
+    value_json,
+  };
+}
+
+async function loadOwnedSavedSearchOrThrow(
+  store: VehicleStore,
+  me: VehicleIdentity | null | undefined,
+  savedSearchId: number,
+): Promise<Record<string, any>> {
+  if (!me?.id) {
+    throw new ProductIntelligenceError("AUTH_REQUIRED", "Sign in to access saved searches.");
+  }
+  if (!Number.isSafeInteger(savedSearchId) || savedSearchId <= 0) {
+    throw new ProductIntelligenceError("SAVED_SEARCH_INVALID_ID", "Valid savedSearchId is required.");
+  }
+  const saved = await store.get("saved_searches", savedSearchId);
+  if (!saved) {
+    throw new ProductIntelligenceError("SAVED_SEARCH_NOT_FOUND", "Saved search was not found.");
+  }
+  const isOwner = String(saved.user ?? "") === String(me.id);
+  if (!isOwner && !me.admin) {
+    throw new ProductIntelligenceError("SAVED_SEARCH_FORBIDDEN", "Not authorized to access this saved search.");
+  }
+  return saved;
+}
+
+export async function getOwnedSavedSearchFacets(
+  store: VehicleStore,
+  me: VehicleIdentity | null | undefined,
+  savedSearchId: number,
+): Promise<any[]> {
+  await loadOwnedSavedSearchOrThrow(store, me, savedSearchId);
+  return await store.list(
+    "saved_search_facets",
+    params({ "filter[saved_search_id][$eq]": savedSearchId, order: "id", limit: 100 }),
+  );
+}
+
+export async function listOwnedSavedSearches(
+  store: VehicleStore,
+  me: VehicleIdentity | null | undefined,
+): Promise<any[]> {
+  if (!me?.id) {
+    throw new ProductIntelligenceError("AUTH_REQUIRED", "Sign in to view saved searches.");
+  }
+  const searches = await store.list(
+    "saved_searches",
+    params({ "filter[user][$eq]": me.id, order: "-created_at", limit: 100 }),
+  );
+  for (const s of searches) {
+    s.facets = await store.list(
+      "saved_search_facets",
+      params({ "filter[saved_search_id][$eq]": s.id, order: "id", limit: 100 }),
+    );
+  }
+  return searches;
+}
+
+export async function saveOwnedSearch(
+  store: VehicleStore,
+  me: VehicleIdentity | null | undefined,
+  input: Record<string, any>,
+): Promise<Record<string, any>> {
+  if (!me?.id) {
+    throw new ProductIntelligenceError("AUTH_REQUIRED", "Sign in to save searches.");
+  }
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new ProductIntelligenceError("SAVED_SEARCH_INVALID", "Search payload must be an object.");
+  }
+
+  const name = clean(input.name, 100);
+  if (!name) {
+    throw new ProductIntelligenceError("SAVED_SEARCH_INVALID", "Saved search name is required.");
+  }
+
+  const minPrice = input.minPrice != null && input.minPrice !== "" ? Number(input.minPrice) : null;
+  const maxPrice = input.maxPrice != null && input.maxPrice !== "" ? Number(input.maxPrice) : null;
+  if ((minPrice != null && (!Number.isFinite(minPrice) || minPrice < 0)) || (maxPrice != null && (!Number.isFinite(maxPrice) || maxPrice < 0))) {
+    throw new ProductIntelligenceError("SAVED_SEARCH_INVALID", "Price bounds must be non-negative numbers.");
+  }
+  if (minPrice != null && maxPrice != null && minPrice > maxPrice) {
+    throw new ProductIntelligenceError("SAVED_SEARCH_INVALID", "minPrice cannot exceed maxPrice.");
+  }
+
+  const rawFacets = Array.isArray(input.facets) ? input.facets : [];
+  if (rawFacets.length > 50) {
+    throw new ProductIntelligenceError("SAVED_SEARCH_INVALID", "At most 50 facets may be attached to a saved search.");
+  }
+  const normalizedFacets = rawFacets.map((f) => normalizeSavedSearchFacetInput(f as Record<string, unknown>));
+
+  const now = nowIso();
+  const targetId = input.id != null ? Number(input.id) : null;
+  let searchId: number;
+
+  if (targetId != null) {
+    await loadOwnedSavedSearchOrThrow(store, me, targetId);
+    const ok = await store.update("saved_searches", targetId, {
+      name,
+      query: input.query ? clean(input.query, 120) : null,
+      category: input.category ? clean(input.category, 80) : null,
+      product_category_id: input.productCategoryId != null ? Number(input.productCategoryId) : null,
+      product_schema_version_id: input.productSchemaVersionId != null ? Number(input.productSchemaVersionId) : null,
+      category_key: input.categoryKey ? clean(input.categoryKey, 80) : null,
+      min_price: minPrice,
+      max_price: maxPrice,
+      alerts: input.alerts === false ? 0 : 1,
+      updated_at: now,
+    });
+    if (!ok) {
+      throw new ProductIntelligenceError("SAVED_SEARCH_SAVE_FAILED", "Could not update saved search.");
+    }
+    searchId = targetId;
+    if (store.remove) {
+      const oldFacets = await store.list(
+        "saved_search_facets",
+        params({ "filter[saved_search_id][$eq]": searchId, limit: 100 }),
+      );
+      for (const oldF of oldFacets) {
+        if (oldF?.id != null) await store.remove("saved_search_facets", oldF.id).catch(() => false);
+      }
+    }
+  } else {
+    const topAuction = (await store.list("auctions", params({ order: "-id", limit: 1 })))[0];
+    const lastSeenId = Number(topAuction?.id ?? 0);
+    const createdId = await store.create("saved_searches", {
+      user: me.id,
+      name,
+      query: input.query ? clean(input.query, 120) : null,
+      category: input.category ? clean(input.category, 80) : null,
+      product_category_id: input.productCategoryId != null ? Number(input.productCategoryId) : null,
+      product_schema_version_id: input.productSchemaVersionId != null ? Number(input.productSchemaVersionId) : null,
+      category_key: input.categoryKey ? clean(input.categoryKey, 80) : null,
+      min_price: minPrice,
+      max_price: maxPrice,
+      alerts: input.alerts === false ? 0 : 1,
+      last_seen_id: lastSeenId,
+      created_at: now,
+      updated_at: now,
+    });
+    if (!createdId) {
+      throw new ProductIntelligenceError("SAVED_SEARCH_SAVE_FAILED", "Could not save search.");
+    }
+    searchId = createdId;
+  }
+
+  for (const facet of normalizedFacets) {
+    await store.create("saved_search_facets", {
+      saved_search_id: searchId,
+      ...facet,
+      created_at: now,
+    });
+  }
+
+  const saved = await store.get("saved_searches", searchId);
+  const savedFacets = await store.list(
+    "saved_search_facets",
+    params({ "filter[saved_search_id][$eq]": searchId, order: "id", limit: 100 }),
+  );
+  return { ...saved, facets: savedFacets };
+}
+
+export async function deleteOwnedSavedSearch(
+  store: VehicleStore,
+  me: VehicleIdentity | null | undefined,
+  savedSearchId: number,
+): Promise<boolean> {
+  await loadOwnedSavedSearchOrThrow(store, me, savedSearchId);
+  if (!store.remove) {
+    throw new ProductIntelligenceError("SAVED_SEARCH_DELETE_UNSUPPORTED", "Store delete is unavailable.");
+  }
+  const facets = await store.list(
+    "saved_search_facets",
+    params({ "filter[saved_search_id][$eq]": savedSearchId, limit: 100 }),
+  );
+  for (const f of facets) {
+    if (f?.id != null) await store.remove("saved_search_facets", f.id);
+  }
+  return await store.remove("saved_searches", savedSearchId);
+}
+
+export async function setOwnedSavedSearchAlerts(
+  store: VehicleStore,
+  me: VehicleIdentity | null | undefined,
+  savedSearchId: number,
+  alertsOn: boolean,
+): Promise<Record<string, any>> {
+  await loadOwnedSavedSearchOrThrow(store, me, savedSearchId);
+  const ok = await store.update("saved_searches", savedSearchId, {
+    alerts: alertsOn ? 1 : 0,
+    updated_at: nowIso(),
+  });
+  if (!ok) {
+    throw new ProductIntelligenceError("SAVED_SEARCH_UPDATE_FAILED", "Could not update saved search alerts.");
+  }
+  return await store.get("saved_searches", savedSearchId);
+}
+
