@@ -481,10 +481,9 @@ export async function resolveVehicleInspectionProjection(
   vehicleId: number,
   auctionId?: number,
 ): Promise<Record<string, unknown> | null> {
-  const viewRows = await store.list(
-    "pi_vehicle_inspection_projection",
-    params({ "filter[vehicle_id][$eq]": vehicleId, limit: 1 }),
-  );
+  const viewRows = await store
+    .list("pi_vehicle_inspection_projection", params({ "filter[vehicle_id][$eq]": vehicleId, limit: 1 }))
+    .catch(() => []);
   if (viewRows[0]) return viewRows[0];
 
   const [inspections, eligibilities] = await Promise.all([
@@ -529,10 +528,9 @@ export async function resolvePublicVehicleDocuments(
   store: VehicleStore,
   vehicleId: number,
 ): Promise<Array<Record<string, unknown>>> {
-  const viewDocs = await store.list(
-    "pi_vehicle_document_public",
-    params({ "filter[vehicle_id][$eq]": vehicleId, limit: 100 }),
-  );
+  const viewDocs = await store
+    .list("pi_vehicle_document_public", params({ "filter[vehicle_id][$eq]": vehicleId, limit: 100 }))
+    .catch(() => []);
   if (viewDocs.length > 0) {
     return viewDocs.map((d) => ({
       vehicle_id: d.vehicle_id,
@@ -586,7 +584,9 @@ export async function resolvePublicVehicleProjection(
   const [auction, intakeSessions, viewRows] = await Promise.all([
     store.get("auctions", auctionId),
     store.list("product_intake_sessions", params({ "filter[auction_id][$eq]": auctionId, limit: 5 })),
-    store.list("pi_vehicle_public", params({ "filter[auction_id][$eq]": auctionId, limit: 1 })),
+    store
+      .list("pi_vehicle_public", params({ "filter[auction_id][$eq]": auctionId, limit: 1 }))
+      .catch(() => []),
   ]);
   const viewRow = viewRows[0] ?? null;
 

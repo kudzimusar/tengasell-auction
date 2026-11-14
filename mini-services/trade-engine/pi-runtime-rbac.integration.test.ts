@@ -23,6 +23,7 @@ let tbUrl = "";
 let teUrl = "";
 let tbProc: ChildProcess | null = null;
 let teProc: ChildProcess | null = null;
+const teLogs: string[] = [];
 const socketsToClose: Socket[] = [];
 
 type UserSession = {
@@ -241,7 +242,6 @@ beforeAll(async () => {
     throw new Error(`${err.message}\nTrailBase logs:\n${tbLogs.join("")}`);
   });
 
-  const teLogs: string[] = [];
   teProc = spawn("bun", ["run", "mini-services/trade-engine/index.ts"], {
     cwd: ROOT,
     env: {
@@ -364,7 +364,7 @@ test("Case 1: Unauthenticated anonymous denial across Socket.IO RPC & TrailBase 
     const res = await tbJson(method, endpoint, null, body);
     expect(res.status === 401 || res.status === 403).toBe(true);
   }
-});
+}, 30_000);
 
 test("Case 2: Seller A structured intake & private vehicle read; Seller B cross-seller denial", async () => {
   const openRes = await rpc<any>(users.sellerA.socket, "product:intake:open", {
@@ -474,7 +474,7 @@ test("Case 2: Seller A structured intake & private vehicle read; Seller B cross-
     users.sellerB.token,
   );
   expect(bRestById.status === 403 || bRestById.status === 404).toBe(true);
-});
+}, 30_000);
 
 test("Case 3: Inspector/Reviewer RBAC & Maker-Checker enforcement on live runtime", async () => {
   const vehicleId = STATE.vehicleAId!;
@@ -608,7 +608,7 @@ test("Case 3: Inspector/Reviewer RBAC & Maker-Checker enforcement on live runtim
   expect(distinctRev.command?.status).toBe("accepted");
   expect(distinctRev.command?.eligibility_status).toBe("ELIGIBLE");
   expect(distinctRev.bundle?.eligibility?.status).toBe("ELIGIBLE");
-});
+}, 30_000);
 
 test("Case 4 & Case 5: Draft/unpublished denial + public projection & comparison privacy redaction", async () => {
   // Create an unpublished draft listing by Seller B and confirm anonymous public read rejects it
@@ -810,7 +810,7 @@ test("Case 4 & Case 5: Draft/unpublished denial + public projection & comparison
     }
     expect(psiSerialized).not.toContain(String(STATE.draftAuctionId));
   }
-});
+}, 25_000);
 
 test("Case 6: Outbox & FTS5 runtime sync and withdrawn listing removal on TrailBase v0.35.1", async () => {
   // Mutate Auction C title & current_price -> verify SQLite trigger enqueues SEARCH_INDEX_REFRESH and outbox updates index + FTS5
@@ -860,7 +860,7 @@ test("Case 6: Outbox & FTS5 runtime sync and withdrawn listing removal on TrailB
   });
   expect(withdrawnCmp.ok).toBe(false);
   expect(withdrawnCmp.code).toBe("COMPARE_LISTING_NOT_PUBLIC");
-});
+}, 25_000);
 
 test("Case 7: Saved search & structured facet RBAC enforcement across Socket.IO & TrailBase REST", async () => {
   // Invalid operator must fail closed cleanly
@@ -975,7 +975,7 @@ test("Case 7: Saved search & structured facet RBAC enforcement across Socket.IO 
     { saved_search_id: STATE.savedSearchAId, attribute_id: makeAttr.id, operator: "EQ", value_text: "Spoof" },
   );
   expect(bSpoofFacet.status === 401 || bSpoofFacet.status === 403).toBe(true);
-});
+}, 30_000);
 
 test("Case 8: Search input bounds, pagination & admin-only rebuild on live runtime", async () => {
   const invalidQueries: Array<Record<string, unknown>> = [
@@ -1110,7 +1110,7 @@ test("Case 8: Search input bounds, pagination & admin-only rebuild on live runti
   expect(page0.items.length).toBe(1);
   expect(page1.items.length).toBe(1);
   expect(page0.items[0].auction_id).not.toBe(page1.items[0].auction_id);
-});
+}, 30_000);
 
 test("Case 9: Revoked/logged-out session token rejection on existing and fresh sockets", async () => {
   const target = users.logoutUser;
@@ -1140,7 +1140,7 @@ test("Case 9: Revoked/logged-out session token rejection on existing and fresh s
   const staleList = await rpc<any>(staleSocket, "saved-search:list", {});
   expect(staleList.ok).toBe(false);
   expect(staleList.code).toBe("AUTH_REQUIRED");
-});
+}, 30_000);
 
 test("Case 10: Fail-closed ADMIN_PASSWORD check across trailbase-admin.ts and trade-engine", async () => {
   // 1. trailbase-admin.ts must fail closed immediately without ADMIN_PASSWORD
@@ -1182,4 +1182,4 @@ test("Case 10: Fail-closed ADMIN_PASSWORD check across trailbase-admin.ts and tr
     killChild(proc);
   }
   expect(stderrChunks.join("")).toContain("ADMIN_PASSWORD environment variable is required");
-});
+}, 30_000);

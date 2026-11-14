@@ -255,11 +255,14 @@ export async function removeAuctionFromSearch(store: VehicleStore, auctionId: nu
   // Immediately invalidate visibility in search index so public search never serves it during recovery
   if (existing) {
     const targetId = existing.id ?? auctionId;
-    await store.update("product_search_index", targetId, {
+    const hideOk = await store.update("product_search_index", targetId, {
       auction_status: "deleted",
       updated_at: nowIso(),
       indexed_at: nowIso(),
     });
+    if (!hideOk) {
+      throw new Error(`Failed to invalidate search visibility for auction ${auctionId}`);
+    }
   }
 
   const existingFacets = await listAllPages(store, "product_search_facet_values", {
