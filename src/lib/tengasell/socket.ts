@@ -5,10 +5,20 @@
 // events validated server-side (proxy bidding, anti-snipe, SLA orders).
 
 import { io, type Socket } from "socket.io-client";
-import { bus } from "./bus";
+import { bus, type SocketConnectionState } from "./bus";
 
 let socket: Socket | null = null;
 let currentToken: string | null = null;
+let connectionState: SocketConnectionState = "disconnected";
+
+function setConnectionState(next: SocketConnectionState): void {
+  connectionState = next;
+  bus.emit("connection:changed", {
+    connected: next === "connected",
+    reconnecting: next === "reconnecting",
+    state: next,
+  });
+}
 
 export function getSocket(): Socket | null {
   return socket;
@@ -16,6 +26,11 @@ export function getSocket(): Socket | null {
 
 export function isConnected(): boolean {
   return socket?.connected ?? false;
+}
+
+export function getConnectionState(): SocketConnectionState {
+  if (socket?.connected) return "connected";
+  return connectionState;
 }
 
 export function connectSocket(token: string | null): Promise<Socket | null> {
@@ -34,15 +49,22 @@ export function connectSocket(token: string | null): Promise<Socket | null> {
       socket = s;
 
       s.on("connect", () => {
-        bus.emit("connection:changed", { connected: true });
+        setConnectionState("connected");
         resolve(s);
       });
-      s.on("disconnect", () => {
-        bus.emit("connection:changed", { connected: false });
+      s.on("disconnect", (reason) => {
+        const reconnecting = reason !== "io client disconnect";
+        setConnectionState(reconnecting ? "reconnecting" : "disconnected");
       });
       s.on("connect_error", () => {
-        bus.emit("connection:changed", { connected: false });
+        setConnectionState(s.active ? "reconnecting" : "disconnected");
         resolve(null);
+      });
+      s.io.on("reconnect_attempt", () => {
+        setConnectionState("reconnecting");
+      });
+      s.io.on("reconnect_failed", () => {
+        setConnectionState("disconnected");
       });
 
       // broadcasts → bus
@@ -69,9 +91,11 @@ export function connectSocket(token: string | null): Promise<Socket | null> {
 export function disconnectSocket() {
   if (socket) {
     socket.removeAllListeners();
+    socket.io.off("reconnect_attempt");
+    socket.io.off("reconnect_failed");
     socket.disconnect();
     socket = null;
-    bus.emit("connection:changed", { connected: false });
+    setConnectionState("disconnected");
   }
 }
 

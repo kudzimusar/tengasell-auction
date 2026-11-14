@@ -5,6 +5,8 @@
 //   · local demo store mutations (offline fallback)
 // Views subscribe once and refresh their data accordingly.
 
+export type SocketConnectionState = "connected" | "reconnecting" | "disconnected";
+
 type EventMap = {
   "auction:update": { auction: import("./types").Auction };
   "auction:ended": { auction: import("./types").Auction };
@@ -12,7 +14,11 @@ type EventMap = {
   "notification:new": { notification: import("./types").Notification };
   "order:update": { order: import("./types").Order };
   "question:update": { question: import("./types").Question };
-  "connection:changed": { connected: boolean };
+  "connection:changed": {
+    connected: boolean;
+    reconnecting?: boolean;
+    state?: SocketConnectionState;
+  };
 };
 
 type Handler<K extends keyof EventMap> = (payload: EventMap[K]) => void;
