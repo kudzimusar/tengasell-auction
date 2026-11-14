@@ -11,6 +11,7 @@ import {
 import { SafeAreaView, type Edge } from "react-native-safe-area-context";
 
 import { useSession } from "../auth/session-context";
+import { AboutDiagnosticsCard } from "./AboutDiagnosticsCard";
 import { fetchAuthenticatedProfile } from "../lib/trailbase";
 import type { Profile } from "../lib/types";
 import {
@@ -259,6 +260,8 @@ export function AccountContent({
                 />
               </View>
 
+              <AboutDiagnosticsCard />
+
               {/* Preferences for signed-out user */}
               <View style={styles.card}>
                 <Text style={styles.sectionHeader} accessibilityRole="header">
@@ -490,6 +493,8 @@ export function AccountContent({
               <Text style={styles.detailValue}>{t("account.helpEmail")}</Text>
             </View>
           </View>
+
+          <AboutDiagnosticsCard />
 
           {/* Sign Out Button */}
           <NxsButton

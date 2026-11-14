@@ -1,0 +1,85 @@
+{
+  "provenance": {
+    "programme": "TENGASELL-MOBILE-01",
+    "assignment": "TENGASELL-MOBILE-UX-PARITY-01-R3",
+    "framework": "11-11 Tech NXS Framework 1.0",
+    "basePr": 9,
+    "baseSha": "9bd369ad7000c7564195c1249d75759064706068",
+    "draftPr": 21,
+    "draftBranch": "feat/tengasell-mobile-ux-parity-01-draft",
+    "targetHead": "d76daae1095842a1ad09039d022aa1febc486cdf",
+    "buildId": "feat_tengasell-mobile-ux-parity-01-draft-d76daae109",
+    "runtime": "Expo SDK 58 (Hermes / React Native 0.88 / ios)",
+    "timestamp": "2026-11-14T13:33:00Z"
+  },
+  "verification": {
+    "expoInstallCheck": "PASS (0 outdated dependencies)",
+    "expoDoctor": "PASS (20/20 checks passed)",
+    "nxsFoundation": "PASS (11 files audited)",
+    "releaseSecrets": "PASS (73 files audited)",
+    "eslint": "PASS (0 errors, 0 warnings)",
+    "typecheck": "PASS (0 errors)",
+    "unitTests": {
+      "total": 138,
+      "passed": 138,
+      "failed": 0,
+      "suites": [
+        "bid-acknowledgement.test.mjs",
+        "bid-completion.test.mjs",
+        "bid-reconciliation.test.mjs",
+        "build-provenance.test.mjs",
+        "login-barrier.test.mjs",
+        "logout-continuity.test.mjs",
+        "navigation-contract.test.mjs",
+        "privacy-boundary.test.mjs",
+        "protected-request.test.mjs",
+        "race01-stale-write.test.mjs",
+        "recommendation.test.mjs",
+        "session-orchestrator.test.mjs",
+        "socket-lifecycle.test.mjs",
+        "storage-concurrency.test.mjs"
+      ]
+    },
+    "androidExport": "PASS (entry-37dbc203cae0ed38719d1ada48b6f35e.hbc 2.8MB)",
+    "iosExport": "PASS (entry-b36a4b4d5e5b103fe8376c4d6e18a6ec.hbc 2.8MB)"
+  },
+  "deviceTesting": {
+    "iosSimulator": {
+      "status": "ONLINE / ACTIVE",
+      "device": "iPhone 18 Pro (FC17FF48-A93F-48B3-9544-72356B1529B5)",
+      "runtime": "iOS 27.0",
+      "displayMode": "Apple Device Hub Desktop Mirrored & simctl Headless",
+      "windowId": 15276
+    },
+    "androidEmulator": {
+      "status": "BLOCKED",
+      "reason": "Container virtualization boundary; hardware acceleration unavailable"
+    },
+    "physicalDevices": {
+      "status": "BLOCKED",
+      "reason": "No USB or adb-connected physical devices present in runner environment"
+    }
+  },
+  "evidenceArtifacts": [
+    {
+      "filename": "desktop_devicehub_window_r3.png",
+      "description": "Live interactive desktop Device Hub window showing iPhone 18 Pro running TengaSell with native controls",
+      "sha256": "23bcd10eda9838095d59ddb740033d6d9670806fdc2281280cadcb7f8f2d454b"
+    },
+    {
+      "filename": "ios_parity_06_r3_diagnostics.png",
+      "description": "Scrolled lot 9002 detail showing PR #14 product intelligence preview and fail-soft non-vehicle notice",
+      "sha256": "97a0b3ba31d9f9a6807b09e155cad1b5d10f5b6ac797fdf02d66be3e24c3ed91"
+    },
+    {
+      "filename": "ios_parity_10_fresh_home.png",
+      "description": "Freshly relaunched TengaSell home screen on iPhone 18 Pro showing connected live gateway and intelligent recommendations",
+      "sha256": "14363a6a8c560b5a5d22edc43726cc3c317a5162a70933744c8e766614179c54"
+    },
+    {
+      "filename": "ios_parity_05_item_vehicle_scrolled.png",
+      "description": "Scrolled vehicle item showing canonical projection grid, unverified state, and privacy-scrubbed tokens",
+      "sha256": "e46a418a25e4f205168611f129011549a41efabdf4335f5315c28f01118949eb"
+    }
+  ]
+}

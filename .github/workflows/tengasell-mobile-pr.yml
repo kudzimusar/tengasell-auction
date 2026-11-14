@@ -148,6 +148,15 @@ jobs:
         if: ${{ hashFiles('mobile/tests/bid-completion.test.mjs') != '' }}
         run: node --experimental-strip-types --test tests/bid-completion.test.mjs
 
+      - name: Product intelligence, boundary privacy & provenance regressions (PARITY-01)
+        if: ${{ hashFiles('mobile/tests/build-provenance.test.mjs') != '' }}
+        run: |
+          node --experimental-strip-types --test \
+            tests/build-provenance.test.mjs \
+            tests/privacy-boundary.test.mjs \
+            tests/recommendation.test.mjs \
+            tests/bid-reconciliation.test.mjs
+
       - name: Android export
         run: npx expo export --platform android
 
