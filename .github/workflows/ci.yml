@@ -34,7 +34,7 @@ permissions:
 jobs:
   build-and-smoke:
     name: Build and smoke test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
       DATABASE_URL: file:${{ github.workspace }}/ci.db
@@ -280,7 +280,7 @@ jobs:
 
   quality:
     name: Lint and typecheck (baseline debt — non-blocking)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     # The imported codebase carries pre-existing debt: 18 ESLint errors
     # (react-hooks/set-state-in-effect) and 312 TypeScript diagnostics that the
