@@ -15,6 +15,7 @@ export interface VehicleStore {
   get(table: string, id: number | string): Promise<any | null>
   list(table: string, params: string): Promise<any[]>
   update(table: string, id: number | string, patch: unknown): Promise<boolean>
+  remove?(table: string, id: number | string): Promise<boolean>
 }
 
 export type VehicleAudit = (
