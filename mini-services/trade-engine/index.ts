@@ -69,6 +69,7 @@ import {
   publishIntake,
   saveIntakeStep,
 } from "./product-intelligence";
+import { createStrictTrailBaseStore } from "./trailbase-adapter";
 import {
   createAuctionEvent,
   eventBundle,
@@ -228,6 +229,11 @@ const auctionCoreStore = {
   list: getRecords,
   update: updateRecord,
 };
+
+const productIntelligenceStore = createStrictTrailBaseStore({
+  baseUrl: TRAILBASE,
+  getAdminToken: ensureAdminToken,
+});
 
 function nowIso(): string {
   return new Date().toISOString().replace(/\.\d+Z$/, "Z");
@@ -1229,7 +1235,7 @@ io.on("connection", (socket: Socket) => {
       const auctionId = Number(data?.auctionId);
       if (!Number.isSafeInteger(auctionId) || auctionId <= 0)
         return ack?.({ ok: false, error: "Invalid auction id." });
-      const bundle = await vehicleBundle(auctionCoreStore, auctionId, viewer);
+      const bundle = await vehicleBundle(productIntelligenceStore, auctionId, viewer);
       if ((bundle as any).errorCode) {
         return ack?.({ ok: false, code: (bundle as any).errorCode, error: "This internal vehicle record requires seller or operational authority." });
       }
@@ -1245,7 +1251,7 @@ io.on("connection", (socket: Socket) => {
       const auctionId = Number(data?.auctionId);
       if (!Number.isSafeInteger(auctionId) || auctionId <= 0)
         return ack?.({ ok: false, error: "Invalid auction id." });
-      const bundle = await publicProductBundle(auctionCoreStore, auctionId);
+      const bundle = await publicProductBundle(productIntelligenceStore, auctionId);
       if (!bundle.product) return ack?.({ ok: false, error: "Public product details are not available." });
       ack?.({ ok: true, bundle });
     } catch (err) {
@@ -1256,7 +1262,7 @@ io.on("connection", (socket: Socket) => {
 
   socket.on("product:schema:get", async (data: any, ack?: Ack) => {
     try {
-      ack?.({ ok: true, schema: await productSchema(auctionCoreStore, data?.categoryKey) });
+      ack?.({ ok: true, schema: await productSchema(productIntelligenceStore, data?.categoryKey) });
     } catch (err) {
       console.error("[product:schema:get]", err);
       ack?.({ ok: false, error: "Product schema is temporarily unavailable." });
@@ -1267,7 +1273,7 @@ io.on("connection", (socket: Socket) => {
     try {
       const user = await requireAuth();
       if (!user) return ack?.({ ok: false, code: "AUTH_REQUIRED", error: "Sign in to start seller intake." });
-      ack?.(await openProductIntake(auctionCoreStore, user, data?.intake ?? {}));
+      ack?.(await openProductIntake(productIntelligenceStore, user, data?.intake ?? {}));
     } catch (err) {
       console.error("[product:intake:open]", err);
       ack?.({ ok: false, error: "Product intake could not be opened." });
@@ -1278,7 +1284,7 @@ io.on("connection", (socket: Socket) => {
     try {
       const user = await requireAuth();
       if (!user) return ack?.({ ok: false, code: "AUTH_REQUIRED", error: "Sign in to resume seller intake." });
-      ack?.(await intakeSession(auctionCoreStore, user, Number(data?.auctionId)));
+      ack?.(await intakeSession(productIntelligenceStore, user, Number(data?.auctionId)));
     } catch (err) {
       console.error("[product:intake:get]", err);
       ack?.({ ok: false, error: "Product intake could not be resumed." });
@@ -1289,7 +1295,7 @@ io.on("connection", (socket: Socket) => {
     try {
       const user = await requireAuth();
       if (!user) return ack?.({ ok: false, code: "AUTH_REQUIRED", error: "Sign in to save seller intake." });
-      ack?.(await saveIntakeStep(auctionCoreStore, user, data?.step ?? {}));
+      ack?.(await saveIntakeStep(productIntelligenceStore, user, data?.step ?? {}));
     } catch (err) {
       console.error("[product:intake:step]", err);
       ack?.({ ok: false, error: "Product intake step could not be saved." });
@@ -1300,7 +1306,7 @@ io.on("connection", (socket: Socket) => {
     try {
       const user = await requireAuth();
       if (!user) return ack?.({ ok: false, code: "AUTH_REQUIRED", error: "Sign in to publish seller intake." });
-      ack?.(await publishIntake(auctionCoreStore, user, data?.command ?? {}));
+      ack?.(await publishIntake(productIntelligenceStore, user, data?.command ?? {}));
     } catch (err) {
       console.error("[product:intake:publish]", err);
       ack?.({ ok: false, error: "Product publish readiness could not be checked." });
@@ -1311,7 +1317,7 @@ io.on("connection", (socket: Socket) => {
     try {
       const user = await requireAuth();
       if (!user) return ack?.({ ok: false, error: "Sign in to submit vehicle intake." });
-      ack?.(await saveVehicleIntake(auctionCoreStore, audit, user, Number(data?.auctionId), data?.vehicle ?? {}));
+      ack?.(await saveVehicleIntake(productIntelligenceStore, audit, user, Number(data?.auctionId), data?.vehicle ?? {}));
     } catch (err) {
       console.error("[vehicle:intake]", err);
       ack?.({ ok: false, error: "Vehicle intake failed." });
@@ -1322,7 +1328,7 @@ io.on("connection", (socket: Socket) => {
     try {
       const user = await requireAuth();
       if (!user) return ack?.({ ok: false, error: "Sign in first." });
-      ack?.(await addVehicleDocument(auctionCoreStore, audit, user, Number(data?.vehicleId), data?.document ?? {}));
+      ack?.(await addVehicleDocument(productIntelligenceStore, audit, user, Number(data?.vehicleId), data?.document ?? {}));
     } catch (err) {
       console.error("[vehicle:document:add]", err);
       ack?.({ ok: false, error: "Vehicle document could not be recorded." });
@@ -1333,7 +1339,7 @@ io.on("connection", (socket: Socket) => {
     try {
       const user = await requireAuth();
       if (!user) return ack?.({ ok: false, error: "Sign in first." });
-      ack?.(await addVehicleHistoryEvent(auctionCoreStore, audit, user, Number(data?.vehicleId), data?.history ?? {}));
+      ack?.(await addVehicleHistoryEvent(productIntelligenceStore, audit, user, Number(data?.vehicleId), data?.history ?? {}));
     } catch (err) {
       console.error("[vehicle:history:add]", err);
       ack?.({ ok: false, error: "Vehicle history event could not be recorded." });
@@ -1344,7 +1350,7 @@ io.on("connection", (socket: Socket) => {
     try {
       const user = await requireAuth();
       if (!user) return ack?.({ ok: false, error: "Sign in first." });
-      ack?.(await addVehicleModification(auctionCoreStore, audit, user, Number(data?.vehicleId), data?.modification ?? {}));
+      ack?.(await addVehicleModification(productIntelligenceStore, audit, user, Number(data?.vehicleId), data?.modification ?? {}));
     } catch (err) {
       console.error("[vehicle:modification:add]", err);
       ack?.({ ok: false, error: "Vehicle modification could not be recorded." });
@@ -1355,7 +1361,7 @@ io.on("connection", (socket: Socket) => {
     try {
       const user = await requireAuth();
       if (!user) return ack?.({ ok: false, error: "Sign in first." });
-      ack?.(await addVehicleEquipment(auctionCoreStore, audit, user, Number(data?.vehicleId), data?.equipment ?? {}));
+      ack?.(await addVehicleEquipment(productIntelligenceStore, audit, user, Number(data?.vehicleId), data?.equipment ?? {}));
     } catch (err) {
       console.error("[vehicle:equipment:add]", err);
       ack?.({ ok: false, error: "Vehicle equipment could not be recorded." });
@@ -1367,7 +1373,7 @@ io.on("connection", (socket: Socket) => {
       const user = await requireAuth();
       if (!user) return ack?.({ ok: false, error: "Sign in first." });
       ack?.(await reviewVehicleDocument(
-        auctionCoreStore, audit, user, Number(data?.documentId),
+        productIntelligenceStore, audit, user, Number(data?.documentId),
         data?.action === "REJECT" ? "REJECT" : "VERIFY", data?.reason, data?.derivedFact ?? null,
       ));
     } catch (err) {
@@ -1380,7 +1386,7 @@ io.on("connection", (socket: Socket) => {
     try {
       const user = await requireAuth();
       if (!user) return ack?.({ ok: false, error: "Sign in first." });
-      ack?.(await startVehicleInspection(auctionCoreStore, audit, user, Number(data?.vehicleId)));
+      ack?.(await startVehicleInspection(productIntelligenceStore, audit, user, Number(data?.vehicleId)));
     } catch (err) {
       console.error("[vehicle:inspection:start]", err);
       ack?.({ ok: false, error: "Inspection could not be started." });
@@ -1392,7 +1398,7 @@ io.on("connection", (socket: Socket) => {
       const user = await requireAuth();
       if (!user) return ack?.({ ok: false, error: "Sign in first." });
       ack?.(await addVehicleFinding(
-        auctionCoreStore, audit, user, Number(data?.inspectionId), data?.finding ?? {},
+        productIntelligenceStore, audit, user, Number(data?.inspectionId), data?.finding ?? {},
       ));
     } catch (err) {
       console.error("[vehicle:inspection:finding]", err);
@@ -1405,7 +1411,7 @@ io.on("connection", (socket: Socket) => {
       const user = await requireAuth();
       if (!user) return ack?.({ ok: false, error: "Sign in first." });
       ack?.(await submitVehicleInspection(
-        auctionCoreStore, audit, user, Number(data?.inspectionId), data?.inspection ?? {},
+        productIntelligenceStore, audit, user, Number(data?.inspectionId), data?.inspection ?? {},
       ));
     } catch (err) {
       console.error("[vehicle:inspection:submit]", err);
@@ -1418,7 +1424,7 @@ io.on("connection", (socket: Socket) => {
       const user = await requireAuth();
       if (!user) return ack?.({ ok: false, error: "Sign in first." });
       ack?.(await reviewVehicleInspection(
-        auctionCoreStore, audit, user, Number(data?.inspectionId), String(data?.commandId ?? ""),
+        productIntelligenceStore, audit, user, Number(data?.inspectionId), String(data?.commandId ?? ""),
       ));
     } catch (err) {
       console.error("[vehicle:inspection:review]", err);
@@ -1430,7 +1436,7 @@ io.on("connection", (socket: Socket) => {
     try {
       const user = await requireAuth();
       if (!user) return ack?.({ ok: false, error: "Sign in first." });
-      ack?.(await grantVehicleRole(auctionCoreStore, audit, user, {
+      ack?.(await grantVehicleRole(productIntelligenceStore, audit, user, {
         user: String(data?.user ?? ""),
         username: String(data?.username ?? ""),
         role: data?.role === "REVIEWER" ? "REVIEWER" : "INSPECTOR",
