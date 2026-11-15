@@ -108,15 +108,31 @@ function recordDelivery(queueId: number, event: string, meta: Record<string, unk
   ]);
 }
 
+function verifyTelegramSecret(candidate: string | null | undefined, configured: string | undefined): boolean {
+  if (!configured || configured.length < 16) return false;
+  if (!candidate || typeof candidate !== "string") return false;
+  const candidateBuf = Buffer.from(candidate, "utf8");
+  const configuredBuf = Buffer.from(configured, "utf8");
+  if (candidateBuf.length !== configuredBuf.length) return false;
+  try {
+    return timingSafeEqual(candidateBuf, configuredBuf);
+  } catch {
+    return false;
+  }
+}
+
 export function registerHookRoutes(on: AddRoute): void {
   // ── Telegram Bot API webhook ─────────────────────────────────────────────
   on("POST", "/hooks/telegram", (ctx) => {
     if (isMock("telegram") || !TELEGRAM_BOT_TOKEN) {
       throw new HttpError(403, "external telegram webhook disabled in mock mode", "provider_disabled");
     }
-    const secretToken = ctx.req.headers.get("x-telegram-bot-api-secret-token");
     const configuredSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
-    if (configuredSecret && secretToken !== configuredSecret) {
+    if (!configuredSecret || configuredSecret.length < 16) {
+      throw new HttpError(403, "external telegram webhook secret not configured", "provider_disabled");
+    }
+    const secretToken = ctx.req.headers.get("x-telegram-bot-api-secret-token");
+    if (!verifyTelegramSecret(secretToken, configuredSecret)) {
       throw new HttpError(401, "invalid telegram webhook secret", "bad_secret");
     }
     const provider = getProvider("telegram");

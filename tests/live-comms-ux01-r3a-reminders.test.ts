@@ -27,6 +27,8 @@ import {
   upsertSubscription,
   setCustomTargetResolver,
   recordFirstPartyReminderTx,
+  fetchCanonicalRecord,
+  resolveCanonicalTarget,
 } from "../mini-services/comms-service/subscriptions";
 import { isMock, providerLabels } from "../mini-services/comms-service/providers";
 import { emitEvent } from "../mini-services/comms-service/emit";
@@ -35,8 +37,10 @@ import {
   BANNED_LEGACY_SECRETS,
   getInternalCommsSecret,
   isInternalSecretConfigured,
+  isSufficientEntropy,
   verifyInternalSecret,
 } from "../mini-services/comms-service/config";
+import { LocalTrailbaseSqlite } from "./helpers/local-trailbase-sqlite-server";
 
 // Isolated test fixture catalogue strictly for unit tests in isolation
 const TEST_FIXTURE_CATALOGUE: Record<string, CanonicalTarget> = {
@@ -866,5 +870,257 @@ describe("TENGASELL-LIVE-COMMS-UX-01 R3A First-Party Reminders & Subscriptions",
     const body = (await res.json()) as any;
     // Because customer-supplied nowIso was ignored and the authoritative server clock was used, 0 reminders were dispatched
     expect(body.dispatched).toBe(0);
+  });
+
+  test("14. P1-A TrailBase ACL Convergence & Real Schema Verification (R4B-CANONICAL-AUTH-01)", async () => {
+    const tb = new LocalTrailbaseSqlite();
+
+    // 1. Anonymous request to raw private 'auctions' table must be rejected with 401
+    const unauthReq = new Request("http://127.0.0.1:3001/api/records/v1/auctions/9101");
+    const unauthRes = await tb.handle(unauthReq);
+    expect(unauthRes.status).toBe(401);
+    const unauthBody = (await unauthRes.json()) as any;
+    expect(unauthBody.error).toContain("auctions");
+
+    // 2. Anonymous collection request to raw 'auctions' table must be rejected with 401
+    const unauthListReq = new Request("http://127.0.0.1:3001/api/records/v1/auctions");
+    const unauthListRes = await tb.handle(unauthListReq);
+    expect(unauthListRes.status).toBe(401);
+
+    // 3. Anonymous request to approved public view 'auction_public' must succeed with 200
+    const publicReq = new Request("http://127.0.0.1:3001/api/records/v1/auction_public/9101");
+    const publicRes = await tb.handle(publicReq);
+    expect(publicRes.status).toBe(200);
+    const publicAuction = (await publicRes.json()) as any;
+    expect(publicAuction.id).toBe(9101);
+    expect(publicAuction.title).toBeDefined();
+    expect(publicAuction.status).toBeDefined();
+    expect(publicAuction.started_at).toBeDefined();
+    // Verify private reserve authority is stripped from auction_public
+    expect(publicAuction.reserve_price).toBeUndefined();
+
+    // 4. Anonymous request to world-readable 'auction_events' must succeed with 200
+    const eventReq = new Request("http://127.0.0.1:3001/api/records/v1/auction_events/901");
+    const eventRes = await tb.handle(eventReq);
+    expect(eventRes.status).toBe(200);
+    const eventData = (await eventRes.json()) as any;
+    expect(eventData.id).toBe(901);
+    expect(eventData.title).toBeDefined();
+
+    // 5. Anonymous request to world-readable 'auction_lots' must succeed with 200
+    const lotReq = new Request("http://127.0.0.1:3001/api/records/v1/auction_lots/9401");
+    const lotRes = await tb.handle(lotReq);
+    expect(lotRes.status).toBe(200);
+    const lotData = (await lotRes.json()) as any;
+    expect(lotData.id).toBe(9401);
+  });
+
+  test("15. P1-B Canonical HTTP Status & Authority Unavailability Semantics (R4B-CANONICAL-HTTP-02)", async () => {
+    // Spin up an ephemeral HTTP server simulating TrailBase endpoints
+    const fakeTb = Bun.serve({
+      port: 0,
+      fetch(req) {
+        const u = new URL(req.url);
+        if (u.pathname === "/api/records/v1/auction_public/200") {
+          return Response.json({
+            id: 200,
+            title: "Valid Public Auction",
+            status: "live",
+            started_at: "2026-11-20T10:00:00Z",
+          });
+        }
+        if (u.pathname === "/api/records/v1/auction_public/draft") {
+          return Response.json({ id: 201, title: "Draft Auction", status: "draft" });
+        }
+        if (u.pathname === "/api/records/v1/auction_public/cancelled") {
+          return Response.json({ id: 202, title: "Cancelled Auction", status: "cancelled" });
+        }
+        if (u.pathname === "/api/records/v1/auction_public/withdrawn") {
+          return Response.json({ id: 203, title: "Withdrawn Auction", status: "withdrawn" });
+        }
+        if (u.pathname === "/api/records/v1/auction_public/404") {
+          return Response.json({ error: "Not found" }, { status: 404 });
+        }
+        if (u.pathname === "/api/records/v1/auction_public/401") {
+          return Response.json({ error: "Unauthorized" }, { status: 401 });
+        }
+        if (u.pathname === "/api/records/v1/auction_public/403") {
+          return Response.json({ error: "Forbidden" }, { status: 403 });
+        }
+        if (u.pathname === "/api/records/v1/auction_public/429") {
+          return new Response("Too Many Requests", { status: 429 });
+        }
+        if (u.pathname === "/api/records/v1/auction_public/500") {
+          return new Response("Internal Server Error", { status: 500 });
+        }
+        if (u.pathname === "/api/records/v1/auction_public/503") {
+          return new Response("Service Unavailable", { status: 503 });
+        }
+        if (u.pathname === "/api/records/v1/auction_public/malformed") {
+          return new Response("<html>not json</html>", {
+            status: 200,
+            headers: { "Content-Type": "text/html" },
+          });
+        }
+        return new Response("Not found", { status: 404 });
+      },
+    });
+
+    const baseUrl = `http://127.0.0.1:${fakeTb.port}`;
+
+    try {
+      // 1. Valid 200 OK
+      const res200 = await fetchCanonicalRecord(`${baseUrl}/api/records/v1/auction_public/200`);
+      expect(res200.ok).toBe(true);
+      expect(res200.status).toBe(200);
+      expect(res200.data?.id).toBe(200);
+
+      // 2. Genuine 404 Not Found -> safe null without throwing
+      const res404 = await fetchCanonicalRecord(`${baseUrl}/api/records/v1/auction_public/404`);
+      expect(res404.ok).toBe(false);
+      expect(res404.status).toBe(404);
+      expect(res404.data).toBeNull();
+
+      // 3. Legitimately Private/Forbidden (401 & 403) -> safe null without disclosing existence
+      const res401 = await fetchCanonicalRecord(`${baseUrl}/api/records/v1/auction_public/401`);
+      expect(res401.ok).toBe(false);
+      expect(res401.status).toBe(401);
+      expect(res401.data).toBeNull();
+
+      const res403 = await fetchCanonicalRecord(`${baseUrl}/api/records/v1/auction_public/403`);
+      expect(res403.ok).toBe(false);
+      expect(res403.status).toBe(403);
+      expect(res403.data).toBeNull();
+
+      // 4. HTTP 429 Rate Limiting -> throws CanonicalAuthorityUnavailableError (defers evaluation)
+      let rateLimitThrown = false;
+      try {
+        await fetchCanonicalRecord(`${baseUrl}/api/records/v1/auction_public/429`);
+      } catch (err: any) {
+        rateLimitThrown = true;
+        expect(err).toBeInstanceOf(CanonicalAuthorityUnavailableError);
+        expect(err.message).toContain("rate limited (HTTP 429)");
+      }
+      expect(rateLimitThrown).toBe(true);
+
+      // 5. HTTP 500 / 503 Operational Failures -> throws CanonicalAuthorityUnavailableError
+      let serverErrThrown = false;
+      try {
+        await fetchCanonicalRecord(`${baseUrl}/api/records/v1/auction_public/500`);
+      } catch (err: any) {
+        serverErrThrown = true;
+        expect(err).toBeInstanceOf(CanonicalAuthorityUnavailableError);
+        expect(err.message).toContain("operational error (HTTP 500)");
+      }
+      expect(serverErrThrown).toBe(true);
+
+      let serviceUnavailThrown = false;
+      try {
+        await fetchCanonicalRecord(`${baseUrl}/api/records/v1/auction_public/503`);
+      } catch (err: any) {
+        serviceUnavailThrown = true;
+        expect(err).toBeInstanceOf(CanonicalAuthorityUnavailableError);
+        expect(err.message).toContain("operational error (HTTP 503)");
+      }
+      expect(serviceUnavailThrown).toBe(true);
+
+      // 6. Malformed JSON payload -> throws CanonicalAuthorityUnavailableError
+      let malformedThrown = false;
+      try {
+        await fetchCanonicalRecord(`${baseUrl}/api/records/v1/auction_public/malformed`);
+      } catch (err: any) {
+        malformedThrown = true;
+        expect(err).toBeInstanceOf(CanonicalAuthorityUnavailableError);
+        expect(err.message).toContain("invalid JSON payload");
+      }
+      expect(malformedThrown).toBe(true);
+
+      // 7. Network / connection failure -> throws CanonicalAuthorityUnavailableError
+      let connErrThrown = false;
+      try {
+        await fetchCanonicalRecord("http://127.0.0.1:59999/unreachable");
+      } catch (err: any) {
+        connErrThrown = true;
+        expect(err).toBeInstanceOf(CanonicalAuthorityUnavailableError);
+        expect(err.message).toContain("connection error");
+      }
+      expect(connErrThrown).toBe(true);
+    } finally {
+      fakeTb.stop();
+    }
+  });
+
+  test("16. P1-C Credential Generation & Entropy Verification (R4B-COMMS-CREDENTIAL-03)", () => {
+    // 1. Length enforcement (< 16 chars rejected)
+    expect(isSufficientEntropy("short")).toBe(false);
+    expect(isSufficientEntropy("123456789012345")).toBe(false);
+
+    // 2. Character diversity enforcement (unique characters < 6 rejected)
+    expect(isSufficientEntropy("aaaaaaaaaaaaaaaa")).toBe(false);
+    expect(isSufficientEntropy("0000000000000000")).toBe(false);
+    expect(isSufficientEntropy("abababababababab")).toBe(false);
+    expect(isSufficientEntropy("abcabcabcabcabca")).toBe(false);
+
+    // 3. Known trivial sequence and dictionary pattern rejection
+    expect(isSufficientEntropy("1234567890123456")).toBe(false);
+    expect(isSufficientEntropy("abcdefghijklmnop")).toBe(false);
+    expect(isSufficientEntropy("adminadminadmin1")).toBe(false);
+    expect(isSufficientEntropy("password12345678")).toBe(false);
+
+    // 4. Legacy banned secrets rejection
+    for (const banned of BANNED_LEGACY_SECRETS) {
+      expect(isSufficientEntropy(banned) && !BANNED_LEGACY_SECRETS.has(banned)).toBe(false);
+    }
+
+    // 5. Cryptographically sound credentials accepted
+    expect(isSufficientEntropy("tgs_sec_r3a_test_credential_32chars_long")).toBe(true);
+    expect(isSufficientEntropy("tgs_ephemeral_48c7e4604bb7f551b98a")).toBe(true);
+    expect(isSufficientEntropy("k8X#9vL2$mQp!4zR1@wY")).toBe(true);
+
+    // 6. verifyInternalSecret constant-time safety against configured environment
+    expect(verifyInternalSecret(TEST_INTERNAL_SECRET)).toBe(true);
+    expect(verifyInternalSecret("mismatched_candidate_secret_32_chars")).toBe(false);
+    expect(verifyInternalSecret(null)).toBe(false);
+    expect(verifyInternalSecret(undefined)).toBe(false);
+    expect(verifyInternalSecret("short")).toBe(false);
+  });
+
+  test("17. P1-D Webhook Activation Safety & Secret Verification (R4B-PROVIDER-HOOK-04)", async () => {
+    // 1. Telegram webhook when TELEGRAM_WEBHOOK_SECRET is missing -> rejects with 403 provider_disabled
+    const origSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+    delete process.env.TELEGRAM_WEBHOOK_SECRET;
+
+    const noSecretReq = new Request("http://127.0.0.1:3005/hooks/telegram", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ update_id: 100 }),
+    });
+    const noSecretRes = await handleRequest(noSecretReq);
+    expect(noSecretRes.status).toBe(403);
+    const noSecretJson = (await noSecretRes.json()) as any;
+    expect(noSecretJson.error).toContain("disabled in mock mode");
+
+    // 2. WhatsApp external webhook when in mock mode -> rejected with 403
+    const waReq = new Request("http://127.0.0.1:3005/hooks/whatsapp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entry: [] }),
+    });
+    const waRes = await handleRequest(waReq);
+    expect(waRes.status).toBe(403);
+
+    // 3. Mock internal callback endpoints require service authentication
+    const unauthDeliveryReq = new Request("http://127.0.0.1:3005/hooks/delivery", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ queueId: 1, event: "delivered" }),
+    });
+    const unauthDeliveryRes = await handleRequest(unauthDeliveryReq);
+    expect(unauthDeliveryRes.status).toBe(401);
+
+    // Restore env
+    if (origSecret !== undefined) {
+      process.env.TELEGRAM_WEBHOOK_SECRET = origSecret;
+    }
   });
 });

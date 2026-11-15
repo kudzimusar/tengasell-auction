@@ -24,11 +24,31 @@ const BANNED_LEGACY_SECRETS: ReadonlySet<string> = new Set([
   "changeme",
 ]);
 
+export function isSufficientEntropy(secret: string): boolean {
+  if (secret.length < 16) return false;
+  const uniqueChars = new Set(secret);
+  if (uniqueChars.size < 6) return false;
+  const lower = secret.toLowerCase();
+  const trivialPatterns = [
+    "1234567890123456",
+    "abcdefghijklmnop",
+    "password12345678",
+    "adminadminadmin1",
+    "aaaaaaaaaaaaaaaa",
+    "bbbbbbbbbbbbbbbb",
+    "0000000000000000",
+  ];
+  for (const p of trivialPatterns) {
+    if (lower.includes(p)) return false;
+  }
+  return true;
+}
+
 export function getInternalCommsSecret(): string | null {
   const secret = process.env.INTERNAL_COMMS_SECRET;
   if (!secret || typeof secret !== "string") return null;
   const trimmed = secret.trim();
-  if (trimmed.length < 16) return null;
+  if (!isSufficientEntropy(trimmed)) return null;
   if (BANNED_LEGACY_SECRETS.has(trimmed)) return null;
   return trimmed;
 }

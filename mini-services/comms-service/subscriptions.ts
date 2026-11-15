@@ -208,6 +208,53 @@ export class CanonicalAuthorityUnavailableError extends Error {
   }
 }
 
+/**
+ * Safely fetches a record from TrailBase, enforcing strict HTTP status handling (R4B-CANONICAL-HTTP-02):
+ * - 200 OK: Returns { ok: true, status: 200, data }
+ * - 404 Not Found: Returns { ok: false, status: 404, data: null } (target does not exist)
+ * - 401 / 403 Forbidden: Returns { ok: false, status, data: null } (private/inaccessible, fail-closed without leaking info)
+ * - 429 Too Many Requests: Throws CanonicalAuthorityUnavailableError (defers reminder evaluation)
+ * - >= 500 Server Error: Throws CanonicalAuthorityUnavailableError (defers reminder evaluation)
+ * - Connection abort / timeout / network drop / invalid JSON: Throws CanonicalAuthorityUnavailableError (defers reminder evaluation)
+ */
+export async function fetchCanonicalRecord(
+  url: string,
+): Promise<{ ok: boolean; status: number; data: any | null }> {
+  let res: Response;
+  try {
+    res = await fetch(url, { signal: AbortSignal.timeout(2500) });
+  } catch (err: any) {
+    throw new CanonicalAuthorityUnavailableError(
+      `TrailBase connection error: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  if (res.status === 429) {
+    throw new CanonicalAuthorityUnavailableError("TrailBase rate limited (HTTP 429)");
+  }
+  if (res.status >= 500) {
+    throw new CanonicalAuthorityUnavailableError(`TrailBase operational error (HTTP ${res.status})`);
+  }
+  if (res.status === 404 || res.status === 401 || res.status === 403) {
+    return { ok: false, status: res.status, data: null };
+  }
+  if (!res.ok) {
+    throw new CanonicalAuthorityUnavailableError(`TrailBase returned unexpected HTTP ${res.status}`);
+  }
+
+  try {
+    const data = await res.json();
+    if (!data || typeof data !== "object") {
+      throw new Error("Invalid response format");
+    }
+    return { ok: true, status: res.status, data };
+  } catch (err: any) {
+    throw new CanonicalAuthorityUnavailableError(
+      `TrailBase returned invalid JSON payload: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
 export async function resolveCanonicalTarget(
   targetType: SubscriptionTargetType,
   targetId: string | number,
@@ -221,64 +268,37 @@ export async function resolveCanonicalTarget(
 
   try {
     if (targetType === "event") {
-      const res = await fetch(`${TRAILBASE_URL}/api/records/v1/auction_events/${idStr}`, {
-        signal: AbortSignal.timeout(2500),
-      });
-      if (res.status >= 500) {
-        throw new CanonicalAuthorityUnavailableError(
-          `TrailBase auction event lookup returned HTTP ${res.status}`,
-        );
-      }
-      if (res.status === 404 || res.status === 401 || res.status === 403) {
+      const res = await fetchCanonicalRecord(`${TRAILBASE_URL}/api/records/v1/auction_events/${idStr}`);
+      if (!res.ok || !res.data) return null;
+      const ev = res.data;
+      const evStatus = String(ev.status || "").toUpperCase();
+      if (evStatus === "DRAFT" || evStatus === "CANCELLED" || evStatus === "WITHDRAWN") {
         return null;
       }
-      if (res.ok) {
-        const ev = await res.json();
-        if (ev && ev.status !== "DRAFT" && ev.status !== "CANCELLED" && ev.status !== "WITHDRAWN") {
-          return {
-            targetType: "event",
-            targetId: String(ev.id),
-            eventId: Number(ev.id),
-            sessionId: ev.session_id != null ? Number(ev.session_id) : null,
-            auctionId: null,
-            lotId: null,
-            title: String(ev.title || `Event #${ev.id}`),
-            startsAt: ev.starts_at ? String(ev.starts_at) : null,
-            status: String(ev.status || "SCHEDULED"),
-            isLive: String(ev.status).toUpperCase() === "LIVE",
-          };
-        }
-        return null;
-      }
-      return null;
+      return {
+        targetType: "event",
+        targetId: String(ev.id),
+        eventId: Number(ev.id),
+        sessionId: ev.session_id != null ? Number(ev.session_id) : null,
+        auctionId: null,
+        lotId: null,
+        title: String(ev.title || `Event #${ev.id}`),
+        startsAt: ev.starts_at ? String(ev.starts_at) : null,
+        status: String(ev.status || "SCHEDULED"),
+        isLive: evStatus === "LIVE",
+      };
     } else if (targetType === "lot") {
       let lot: any = null;
-      const res = await fetch(`${TRAILBASE_URL}/api/records/v1/auction_lots/${idStr}`, {
-        signal: AbortSignal.timeout(2500),
-      });
-      if (res.status >= 500) {
-        throw new CanonicalAuthorityUnavailableError(
-          `TrailBase lot lookup returned HTTP ${res.status}`,
-        );
-      }
-      if (res.ok) {
-        lot = await res.json();
-      } else if (res.status === 404) {
+      const lotRes = await fetchCanonicalRecord(`${TRAILBASE_URL}/api/records/v1/auction_lots/${idStr}`);
+      if (lotRes.ok && lotRes.data) {
+        lot = lotRes.data;
+      } else if (lotRes.status === 404) {
         // Fallback: check if idStr is auction_id in auction_lots
-        const listRes = await fetch(
+        const listRes = await fetchCanonicalRecord(
           `${TRAILBASE_URL}/api/records/v1/auction_lots?auction_id=${encodeURIComponent(idStr)}`,
-          { signal: AbortSignal.timeout(2500) },
         );
-        if (listRes.status >= 500) {
-          throw new CanonicalAuthorityUnavailableError(
-            `TrailBase auction_lots list returned HTTP ${listRes.status}`,
-          );
-        }
-        if (listRes.ok) {
-          const listData = (await listRes.json()) as { records?: any[] };
-          if (listData?.records && listData.records.length > 0) {
-            lot = listData.records[0];
-          }
+        if (listRes.ok && listRes.data?.records && listRes.data.records.length > 0) {
+          lot = listRes.data.records[0];
         }
       }
 
@@ -289,33 +309,25 @@ export async function resolveCanonicalTarget(
         let eventTitle = `Lot #${lot.sequence_no ?? lot.id}`;
         let eventStartsAt: string | null = null;
         if (lot.event_id != null) {
-          const evRes = await fetch(`${TRAILBASE_URL}/api/records/v1/auction_events/${lot.event_id}`, {
-            signal: AbortSignal.timeout(2500),
-          });
-          if (evRes.status >= 500) {
-            throw new CanonicalAuthorityUnavailableError(
-              `TrailBase event lookup returned HTTP ${evRes.status}`,
-            );
-          }
-          if (evRes.ok) {
-            const ev = await evRes.json();
-            if (ev.status === "DRAFT" || ev.status === "CANCELLED" || ev.status === "WITHDRAWN") return null;
+          const evRes = await fetchCanonicalRecord(
+            `${TRAILBASE_URL}/api/records/v1/auction_events/${lot.event_id}`,
+          );
+          if (evRes.ok && evRes.data) {
+            const ev = evRes.data;
+            const evStatus = String(ev.status || "").toUpperCase();
+            if (evStatus === "DRAFT" || evStatus === "CANCELLED" || evStatus === "WITHDRAWN") return null;
             eventTitle = String(ev.title || eventTitle);
             eventStartsAt = ev.starts_at ? String(ev.starts_at) : null;
           }
         }
         let auctionTitle = "";
         if (lot.auction_id != null) {
-          const aucRes = await fetch(`${TRAILBASE_URL}/api/records/v1/auctions/${lot.auction_id}`, {
-            signal: AbortSignal.timeout(2500),
-          });
-          if (aucRes.status >= 500) {
-            throw new CanonicalAuthorityUnavailableError(
-              `TrailBase auction lookup returned HTTP ${aucRes.status}`,
-            );
-          }
-          if (aucRes.ok) {
-            const auc = await aucRes.json();
+          // Query approved public view auction_public (R4B-CANONICAL-AUTH-01)
+          const aucRes = await fetchCanonicalRecord(
+            `${TRAILBASE_URL}/api/records/v1/auction_public/${lot.auction_id}`,
+          );
+          if (aucRes.ok && aucRes.data) {
+            const auc = aucRes.data;
             const aucStatus = String(auc.status || "").toLowerCase();
             if (aucStatus === "draft" || aucStatus === "cancelled" || aucStatus === "withdrawn") return null;
             auctionTitle = String(auc.title || "");
@@ -335,19 +347,14 @@ export async function resolveCanonicalTarget(
         };
       }
 
-      // If not an auction_lot record, check if it's an auction that can be followed as a lot
-      const aucRes = await fetch(`${TRAILBASE_URL}/api/records/v1/auctions/${idStr}`, {
-        signal: AbortSignal.timeout(2500),
-      });
-      if (aucRes.status >= 500) {
-        throw new CanonicalAuthorityUnavailableError(
-          `TrailBase auction lookup returned HTTP ${aucRes.status}`,
-        );
-      }
-      if (aucRes.ok) {
-        const auc = await aucRes.json();
+      // If not an auction_lot record, check if it's an auction that can be followed as a lot (via auction_public)
+      const aucRes = await fetchCanonicalRecord(
+        `${TRAILBASE_URL}/api/records/v1/auction_public/${idStr}`,
+      );
+      if (aucRes.ok && aucRes.data) {
+        const auc = aucRes.data;
         const aucStatus = String(auc.status || "").toLowerCase();
-        if (auc && aucStatus !== "draft" && aucStatus !== "cancelled" && aucStatus !== "withdrawn") {
+        if (aucStatus !== "draft" && aucStatus !== "cancelled" && aucStatus !== "withdrawn") {
           return {
             targetType: "lot",
             targetId: idStr,
@@ -364,18 +371,14 @@ export async function resolveCanonicalTarget(
       }
       return null;
     } else if (targetType === "auction") {
-      const res = await fetch(`${TRAILBASE_URL}/api/records/v1/auctions/${idStr}`, {
-        signal: AbortSignal.timeout(2500),
-      });
-      if (res.status >= 500) {
-        throw new CanonicalAuthorityUnavailableError(
-          `TrailBase auction lookup returned HTTP ${res.status}`,
-        );
-      }
-      if (res.ok) {
-        const auc = await res.json();
+      // Query approved public view auction_public (R4B-CANONICAL-AUTH-01)
+      const res = await fetchCanonicalRecord(
+        `${TRAILBASE_URL}/api/records/v1/auction_public/${idStr}`,
+      );
+      if (res.ok && res.data) {
+        const auc = res.data;
         const aucStatus = String(auc.status || "").toLowerCase();
-        if (auc && aucStatus !== "draft" && aucStatus !== "cancelled" && aucStatus !== "withdrawn") {
+        if (aucStatus !== "draft" && aucStatus !== "cancelled" && aucStatus !== "withdrawn") {
           return {
             targetType: "auction",
             targetId: String(auc.id),
@@ -386,7 +389,7 @@ export async function resolveCanonicalTarget(
             title: String(auc.title || `Auction #${auc.id}`),
             startsAt: auc.started_at ? String(auc.started_at) : auc.ends_at ? String(auc.ends_at) : null,
             status: String(auc.status || "live"),
-            isLive: String(auc.status).toLowerCase() === "live",
+            isLive: aucStatus === "live",
           };
         }
       }

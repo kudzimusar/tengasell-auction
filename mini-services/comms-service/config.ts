@@ -17,14 +17,40 @@ export const BANNED_LEGACY_SECRETS: ReadonlySet<string> = new Set([
 export const MIN_INTERNAL_SECRET_LENGTH = 16;
 
 /**
+ * Validates whether the credential possesses sufficient cryptographic entropy.
+ * Rejects low-entropy strings, single-character repetitions, and obvious patterns.
+ */
+export function isSufficientEntropy(secret: string): boolean {
+  if (secret.length < MIN_INTERNAL_SECRET_LENGTH) return false;
+  // Unique character diversity check
+  const uniqueChars = new Set(secret);
+  if (uniqueChars.size < 6) return false;
+  // Repetitive or trivial patterns
+  const lower = secret.toLowerCase();
+  const trivialPatterns = [
+    "1234567890123456",
+    "abcdefghijklmnop",
+    "password12345678",
+    "adminadminadmin1",
+    "aaaaaaaaaaaaaaaa",
+    "bbbbbbbbbbbbbbbb",
+    "0000000000000000",
+  ];
+  for (const p of trivialPatterns) {
+    if (lower.includes(p)) return false;
+  }
+  return true;
+}
+
+/**
  * Validates whether the environment has a cryptographically sound internal service secret configured.
- * Strictly rejects unset, empty, short (<16 chars), and known legacy default credentials.
+ * Strictly rejects unset, empty, short (<16 chars), low-entropy, and known legacy default credentials.
  */
 export function isInternalSecretConfigured(): boolean {
   const secret = process.env.INTERNAL_COMMS_SECRET;
   if (!secret || typeof secret !== "string") return false;
   const trimmed = secret.trim();
-  if (trimmed.length < MIN_INTERNAL_SECRET_LENGTH) return false;
+  if (!isSufficientEntropy(trimmed)) return false;
   if (BANNED_LEGACY_SECRETS.has(trimmed)) return false;
   return true;
 }
