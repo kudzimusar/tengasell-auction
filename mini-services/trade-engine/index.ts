@@ -77,6 +77,7 @@ import {
   saveOwnedSearch,
   setOwnedSavedSearchAlerts,
 } from "./product-intelligence";
+import { createStrictTrailBaseStore } from "./trailbase-adapter";
 import {
   SearchValidationError,
   consumeSearchProjectionOutbox,

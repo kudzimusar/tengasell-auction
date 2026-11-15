@@ -284,6 +284,13 @@ def main() -> int:
         baseline = seed_historical_u16_data(db_path)
         print(f"   Seeded historical auction #{baseline['auction_id']}, vehicle #{baseline['vehicle_id']}, VIN {baseline['vin']}")
 
+        if ADMIN_PASSWORD:
+            subprocess.run(
+                [str(TRAIL_BIN), "--depot", str(depot_dir), "user", "change-password", "admin", ADMIN_PASSWORD],
+                check=True,
+                capture_output=True,
+            )
+
         # Verify baseline state via direct sqlite query
         conn = sqlite3.connect(str(db_path))
         auc_count_before = conn.execute("SELECT COUNT(*) FROM auctions").fetchone()[0]

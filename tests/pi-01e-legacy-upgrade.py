@@ -417,6 +417,13 @@ def run_u23_to_u25_upgrade_test() -> None:
         db_path = depot_dir / "data/main.db"
         baseline = seed_historical_u23_data(db_path)
 
+        if ADMIN_PASSWORD:
+            subprocess.run(
+                [str(TRAIL_BIN), "--depot", str(depot_dir), "user", "change-password", "admin", ADMIN_PASSWORD],
+                check=True,
+                capture_output=True,
+            )
+
         # Copy U24 and U25 migrations and upgraded config.textproto
         print("3. Copying migrations U24..U25 and upgraded config.textproto...")
         shutil.copy2(TEMPLATE_DEPOT / "config.textproto", depot_dir / "config.textproto")

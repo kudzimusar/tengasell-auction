@@ -100,9 +100,25 @@ test("publicProductBundle resolves physical TrailBase tables safely and fails cl
     vehicle_documents: [
       { id: 1, vehicle_id: 20, document_type: "REGISTRATION_BOOK", status: "VERIFIED", storage_ref: "private/secret-reg.pdf", document_number: "ZW-7788" },
     ],
-    vehicle_inspections: [{ id: 5, vehicle_id: 20, version: 1, lifecycle: "COMPLETED", grade: "B", grade_score: 82, roadworthy: 1, odometer_km: 88000 }],
+    vehicle_inspections: [{ id: 5, vehicle_id: 20, version: 1, lifecycle: "REVIEWED", grade: "B", grade_score: 82, roadworthy: 1, odometer_km: 88000 }],
     vehicle_eligibility: [{ id: 6, vehicle_id: 20, version: 1, status: "ELIGIBLE" }],
-    vehicle_inspection_findings: [],
+    vehicle_inspection_findings: [
+      {
+        id: 101,
+        inspection_id: 5,
+        category: "MECHANICAL",
+        component: "Brake Pads",
+        location: "Front Left",
+        severity: "MINOR",
+        description: "Front brake pads 60% worn",
+        repair_recommended: 1,
+        safety_critical: 0,
+        evidence_document_id: 999,
+        created_by: "inspector_bob_id",
+        created_at: "2026-02-01T00:00:00Z",
+        internal_notes: "PRIVATE_NOTE_LEAK_CHECK",
+      },
+    ],
     vehicle_history_events: [],
     vehicle_modifications: [],
     vehicle_equipment: [],
@@ -137,6 +153,146 @@ test("publicProductBundle resolves physical TrailBase tables safely and fails cl
   expect(JSON.stringify(pub)).not.toContain("1GD-SECRET-99");
   expect(JSON.stringify(pub)).not.toContain("private/secret-reg.pdf");
 
+  // Verify allowlisted finding DTO: only public fields exposed, sensitive internal fields stripped
+  expect(pub.findings).toHaveLength(1);
+  const f = pub.findings[0] as any;
+  expect(f.category).toBe("MECHANICAL");
+  expect(f.component).toBe("Brake Pads");
+  expect(f.location).toBe("Front Left");
+  expect(f.severity).toBe("MINOR");
+  expect(f.description).toBe("Front brake pads 60% worn");
+  expect(f.repair_recommended).toBe(true);
+  expect(f.safety_critical).toBe(false);
+  expect(f.id).toBeUndefined();
+  expect(f.inspection_id).toBeUndefined();
+  expect(f.created_by).toBeUndefined();
+  expect(f.evidence_document_id).toBeUndefined();
+  expect(f.created_at).toBeUndefined();
+  expect(f.internal_notes).toBeUndefined();
+  expect(JSON.stringify(pub)).not.toContain("PRIVATE_NOTE_LEAK_CHECK");
+  expect(JSON.stringify(pub)).not.toContain("inspector_bob_id");
+
   const draft = await publicProductBundle(mockStore, 11);
   expect(draft.product).toBeNull();
+});
+
+test("PI-G5-PUBLIC-FINDINGS-01: negative proof - unapproved or ineligible inspections never disclose findings or sentinels", async () => {
+  const unapprovedLifecycles = ["DRAFT", "SUBMITTED", "REJECTED", "SUPERSEDED"];
+
+  for (const lifecycle of unapprovedLifecycles) {
+    const sentinelDesc = `SENTINEL_UNAPPROVED_DESC_${lifecycle}_7766`;
+    const sentinelNote = `SENTINEL_DRAFT_FINDING_NOTE_${lifecycle}_9988`;
+    const sentinelPhoto = `SENTINEL_PRIVATE_PHOTO_${lifecycle}_5544`;
+
+    const tables: Record<string, any[]> = {
+      categories: [{ id: 2, category_key: "VEHICLE_PASSENGER_CAR", name: "Passenger Cars" }],
+      pi_category_labels: [{ category_id: 2, locale: "en", label: "Passenger Car" }],
+      pi_category_schema_versions: [{ id: 1, category_id: 2, schema_key: "VEHICLE_V1", status: "ACTIVE" }],
+      pi_attribute_definitions: [],
+      auctions: [{ id: 200, title: "Test Car", status: "live", current_price: 10000, city: "Harare", ends_at: "2030-01-01T00:00:00Z", product_category_id: 2, product_schema_version_id: 1 }],
+      product_intake_sessions: [{ id: 1, auction_id: 200, state: "PUBLISHED" }],
+      vehicles: [{ id: 50, auction_id: 200, make: "Toyota", model: "Corolla", model_year: 2019, fuel_type: "PETROL", transmission: "MANUAL", drivetrain: "FWD" }],
+      pi_effective_facts: [],
+      vehicle_documents: [],
+      vehicle_inspections: [{ id: 88, vehicle_id: 50, version: 1, lifecycle, grade: "C", grade_score: 70, roadworthy: 1, odometer_km: 50000 }],
+      vehicle_eligibility: [{ id: 89, vehicle_id: 50, version: 1, status: "ELIGIBLE" }],
+      vehicle_inspection_findings: [
+        {
+          id: 999,
+          inspection_id: 88,
+          category: "MECHANICAL",
+          component: "Engine",
+          severity: "CRITICAL",
+          description: sentinelDesc,
+          internal_notes: sentinelNote,
+          photo_ref: sentinelPhoto,
+        },
+      ],
+      vehicle_history_events: [],
+      vehicle_modifications: [],
+      vehicle_equipment: [],
+    };
+
+    const mockStore = {
+      async get(table: string, id: number | string) {
+        return (tables[table] ?? []).find((r) => String(r.id) === String(id)) ?? null;
+      },
+      async create() { return null; },
+      async update() { return false; },
+      async list(table: string, qs: string) {
+        const sp = new URLSearchParams(qs);
+        let rows = [...(tables[table] ?? [])];
+        for (const [k, v] of sp.entries()) {
+          const m = k.match(/^filter\[(\w+)\]\[\$(\w+)\]$/);
+          if (m && m[2] === "eq") rows = rows.filter((r) => String(r[m[1]]) === String(v));
+        }
+        return rows;
+      },
+    };
+
+    const pub = await publicProductBundle(mockStore, 200);
+    expect(pub.product).not.toBeNull();
+    expect(pub.product?.inspection_status).toBeNull();
+    expect(pub.product?.inspection_grade).toBeNull();
+    expect(pub.product?.finding_count).toBe(0);
+    expect(pub.findings).toEqual([]);
+
+    const serialized = JSON.stringify(pub);
+    expect(serialized).not.toContain(sentinelDesc);
+    expect(serialized).not.toContain(sentinelNote);
+    expect(serialized).not.toContain(sentinelPhoto);
+  }
+
+  // Also test when lifecycle is REVIEWED but eligibility is INELIGIBLE
+  const ineligibleSentinel = "SENTINEL_INELIGIBLE_FINDING_DESC_1122";
+  const ineligibleTables: Record<string, any[]> = {
+    categories: [{ id: 2, category_key: "VEHICLE_PASSENGER_CAR", name: "Passenger Cars" }],
+    pi_category_labels: [{ category_id: 2, locale: "en", label: "Passenger Car" }],
+    pi_category_schema_versions: [{ id: 1, category_id: 2, schema_key: "VEHICLE_V1", status: "ACTIVE" }],
+    pi_attribute_definitions: [],
+    auctions: [{ id: 300, title: "Ineligible Car", status: "live", current_price: 10000, city: "Harare", ends_at: "2030-01-01T00:00:00Z", product_category_id: 2, product_schema_version_id: 1 }],
+    product_intake_sessions: [{ id: 1, auction_id: 300, state: "PUBLISHED" }],
+    vehicles: [{ id: 60, auction_id: 300, make: "Nissan", model: "Sunny", model_year: 2015, fuel_type: "PETROL", transmission: "MANUAL", drivetrain: "FWD" }],
+    pi_effective_facts: [],
+    vehicle_documents: [],
+    vehicle_inspections: [{ id: 91, vehicle_id: 60, version: 1, lifecycle: "REVIEWED", grade: "REJECT", grade_score: 30, roadworthy: 0, odometer_km: 150000 }],
+    vehicle_eligibility: [{ id: 92, vehicle_id: 60, version: 1, status: "INELIGIBLE" }],
+    vehicle_inspection_findings: [
+      {
+        id: 1000,
+        inspection_id: 91,
+        category: "STRUCTURAL",
+        component: "Chassis Frame",
+        severity: "CRITICAL",
+        description: ineligibleSentinel,
+      },
+    ],
+    vehicle_history_events: [],
+    vehicle_modifications: [],
+    vehicle_equipment: [],
+  };
+
+  const ineligibleStore = {
+    async get(table: string, id: number | string) {
+      return (ineligibleTables[table] ?? []).find((r) => String(r.id) === String(id)) ?? null;
+    },
+    async create() { return null; },
+    async update() { return false; },
+    async list(table: string, qs: string) {
+      const sp = new URLSearchParams(qs);
+      let rows = [...(ineligibleTables[table] ?? [])];
+      for (const [k, v] of sp.entries()) {
+        const m = k.match(/^filter\[(\w+)\]\[\$(\w+)\]$/);
+        if (m && m[2] === "eq") rows = rows.filter((r) => String(r[m[1]]) === String(v));
+      }
+      return rows;
+    },
+  };
+
+  const ineligPub = await publicProductBundle(ineligibleStore, 300);
+  expect(ineligPub.product).not.toBeNull();
+  expect(ineligPub.product?.inspection_status).toBeNull();
+  expect(ineligPub.product?.finding_count).toBe(0);
+  expect(ineligPub.findings).toEqual([]);
+  expect(JSON.stringify(ineligPub)).not.toContain(ineligibleSentinel);
 });

@@ -6,6 +6,15 @@
 // projections without returning raw canonical vehicle rows.
 
 import type { VehicleIdentity, VehicleStore } from "./vehicle-authority";
+import { TrailBaseReadError } from "./trailbase-adapter";
+
+function isViewUnavailable(err: unknown, viewName: string): boolean {
+  if (err instanceof TrailBaseReadError) {
+    if (err.status === 405) return true;
+    if (err.status === 404 && err.table === viewName) return true;
+  }
+  return false;
+}
 
 export type PiSourceClass =
   | "SELLER_DECLARED"
@@ -481,10 +490,25 @@ export async function resolveVehicleInspectionProjection(
   vehicleId: number,
   auctionId?: number,
 ): Promise<Record<string, unknown> | null> {
-  const viewRows = await store
-    .list("pi_vehicle_inspection_projection", params({ "filter[vehicle_id][$eq]": vehicleId, limit: 1 }))
-    .catch(() => []);
-  if (viewRows[0]) return viewRows[0];
+  let viewRows: Array<Record<string, unknown>> = [];
+  try {
+    viewRows = await store.list(
+      "pi_vehicle_inspection_projection",
+      params({ "filter[vehicle_id][$eq]": vehicleId, limit: 1 }),
+    );
+  } catch (err) {
+    if (!isViewUnavailable(err, "pi_vehicle_inspection_projection")) {
+      throw err;
+    }
+  }
+
+  if (viewRows[0]) {
+    const row = viewRows[0];
+    if (row.inspection_status !== "REVIEWED" || row.eligibility_status !== "ELIGIBLE") {
+      return null;
+    }
+    return row;
+  }
 
   const [inspections, eligibilities] = await Promise.all([
     store.list("vehicle_inspections", params({ "filter[vehicle_id][$eq]": vehicleId, order: "-version", limit: 1 })),
@@ -492,8 +516,13 @@ export async function resolveVehicleInspectionProjection(
   ]);
   const insp = inspections[0] ?? null;
   const elig = eligibilities[0] ?? null;
+
+  if (!insp || insp.lifecycle !== "REVIEWED" || !elig || elig.status !== "ELIGIBLE") {
+    return null;
+  }
+
   let findings: Array<Record<string, unknown>> = [];
-  if (insp?.id != null) {
+  if (insp.id != null) {
     findings = await store.list(
       "vehicle_inspection_findings",
       params({ "filter[inspection_id][$eq]": insp.id, limit: 200 }),
@@ -509,18 +538,18 @@ export async function resolveVehicleInspectionProjection(
 
   return {
     vehicle_id: vehicleId,
-    auction_id: auctionId ?? insp?.auction_id ?? null,
-    inspection_id: insp?.id ?? null,
-    inspection_status: insp?.lifecycle ?? null,
-    inspection_grade: insp?.grade ?? null,
-    grade_score: insp?.grade_score ?? null,
-    roadworthy: insp?.roadworthy ?? null,
-    inspection_odometer_km: insp?.odometer_km ?? null,
+    auction_id: auctionId ?? insp.auction_id ?? null,
+    inspection_id: insp.id ?? null,
+    inspection_status: insp.lifecycle ?? null,
+    inspection_grade: insp.grade ?? null,
+    grade_score: insp.grade_score ?? null,
+    roadworthy: insp.roadworthy ?? null,
+    inspection_odometer_km: insp.odometer_km ?? null,
     major_defect_count: majorDefectCount,
     safety_critical: safetyCritical,
     structural_condition_summary: hasStructural ? "STRUCTURAL" : "NOT_PROVIDED",
     mechanical_condition_summary: hasMechanical ? "MECHANICAL" : "NOT_PROVIDED",
-    eligibility_status: elig?.status ?? null,
+    eligibility_status: elig.status ?? null,
   };
 }
 
@@ -528,9 +557,17 @@ export async function resolvePublicVehicleDocuments(
   store: VehicleStore,
   vehicleId: number,
 ): Promise<Array<Record<string, unknown>>> {
-  const viewDocs = await store
-    .list("pi_vehicle_document_public", params({ "filter[vehicle_id][$eq]": vehicleId, limit: 100 }))
-    .catch(() => []);
+  let viewDocs: Array<Record<string, unknown>> = [];
+  try {
+    viewDocs = await store.list(
+      "pi_vehicle_document_public",
+      params({ "filter[vehicle_id][$eq]": vehicleId, limit: 100 }),
+    );
+  } catch (err) {
+    if (!isViewUnavailable(err, "pi_vehicle_document_public")) {
+      throw err;
+    }
+  }
   if (viewDocs.length > 0) {
     return viewDocs.map((d) => ({
       vehicle_id: d.vehicle_id,
@@ -574,6 +611,21 @@ function sanitizePublicVehicleRow(row: Record<string, unknown>): Record<string, 
     seller_user: _sellerUser,
     ...rest
   } = row;
+
+  if (rest.inspection_status !== "REVIEWED" || rest.eligibility_status !== "ELIGIBLE") {
+    rest.inspection_status = null;
+    rest.inspection_grade = null;
+    rest.grade_score = null;
+    rest.roadworthy = null;
+    rest.inspection_odometer_km = null;
+    rest.major_defect_count = 0;
+    rest.safety_critical = 0;
+    rest.structural_condition_summary = "NOT_PROVIDED";
+    rest.mechanical_condition_summary = "NOT_PROVIDED";
+    rest.eligibility_status = null;
+    rest.finding_count = 0;
+  }
+
   return rest;
 }
 
@@ -581,13 +633,24 @@ export async function resolvePublicVehicleProjection(
   store: VehicleStore,
   auctionId: number,
 ): Promise<Record<string, unknown> | null> {
-  const [auction, intakeSessions, viewRows] = await Promise.all([
-    store.get("auctions", auctionId),
-    store.list("product_intake_sessions", params({ "filter[auction_id][$eq]": auctionId, limit: 5 })),
-    store
-      .list("pi_vehicle_public", params({ "filter[auction_id][$eq]": auctionId, limit: 1 }))
-      .catch(() => []),
-  ]);
+  let viewRows: Array<Record<string, unknown>> = [];
+  let auction: Record<string, unknown> | null = null;
+  let intakeSessions: Array<Record<string, unknown>> = [];
+
+  try {
+    [auction, intakeSessions, viewRows] = await Promise.all([
+      store.get("auctions", auctionId),
+      store.list("product_intake_sessions", params({ "filter[auction_id][$eq]": auctionId, limit: 5 })),
+      store
+        .list("pi_vehicle_public", params({ "filter[auction_id][$eq]": auctionId, limit: 1 }))
+        .catch((err) => {
+          if (!isViewUnavailable(err, "pi_vehicle_public")) throw err;
+          return [];
+        }),
+    ]);
+  } catch (err) {
+    throw err;
+  }
   const viewRow = viewRows[0] ?? null;
 
   if (auction) {
@@ -607,7 +670,7 @@ export async function resolvePublicVehicleProjection(
   const v = (await store.list("vehicles", params({ "filter[auction_id][$eq]": auctionId, limit: 1 })))[0] ?? null;
   if (!v || !auction) return null;
 
-  const [category, labels, schemas, effective, definitions, ip, docs, findings] = await Promise.all([
+  const [category, labels, schemas, effective, definitions, ip, docs] = await Promise.all([
     auction.product_category_id != null ? store.get("categories", Number(auction.product_category_id)) : Promise.resolve(null),
     auction.product_category_id != null
       ? store.list("pi_category_labels", params({ "filter[category_id][$eq]": auction.product_category_id, limit: 10 }))
@@ -619,7 +682,6 @@ export async function resolvePublicVehicleProjection(
     store.list("pi_attribute_definitions", params({ "filter[active][$eq]": 1, limit: 300 })),
     resolveVehicleInspectionProjection(store, Number(v.id), auctionId),
     resolvePublicVehicleDocuments(store, Number(v.id)),
-    Promise.resolve([] as Array<Record<string, unknown>>),
   ]);
 
   const enLabel = labels.find((l) => String(l.locale) === "en")?.label ?? category?.name ?? null;
@@ -630,8 +692,8 @@ export async function resolvePublicVehicleProjection(
   const effectiveOdometer =
     odometerFact?.value_decimal != null ? Math.round(Number(odometerFact.value_decimal)) : (v.odometer_km ?? null);
 
-  let findingCount = findings.length;
-  if (ip?.inspection_id != null) {
+  let findingCount = 0;
+  if (ip?.inspection_id != null && ip?.inspection_status === "REVIEWED" && ip?.eligibility_status === "ELIGIBLE") {
     const inspFindings = await store.list(
       "vehicle_inspection_findings",
       params({ "filter[inspection_id][$eq]": Number(ip.inspection_id), limit: 200 }),
@@ -739,10 +801,37 @@ export async function publicProductBundle(store: VehicleStore, auctionId: number
       conflict: fact.conflict_state,
     });
   }
-  let findings: any[] = [];
-  if (projection?.inspection_id) {
-    findings = await store.list("vehicle_inspection_findings", params({ "filter[inspection_id][$eq]": projection.inspection_id as number, order: "id", limit: 200 }));
+
+  let findings: Array<{
+    category: unknown;
+    component: unknown;
+    location: unknown;
+    severity: unknown;
+    description: unknown;
+    repair_recommended: boolean;
+    safety_critical: boolean;
+  }> = [];
+
+  if (
+    projection?.inspection_id != null &&
+    projection?.inspection_status === "REVIEWED" &&
+    projection?.eligibility_status === "ELIGIBLE"
+  ) {
+    const rawFindings = await store.list(
+      "vehicle_inspection_findings",
+      params({ "filter[inspection_id][$eq]": projection.inspection_id as number, order: "id", limit: 200 })
+    );
+    findings = rawFindings.map((finding) => ({
+      category: finding.category,
+      component: finding.component,
+      location: finding.location ?? null,
+      severity: finding.severity,
+      description: finding.description,
+      repair_recommended: Number(finding.repair_recommended ?? 0) === 1,
+      safety_critical: Number(finding.safety_critical ?? 0) === 1,
+    }));
   }
+
   return {
     product,
     facts: publicFacts,
@@ -750,7 +839,7 @@ export async function publicProductBundle(store: VehicleStore, auctionId: number
     history: history.map(({ asserted_by: _actor, created_by: _cby, ...row }) => row),
     modifications: modifications.map(({ asserted_by: _actor, created_by: _cby, ...row }) => row),
     equipment: equipment.map(({ asserted_by: _actor, created_by: _cby, ...row }) => row),
-    findings: findings.map(({ created_by: _actor, evidence_document_id: _evidence, ...row }) => row),
+    findings,
   };
 }
 

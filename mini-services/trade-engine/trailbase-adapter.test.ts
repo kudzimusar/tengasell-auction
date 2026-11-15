@@ -29,8 +29,11 @@ class MockTrailBaseServer {
   collectionFaults: Map<string, FaultRule> = new Map();
   recordFaults: Map<string, FaultRule> = new Map();
   patchFaults: Map<string, FaultRule> = new Map();
+  postFaults: Map<string, FaultRule> = new Map();
+  deleteFaults: Map<string, FaultRule> = new Map();
   loginFault: FaultRule | null = null;
   requireAuth = true;
+  delayMs = 0;
 
   resetData() {
     this.tables = {
@@ -53,8 +56,11 @@ class MockTrailBaseServer {
     this.collectionFaults.clear();
     this.recordFaults.clear();
     this.patchFaults.clear();
+    this.postFaults.clear();
+    this.deleteFaults.clear();
     this.loginFault = null;
     this.requireAuth = true;
+    this.delayMs = 0;
   }
 
   async start(): Promise<void> {
@@ -81,6 +87,14 @@ class MockTrailBaseServer {
   }
 
   private handle(req: IncomingMessage, res: ServerResponse) {
+    if (this.delayMs > 0) {
+      setTimeout(() => this.processRequest(req, res), this.delayMs);
+      return;
+    }
+    this.processRequest(req, res);
+  }
+
+  private processRequest(req: IncomingMessage, res: ServerResponse) {
     const parsedUrl = new URL(req.url ?? "/", `http://${req.headers.host}`);
     const pathname = parsedUrl.pathname;
     const method = (req.method ?? "GET").toUpperCase();
@@ -197,6 +211,13 @@ class MockTrailBaseServer {
 
     // Record POST
     if (id == null && method === "POST") {
+      const fault = this.postFaults.get(table);
+      if (fault) {
+        res.writeHead(fault.status, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(fault.body ?? { error: `Post fault on ${table}` }));
+        return;
+      }
+
       let bodyStr = "";
       req.on("data", (chunk) => {
         bodyStr += chunk;
@@ -260,6 +281,14 @@ class MockTrailBaseServer {
 
     // Record DELETE
     if (id != null && method === "DELETE") {
+      const faultKey = `${table}/${id}`;
+      const fault = this.deleteFaults.get(faultKey) ?? this.deleteFaults.get(table);
+      if (fault) {
+        res.writeHead(fault.status, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(fault.body ?? { error: `Delete fault on ${table}/${id}` }));
+        return;
+      }
+
       const numId = Number(id);
       tableMap.delete(id);
       if (Number.isSafeInteger(numId)) tableMap.delete(numId);
@@ -574,5 +603,118 @@ describe("PI-BASELINE-03-R4B: Production TrailBase Adapter Read-Error Propagatio
     await expect(productCompare(store, [81, 82])).rejects.toThrow(
       "not publicly available for comparison",
     );
+  });
+
+  // ── Mandatory Case 12: HTTP 429 Rate Limit throws TrailBaseReadError ──
+  test("Case 12: HTTP 429 Rate Limit throws TrailBaseReadError", async () => {
+    harness.collectionFaults.set("auctions", { status: 429, body: { error: "Too many requests" } });
+    await expect(store.list("auctions", "")).rejects.toThrow(TrailBaseReadError);
+    try {
+      await store.list("auctions", "");
+    } catch (err: any) {
+      expect(err).toBeInstanceOf(TrailBaseReadError);
+      expect(err.status).toBe(429);
+      expect(err.table).toBe("auctions");
+    }
+  });
+
+  // ── Mandatory Case 13: HTTP 502 Bad Gateway throws TrailBaseReadError ──
+  test("Case 13: HTTP 502 Bad Gateway throws TrailBaseReadError", async () => {
+    harness.recordFaults.set("auctions/99", { status: 502, body: { error: "Bad gateway" } });
+    await expect(store.get("auctions", 99)).rejects.toThrow(TrailBaseReadError);
+    try {
+      await store.get("auctions", 99);
+    } catch (err: any) {
+      expect(err).toBeInstanceOf(TrailBaseReadError);
+      expect(err.status).toBe(502);
+      expect(err.table).toBe("auctions");
+    }
+  });
+
+  // ── Mandatory Case 14: Request timeout / AbortSignal throws ──
+  test("Case 14: Request timeout / AbortSignal throws", async () => {
+    const timeoutStore = createStrictTrailBaseStore({
+      baseUrl: harness.url,
+      timeoutMs: 40,
+      getAdminToken: async () => harness.validToken,
+    });
+    harness.delayMs = 150;
+    await expect(timeoutStore.get("auctions", 1)).rejects.toThrow();
+    harness.delayMs = 0;
+  });
+
+  // ── Mandatory Case 15: Network connection failure propagates ──
+  test("Case 15: Network connection failure propagates", async () => {
+    const unreachableStore = createStrictTrailBaseStore({
+      baseUrl: "http://127.0.0.1:59998",
+      timeoutMs: 500,
+      getAdminToken: async () => harness.validToken,
+    });
+    await expect(unreachableStore.get("auctions", 1)).rejects.toThrow();
+  });
+
+  // ── Mandatory Case 16: Failed POST returns null, logs status, does not acknowledge ──
+  test("Case 16: Failed POST returns null, logs status, does not acknowledge", async () => {
+    harness.postFaults.set("product_search_facet_values", { status: 500, body: { error: "Insert constraint violation" } });
+    const createdId = await store.create("product_search_facet_values", { auction_id: 99 });
+    expect(createdId).toBeNull();
+  });
+
+  // ── Mandatory Case 17: Failed DELETE returns false, fails closed ──
+  test("Case 17: Failed DELETE returns false, fails closed", async () => {
+    harness.deleteFaults.set("product_search_facet_values/55", { status: 500, body: { error: "Delete lock conflict" } });
+    const removed = await store.remove("product_search_facet_values", 55);
+    expect(removed).toBe(false);
+  });
+
+  // ── Mandatory Case 18: Successful forced token refresh on 401/403 retry ──
+  test("Case 18: Successful forced token refresh on 401/403 retry", async () => {
+    let callCount = 0;
+    const dynamicStore = createStrictTrailBaseStore({
+      baseUrl: harness.url,
+      getAdminToken: async (force?: boolean) => {
+        callCount++;
+        // First token is invalid, forced token is valid
+        if (force) return harness.validToken;
+        return "expired-initial-token";
+      },
+    });
+
+    harness.tables.auctions.set(100, { id: 100, title: "Refreshed Auction" });
+    const record = await dynamicStore.get("auctions", 100);
+    expect(record).not.toBeNull();
+    expect(record?.id).toBe(100);
+    expect(callCount).toBe(2);
+  });
+
+  // ── Mandatory Case 19: Failed forced token refresh throws login error ──
+  test("Case 19: Failed forced token refresh throws login error", async () => {
+    const failingAuthStore = createStrictTrailBaseStore({
+      baseUrl: harness.url,
+      getAdminToken: async (force?: boolean) => {
+        if (force) throw new Error("Credential revocation on re-auth");
+        return "stale-token";
+      },
+    });
+
+    await expect(failingAuthStore.get("auctions", 1)).rejects.toThrow(
+      "Credential revocation on re-auth",
+    );
+  });
+
+  // ── Mandatory Case 20: Repeated auth failure bounds retries to exactly 1 ──
+  test("Case 20: Repeated auth failure bounds retries to exactly 1 and throws TrailBaseReadError", async () => {
+    let authAttempts = 0;
+    const alwaysRejectedStore = createStrictTrailBaseStore({
+      baseUrl: harness.url,
+      getAdminToken: async (_force?: boolean) => {
+        authAttempts++;
+        return "permanently-bad-token";
+      },
+    });
+
+    await expect(alwaysRejectedStore.get("auctions", 1)).rejects.toThrow(TrailBaseReadError);
+    // Initial call (1) + retry on 401 (1) = 2 attempts total (exactly 1 retry)
+    expect(authAttempts).toBe(2);
   });
 });

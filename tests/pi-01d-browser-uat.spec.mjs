@@ -464,6 +464,13 @@ async function main() {
   const depotDir = path.join(tmpRoot, "traildepot");
   const dataDir = path.join(depotDir, "data");
   fs.cpSync(TEMPLATE_DEPOT, depotDir, { recursive: true });
+  if (ADMIN_PASSWORD && fs.existsSync(TRAIL_BIN)) {
+    try {
+      execSync(`"${TRAIL_BIN}" --depot "${depotDir}" user change-password admin "${ADMIN_PASSWORD}"`, { stdio: "ignore" });
+    } catch {
+      /* ignore if binary not ready */
+    }
+  }
 
   const tbPort = await getFreePort();
   const tePort = await getFreePort();

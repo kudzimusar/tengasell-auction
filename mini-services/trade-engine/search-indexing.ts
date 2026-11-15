@@ -539,20 +539,17 @@ async function refreshAuctionFacets(
     const def = definitions.find((d: any) => String(d.attribute_key).toUpperCase() === key);
     if (!def) continue;
 
-    // Strict privacy and searchability boundaries:
-    // Only public, searchable attributes with an active filter class can be projected into product_search_facet_values.
-    if (def.searchable === 0 || def.searchable === false) continue;
-    if (
-      def.privacy_policy_key === "VEHICLE_IDENTIFIER_CLASSIFIED" ||
-      def.privacy_policy_key === "PRODUCT_INTERNAL" ||
-      def.privacy_policy_key === "PRODUCT_RESTRICTED"
-    ) {
-      continue;
-    }
+    // Strict privacy and searchability boundaries (PI-G4-FACET-ALLOWLIST-01):
+    // Strict allowlist: Only PRODUCT_PUBLIC attributes may be projected into facets
+    if (def.privacy_policy_key !== "PRODUCT_PUBLIC") continue;
+
+    // Strict searchability: Only explicitly searchable attributes (1 or true)
+    if (Number(def.searchable) !== 1 && def.searchable !== true) continue;
 
     const bind = bindings.find((b: any) => Number(b.attribute_id) === Number(def.id));
     const filterClass = bind?.filter_class ?? def.filter_class ?? "NONE";
-    if (filterClass === "NONE") continue;
+    const allowedFilterClasses = new Set(["PRIMARY", "SECONDARY", "ADVANCED"]);
+    if (!allowedFilterClasses.has(filterClass)) continue;
 
     const hasVal =
       (val.text != null && String(val.text).trim() !== "") ||

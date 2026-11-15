@@ -40,7 +40,6 @@ jobs:
       DATABASE_URL: file:${{ github.workspace }}/ci.db
       NEXT_TELEMETRY_DISABLED: "1"
       CI: "true"
-      ADMIN_PASSWORD: "${{ vars.TENGASELL_CI_ADMIN_PASSWORD || 'Tengasell#2025' }}"
 
     steps:
       - name: Checkout exact source head
@@ -48,6 +47,15 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
+
+      - name: Configure ephemeral CI admin secret
+        run: |
+          ADMIN_PW="${{ secrets.TENGASELL_CI_ADMIN_PASSWORD || vars.TENGASELL_CI_ADMIN_PASSWORD }}"
+          if [ -z "$ADMIN_PW" ]; then
+            ADMIN_PW=$(openssl rand -hex 16)
+          fi
+          echo "::add-mask::$ADMIN_PW"
+          echo "ADMIN_PASSWORD=$ADMIN_PW" >> "$GITHUB_ENV"
 
       - name: Publish LR01-R1 regression pending status
         if: github.job == 'build-and-smoke'
@@ -135,6 +143,7 @@ jobs:
         run: |
           TMP_DEPOT=$(mktemp -d)
           cp -R mini-services/trailbase-db/traildepot/config.textproto mini-services/trailbase-db/traildepot/migrations "$TMP_DEPOT/"
+          .tools/tb/trail --depot "$TMP_DEPOT" user change-password admin "$ADMIN_PASSWORD"
           (.tools/tb/trail --depot "$TMP_DEPOT" run --address 127.0.0.1:18401 --stderr-logging >/tmp/tb-ci-smoke.log 2>&1 &
            TB_PID=$!
            trap 'kill "$TB_PID" 2>/dev/null || true; rm -rf "$TMP_DEPOT"' EXIT

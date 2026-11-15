@@ -202,6 +202,16 @@ function queryMainDb<T = any>(sql: string, ...args: any[]): T[] {
   }
 }
 
+function mutateMainDb(sql: string, ...args: any[]): void {
+  const db = new Database(path.join(dataDir, "main.db"));
+  try {
+    db.exec("PRAGMA busy_timeout = 5000;");
+    db.run(sql, ...args);
+  } finally {
+    db.close();
+  }
+}
+
 function killChild(proc: ChildProcess | null): void {
   if (!proc || proc.killed) return;
   try {
@@ -219,6 +229,16 @@ beforeAll(async () => {
   depotDir = path.join(tmpRoot, "traildepot");
   dataDir = path.join(depotDir, "data");
   fs.cpSync(TEMPLATE_DEPOT, depotDir, { recursive: true });
+  if (ADMIN_PASSWORD && fs.existsSync(TRAIL_BIN)) {
+    try {
+      require("node:child_process").execSync(
+        `"${TRAIL_BIN}" --depot "${depotDir}" user change-password admin "${ADMIN_PASSWORD}"`,
+        { stdio: "ignore" },
+      );
+    } catch {
+      /* ignore */
+    }
+  }
 
   tbPort = await getFreePort();
   tePort = await getFreePort();
@@ -1183,3 +1203,79 @@ test("Case 10: Fail-closed ADMIN_PASSWORD check across trailbase-admin.ts and tr
   }
   expect(stderrChunks.join("")).toContain("ADMIN_PASSWORD environment variable is required");
 }, 30_000);
+
+test("Case 11 (PI-G5-RESERVE-HTTP-PROOF-01): Runtime anonymous reserve confidentiality proof with secret sentinel", async () => {
+  const RESERVE_SENTINEL = 987654.32;
+  const testAuctionId = STATE.auctionAId!;
+  expect(testAuctionId).toBeGreaterThan(0);
+
+  // Directly set secret reserve sentinel on the live Auction A
+  mutateMainDb(
+    "UPDATE auctions SET reserve_price = ?, reserve_disclosure = 'RESERVE_APPLIES' WHERE id = ?",
+    RESERVE_SENTINEL,
+    testAuctionId,
+  );
+
+  // 1. Anonymous GET /api/records/v1/auctions -> 401 or 403 denied
+  const anonAuctionsList = await tbJson("GET", "/api/records/v1/auctions", null);
+  expect(anonAuctionsList.status === 401 || anonAuctionsList.status === 403).toBe(true);
+
+  // 2. Anonymous GET /api/records/v1/auctions/:id -> 401 or 403 denied
+  const anonAuctionRecord = await tbJson("GET", `/api/records/v1/auctions/${testAuctionId}`, null);
+  expect(anonAuctionRecord.status === 401 || anonAuctionRecord.status === 403).toBe(true);
+
+  // 3. Anonymous GET /api/records/v1/auction_public -> HTTP 200, but reserve_price and sentinel are strictly absent
+  const anonPublicList = await tbJson("GET", "/api/records/v1/auction_public", null);
+  expect(anonPublicList.status).toBe(200);
+  const pubText = JSON.stringify(anonPublicList.json);
+  expect(pubText).not.toContain("987654.32");
+  expect(pubText).not.toContain("reserve_price");
+
+  const pubItem = (anonPublicList.json?.records ?? []).find((r: any) => Number(r.id) === testAuctionId);
+  if (pubItem) {
+    expect(pubItem.reserve_disclosure).toBe("RESERVE_APPLIES");
+    expect((pubItem as any).reserve_price).toBeUndefined();
+  }
+
+  // 4. Anonymous Socket.IO RPC product:public:get -> reserve sentinel absent, reserve_disclosure = RESERVE_APPLIES
+  const pubGet = await rpc<any>(anonSocket, "product:public:get", { auctionId: testAuctionId });
+  expect(pubGet.ok).toBe(true);
+  const pubGetStr = JSON.stringify(pubGet);
+  expect(pubGetStr).not.toContain("987654.32");
+  expect(pubGetStr).not.toContain("reserve_price");
+  expect(pubGet.bundle?.product?.reserve_disclosure).toBe("RESERVE_APPLIES");
+
+  // Ensure Auction C is live for 2-item comparison
+  await tbJson("PATCH", `/api/records/v1/auctions/${STATE.auctionCId}`, users.admin.token, {
+    status: "live",
+  });
+
+  // 5. Anonymous Socket.IO RPC product:compare -> reserve sentinel absent
+  const cmp = await rpc<any>(anonSocket, "product:compare", {
+    auctionIds: [testAuctionId, STATE.auctionCId!],
+  });
+  expect(cmp.ok).toBe(true);
+  const cmpStr = JSON.stringify(cmp);
+  expect(cmpStr).not.toContain("987654.32");
+  expect(cmpStr).not.toContain("reserve_price");
+
+  // 6. Authenticated unrelated party (Seller B) -> raw auctions denied or filtered, sentinel absent
+  const unrelatedGetRaw = await tbJson("GET", `/api/records/v1/auctions/${testAuctionId}`, users.sellerB.token);
+  expect(
+    unrelatedGetRaw.status === 401 ||
+    unrelatedGetRaw.status === 403 ||
+    unrelatedGetRaw.status === 404 ||
+    (unrelatedGetRaw.status === 200 && (unrelatedGetRaw.json?.reserve_price == null))
+  ).toBe(true);
+  const unrelatedPublicGet = await rpc<any>(users.sellerB.socket, "product:public:get", { auctionId: testAuctionId });
+  expect(JSON.stringify(unrelatedPublicGet)).not.toContain("987654.32");
+
+  // 7. Seller A (owner) or Admin -> authorized access preserved, reserve_price is accessible
+  const sellerGetRaw = await tbJson("GET", `/api/records/v1/auctions/${testAuctionId}`, users.sellerA.token);
+  expect(sellerGetRaw.status).toBe(200);
+  expect(Number(sellerGetRaw.json?.reserve_price)).toBe(RESERVE_SENTINEL);
+
+  const adminGetRaw = await tbJson("GET", `/api/records/v1/auctions/${testAuctionId}`, users.admin.token);
+  expect(adminGetRaw.status).toBe(200);
+  expect(Number(adminGetRaw.json?.reserve_price)).toBe(RESERVE_SENTINEL);
+}, 35_000);
