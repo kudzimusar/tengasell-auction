@@ -8,7 +8,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { HttpError, bodyStr, bodyOptStr, type AddRoute } from "../http";
 import { get, insert } from "../db";
-import { WHATSAPP_APP_SECRET } from "../config";
+import { WHATSAPP_APP_SECRET, TELEGRAM_BOT_TOKEN } from "../config";
 import { getProvider, isMock } from "../providers";
 import { moderateAndLog, counterpartOnThread } from "../relay";
 import { recordMockChat } from "../providers/mock";
@@ -30,10 +30,9 @@ function verifiedLinkByHandle(channel: string, handle: string): LinkRow | null {
   );
 }
 
-/** X-Hub-Signature-256 verification (only enforced when WHATSAPP_APP_SECRET is set). */
+/** X-Hub-Signature-256 verification (fails closed when secret is absent or invalid). */
 function verifyWaSignature(rawBody: string | null, header: string | null): boolean {
-  if (!WHATSAPP_APP_SECRET) return true;
-  if (!header || !rawBody) return false;
+  if (!WHATSAPP_APP_SECRET || !header || !rawBody) return false;
   const expected = `sha256=${createHmac("sha256", WHATSAPP_APP_SECRET).update(rawBody).digest("hex")}`;
   const a = Buffer.from(header);
   const b = Buffer.from(expected);
@@ -109,9 +108,33 @@ function recordDelivery(queueId: number, event: string, meta: Record<string, unk
   ]);
 }
 
+function verifyTelegramSecret(candidate: string | null | undefined, configured: string | undefined): boolean {
+  if (!configured || configured.length < 16) return false;
+  if (!candidate || typeof candidate !== "string") return false;
+  const candidateBuf = Buffer.from(candidate, "utf8");
+  const configuredBuf = Buffer.from(configured, "utf8");
+  if (candidateBuf.length !== configuredBuf.length) return false;
+  try {
+    return timingSafeEqual(candidateBuf, configuredBuf);
+  } catch {
+    return false;
+  }
+}
+
 export function registerHookRoutes(on: AddRoute): void {
   // ── Telegram Bot API webhook ─────────────────────────────────────────────
   on("POST", "/hooks/telegram", (ctx) => {
+    if (isMock("telegram") || !TELEGRAM_BOT_TOKEN) {
+      throw new HttpError(403, "external telegram webhook disabled in mock mode", "provider_disabled");
+    }
+    const configuredSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+    if (!configuredSecret || configuredSecret.length < 16) {
+      throw new HttpError(403, "external telegram webhook secret not configured", "provider_disabled");
+    }
+    const secretToken = ctx.req.headers.get("x-telegram-bot-api-secret-token");
+    if (!verifyTelegramSecret(secretToken, configuredSecret)) {
+      throw new HttpError(401, "invalid telegram webhook secret", "bad_secret");
+    }
     const provider = getProvider("telegram");
     if (!provider.parseInbound) throw new HttpError(501, "telegram inbound parsing unavailable", "no_parser");
     const parsed = provider.parseInbound(ctx.body);
@@ -139,6 +162,9 @@ export function registerHookRoutes(on: AddRoute): void {
 
   // ── WhatsApp Cloud API webhook (signature verified when secret set) ───────
   on("POST", "/hooks/whatsapp", (ctx) => {
+    if (isMock("whatsapp") || !WHATSAPP_APP_SECRET) {
+      throw new HttpError(403, "external whatsapp webhook disabled in mock mode", "provider_disabled");
+    }
     if (!verifyWaSignature(ctx.rawBody, ctx.req.headers.get("x-hub-signature-256"))) {
       throw new HttpError(401, "invalid x-hub-signature-256", "bad_signature");
     }

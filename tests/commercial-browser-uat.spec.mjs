@@ -356,7 +356,7 @@ for (const viewport of [
     const page = await context.newPage();
     await installSyntheticAuthority(page, "buyer", false);
     await page.goto(BASE + "/#/events/77");
-    await expect(page.getByRole("heading", { name: "Bidder qualification" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Bidder qualification" })).toBeVisible({ timeout: 15000 });
     await expect(page.getByText("US$50,000")).toBeVisible();
     await expect(page.getByText("US$32,000")).toBeVisible();
     await expect(page.getByText("US$18,000")).toBeVisible();

@@ -16,6 +16,13 @@ import { spawn } from "node:child_process";
 import net from "node:net";
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
+
+// Auto-provision a high-entropy ephemeral internal token for zero-cost local development
+// when none is set in the environment. Production requires explicit external provisioning.
+if (!process.env.INTERNAL_COMMS_SECRET && process.env.NODE_ENV !== "production") {
+  process.env.INTERNAL_COMMS_SECRET = `tgs_ephemeral_${crypto.randomBytes(24).toString("hex")}`;
+}
 
 const HOME = process.env.HOME ?? "/home/z";
 const PROJECT = process.cwd();

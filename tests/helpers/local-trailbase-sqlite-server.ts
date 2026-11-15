@@ -58,7 +58,7 @@ function serializeRow(row: Record<string, unknown> | null): Record<string, unkno
   return out;
 }
 
-class LocalTrailbaseSqlite {
+export class LocalTrailbaseSqlite {
   db!: Database;
   tables = new Map<string, Map<string, string>>();
   revokedTokens = new Set<string>();
@@ -752,6 +752,21 @@ class LocalTrailbaseSqlite {
     // Single record endpoints
     if (idParam !== undefined) {
       if (req.method === "GET") {
+        if (table === "auctions") {
+          const user = this.resolveBearerUser(req);
+          if (!user) {
+            return json({ error: "Unauthorized: table 'auctions' requires Bearer authentication" }, 401);
+          }
+          const row = this.db
+            .query(`SELECT * FROM "${table}" WHERE id = ? LIMIT 1`)
+            .get(this.convertParam(table, "id", idParam) as never) as Record<string, unknown> | null;
+          if (!row) return json({ error: "Not found" }, 404);
+          if (!user.admin && row.user && toBase64(row.user) !== toBase64(user.id)) {
+            return json({ error: "Forbidden: read access denied by ACL" }, 403);
+          }
+          return json(serializeRow(row));
+        }
+
         const row = this.db
           .query(`SELECT * FROM "${table}" WHERE id = ? LIMIT 1`)
           .get(this.convertParam(table, "id", idParam) as never) as Record<string, unknown> | null;
@@ -785,8 +800,19 @@ class LocalTrailbaseSqlite {
 
     // Collection GET
     if (req.method === "GET") {
+      let authUser: { id: Uint8Array; username: string; admin: boolean } | null = null;
+      if (table === "auctions") {
+        authUser = this.resolveBearerUser(req);
+        if (!authUser) {
+          return json({ error: "Unauthorized: table 'auctions' requires Bearer authentication" }, 401);
+        }
+      }
       const whereParts: string[] = [];
       const whereValues: unknown[] = [];
+      if (table === "auctions" && authUser && !authUser.admin) {
+        whereParts.push(`"user" = ?`);
+        whereValues.push(authUser.id);
+      }
 
       for (const [key, value] of url.searchParams.entries()) {
         const m = key.match(/^filter\[([^\]]+)\]\[(\$[a-z]+)\]$/);
@@ -895,13 +921,14 @@ class LocalTrailbaseSqlite {
   }
 }
 
-const store = new LocalTrailbaseSqlite();
-const server = Bun.serve({
-  port: PORT,
-  hostname: "127.0.0.1",
-  fetch(req) {
-    return store.handle(req);
-  },
-});
-
-console.log(`[local-trailbase-sqlite] listening on http://127.0.0.1:${server.port}`);
+if (import.meta.main) {
+  const store = new LocalTrailbaseSqlite();
+  const server = Bun.serve({
+    port: PORT,
+    hostname: "127.0.0.1",
+    fetch(req) {
+      return store.handle(req);
+    },
+  });
+  console.log(`[local-trailbase-sqlite] listening on http://127.0.0.1:${server.port}`);
+}

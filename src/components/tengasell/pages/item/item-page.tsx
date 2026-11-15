@@ -89,6 +89,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   AuctionCommsNotice,
+  AuctionFollowButton,
   Avatar,
   BidRules,
   Countdown,
@@ -227,7 +228,9 @@ export default function ItemPage({ id }: { id: number }) {
     }
   }, [id]);
   useEffect(() => {
-    void loadOffers();
+    queueMicrotask(() => {
+      void loadOffers();
+    });
   }, [loadOffers]);
   // realtime: engine broadcasts offer:update (submit/accept/counter/expire)
   useEffect(
@@ -784,6 +787,15 @@ export default function ItemPage({ id }: { id: number }) {
                 </a>
               </Button>
             </div>
+            <AuctionFollowButton
+              targetType="auction"
+              targetId={auction.id}
+              auctionId={auction.id}
+              title={auction.title}
+              startsAt={auction.ends_at}
+              testId="item-follow-auction-btn"
+              className="w-full"
+            />
             <AuctionCommsNotice context="item" compact testId="item-comms-notice" />
           </div>
 
@@ -941,10 +953,12 @@ function MakeOfferDialog({
 
   useEffect(() => {
     if (open) {
-      setValue("");
-      setMessage("");
-      setError(null);
-      setSuccess(null);
+      queueMicrotask(() => {
+        setValue("");
+        setMessage("");
+        setError(null);
+        setSuccess(null);
+      });
     }
   }, [open]);
 
@@ -1440,9 +1454,11 @@ function CounterOfferDialog({
 
   useEffect(() => {
     if (open) {
-      setValue(offer.amount % 1 === 0 ? String(offer.amount) : offer.amount.toFixed(2));
-      setMessage("");
-      setError(null);
+      queueMicrotask(() => {
+        setValue(offer.amount % 1 === 0 ? String(offer.amount) : offer.amount.toFixed(2));
+        setMessage("");
+        setError(null);
+      });
     }
   }, [open, offer.amount]);
 
@@ -1735,8 +1751,10 @@ function RetractBidDialog({
 
   useEffect(() => {
     if (bid) {
-      setReason("");
-      setError(null);
+      queueMicrotask(() => {
+        setReason("");
+        setError(null);
+      });
     }
   }, [bid]);
 

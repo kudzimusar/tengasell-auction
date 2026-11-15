@@ -2,6 +2,7 @@
 import { expect, test } from "bun:test";
 import {
   addVehicleDocument,
+  projectPublicVehicleBundle,
   reviewVehicleDocument,
   saveVehicleIntake,
   startVehicleInspection,
@@ -124,4 +125,69 @@ test("document ownership and reviewer/inspector verification authority are separ
   expect(accepted.ok).toBe(true);
   expect(accepted.document?.status).toBe("VERIFIED");
   expect(accepted.document?.verified_by).toBe("reviewer");
+});
+
+test("projectPublicVehicleBundle enforces R4A-R2-DOSSIER-04 privacy and lifecycle gates", () => {
+  const rawBundle = {
+    vehicle: {
+      id: 1,
+      auction_id: 10,
+      make: "Toyota",
+      model: "Hilux",
+      vin: "JH4KA8260MC000001",
+      registration_number: "ABC-1234",
+    },
+    inspection: {
+      id: 5,
+      vehicle_id: 1,
+      lifecycle: "IN_PROGRESS",
+      overall_grade: "A",
+    },
+    findings: [
+      { id: 1, inspection_id: 5, component: "Brakes", severity: "LOW", description: "Pads at 60%", photos: ["s3://leak/photo1.jpg"] },
+    ],
+    provenance: {
+      internal_owner_id: "private-user-123",
+      import_record_no: "IMP-8899",
+    },
+    permissions: { canBid: true },
+  };
+
+  // In-progress inspection must withhold inspection and findings
+  const publicInProgress = projectPublicVehicleBundle(rawBundle);
+  expect(publicInProgress.inspection).toBeNull();
+  expect(publicInProgress.inspections).toEqual([]);
+  expect(publicInProgress.findings).toEqual([]);
+  expect(publicInProgress.provenance).toEqual({});
+  expect(publicInProgress.vehicle.vin_masked).toBe("JH4***0001");
+  expect(publicInProgress.vehicle.has_vin).toBe(true);
+
+  // Completed inspection discloses inspection and findings, but strips photos & provenance
+  const completedBundle = {
+    ...rawBundle,
+    inspection: {
+      ...rawBundle.inspection,
+      lifecycle: "COMPLETED",
+    },
+  };
+  const publicCompleted = projectPublicVehicleBundle(completedBundle);
+  expect(publicCompleted.inspection).not.toBeNull();
+  expect(publicCompleted.inspection?.lifecycle).toBe("COMPLETED");
+  expect(publicCompleted.findings.length).toBe(1);
+  expect(publicCompleted.findings[0].description).toBe("Pads at 60%");
+  expect((publicCompleted.findings[0] as any).photos).toBeUndefined();
+  expect(publicCompleted.provenance).toEqual({});
+
+  // Reviewed inspection (the canonical DB state) also discloses inspection and findings
+  const reviewedBundle = {
+    ...rawBundle,
+    inspection: {
+      ...rawBundle.inspection,
+      lifecycle: "REVIEWED",
+    },
+  };
+  const publicReviewed = projectPublicVehicleBundle(reviewedBundle);
+  expect(publicReviewed.inspection).not.toBeNull();
+  expect(publicReviewed.inspection?.lifecycle).toBe("REVIEWED");
+  expect(publicReviewed.findings.length).toBe(1);
 });

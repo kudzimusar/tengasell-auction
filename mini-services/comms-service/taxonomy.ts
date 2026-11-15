@@ -24,6 +24,15 @@ export const EVENTS: EventDef[] = [
   { key: "auction.ending_soon", group: "Auctions", labelEn: "Ending soon", labelJa: "まもなく終了", defaults: TX() },
   { key: "auction.sold", group: "Auctions", labelEn: "Auction sold", labelJa: "落札成立", defaults: TX() },
   { key: "auction.question", group: "Auctions", labelEn: "Buyer question", labelJa: "購入者からの質問", defaults: TX() },
+  // Live Events & First-Party Reminders (TENGASELL-LIVE-COMMS-UX-01 R3A)
+  { key: "auction.event.FollowConfirmed", group: "Auctions", labelEn: "Event follow confirmed", labelJa: "イベントフォロー確認", defaults: OFF() },
+  { key: "auction.event.Starting24h", group: "Auctions", labelEn: "Event starting in 24h", labelJa: "開催24時間前リマインダー", defaults: OFF() },
+  { key: "auction.event.Starting1h", group: "Auctions", labelEn: "Event starting in 1h", labelJa: "開催1時間前リマインダー", defaults: OFF() },
+  { key: "auction.event.LiveNow", group: "Auctions", labelEn: "Event live now", labelJa: "ライブ配信開始", defaults: OFF() },
+  { key: "auction.lot.UpNext", group: "Auctions", labelEn: "Followed lot up next", labelJa: "注目ロットまもなく開始", defaults: OFF() },
+  { key: "auction.lot.OpenNow", group: "Auctions", labelEn: "Followed lot open now", labelJa: "注目ロット入札開始", defaults: OFF() },
+  { key: "auction.live.Outbid", group: "Auctions", labelEn: "Live floor outbid", labelJa: "ライブ競り上回り通知", defaults: OFF() },
+  { key: "auction.live.Result", group: "Auctions", labelEn: "Live lot result", labelJa: "ライブ結果通知", defaults: OFF() },
   // Offers (Gap-8 Best-Offer)
   { key: "offer.received", group: "Offers", labelEn: "Offer received", labelJa: "オファー受信", defaults: TX() },
   { key: "offer.responded", group: "Offers", labelEn: "Offer response", labelJa: "オファー返答", defaults: TX() },

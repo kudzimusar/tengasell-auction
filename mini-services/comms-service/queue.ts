@@ -162,6 +162,16 @@ export async function dispatchRow(id: number): Promise<void> {
 
   updateRow(row.id, { status: "sending", subject });
 
+  if (row.channel === "in_app") {
+    updateRow(row.id, {
+      status: "sent",
+      sent_at: nowIso(),
+      provider_msg_id: `in_app_${row.id}`,
+      last_error: null,
+    });
+    return;
+  }
+
   const provider = getProvider(row.channel);
   let res;
   try {

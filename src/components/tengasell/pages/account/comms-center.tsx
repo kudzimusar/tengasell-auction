@@ -22,6 +22,8 @@ import {
   Copy,
   ExternalLink,
   KeyRound,
+  RotateCw,
+  ShieldAlert,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -46,7 +48,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
-import { AuctionCommsRoadmapCard, EmptyState, ErrorState, SectionHeader } from "@/components/tengasell/ui";
+import { AuctionCommsRoadmapCard, EmptyState, ErrorState, SectionHeader, StatusPill } from "@/components/tengasell/ui";
 import { toast } from "@/hooks/use-toast";
 import { useI18n } from "@/lib/tengasell/i18n";
 import { useResource } from "@/lib/tengasell/hooks";
@@ -237,6 +239,9 @@ export function CommsSection({ user }: { user: CurrentUser }) {
       />
 
       <AuctionCommsRoadmapCard />
+
+      {/* ── First-Party Auction Subscriptions & Reminders (UX-01 R3A) ─── */}
+      <SubscriptionsSection token={token} onUpdated={notifications.reload} />
 
       {/* ── 1. linked channels ─────────────────────────────────────── */}
       <div className="min-w-0 space-y-3">
@@ -821,8 +826,10 @@ function PreferencesCard({
       marketing[ch] = on;
       marketingInitial[ch] = on;
     }
-    setDraft({ rows, initial, marketing, marketingInitial });
-    setSaveError(null);
+    queueMicrotask(() => {
+      setDraft({ rows, initial, marketing, marketingInitial });
+      setSaveError(null);
+    });
   }, [prefs.data]);
 
   const dirty = useMemo(() => {
@@ -1225,6 +1232,181 @@ function NotificationsCard({
           })}
         </ul>
       )}
+    </div>
+  );
+}
+
+// ── SubscriptionsSection (UX-01 R3A) ──────────────────────────────────────────
+
+interface SubscriptionsPayload {
+  ok: boolean;
+  externalLocked: boolean;
+  subscriptions: Array<{
+    id: number;
+    userId: string;
+    targetType: "event" | "lot" | "auction";
+    targetId: string;
+    eventId: number | null;
+    lotId: number | null;
+    sessionId: number | null;
+    auctionId: number | null;
+    title: string;
+    startsAt: string | null;
+    status: "active" | "unsubscribed";
+    channels: string[];
+    notify24h: boolean;
+    notify1h: boolean;
+    notifyLive: boolean;
+    createdAt: string | null;
+    updatedAt: string | null;
+  }>;
+}
+
+function SubscriptionsSection({ token, onUpdated }: { token: string; onUpdated?: () => void }) {
+  const [evaluating, setEvaluating] = useState(false);
+  const subs = useResource<SubscriptionsPayload>(
+    async () => commsFetch<SubscriptionsPayload>(token, "/subscriptions"),
+    [token],
+  );
+
+  const handleEvaluate = async () => {
+    setEvaluating(true);
+    try {
+      const res = await commsFetch<{
+        ok: boolean;
+        dispatched: number;
+        skippedDuplicates: number;
+        items?: any[];
+      }>(token, "/reminders", { method: "POST", body: JSON.stringify({}) });
+      if (res.ok) {
+        toast({
+          title: "Reminders evaluated",
+          description: `Dispatched ${res.dispatched} notification(s); ${res.skippedDuplicates} skipped as already delivered.`,
+        });
+        subs.reload();
+        onUpdated?.();
+      }
+    } catch (err) {
+      toast({
+        title: "Evaluation failed",
+        description: (err as Error).message,
+        variant: "destructive",
+      });
+    } finally {
+      setEvaluating(false);
+    }
+  };
+
+  const handleUnsubscribe = async (targetType: string, targetId: string) => {
+    try {
+      const res = await commsFetch<{ ok: boolean }>(
+        token,
+        `/subscriptions?targetType=${encodeURIComponent(targetType)}&targetId=${encodeURIComponent(targetId)}`,
+        { method: "DELETE" },
+      );
+      if (res.ok) {
+        toast({
+          title: "Unsubscribed",
+          description: "Auction reminder removed.",
+        });
+        subs.reload();
+        onUpdated?.();
+      }
+    } catch (err) {
+      toast({
+        title: "Unsubscribe failed",
+        description: (err as Error).message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const items = (subs.data?.subscriptions ?? []).filter((s) => s.status === "active");
+
+  return (
+    <div data-testid="comms-subscriptions-section" className="min-w-0 space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <SectionHeader
+          title="Active Auction Subscriptions & Reminders"
+          subtitle="First-party in-app reminders for followed live auction events, run-list lots, and timed listings."
+        />
+        <Button
+          data-testid="comms-evaluate-reminders-btn"
+          variant="outline"
+          size="sm"
+          className="min-h-10"
+          disabled={evaluating || subs.loading}
+          onClick={handleEvaluate}
+        >
+          {evaluating ? (
+            <Loader2 className="me-1.5 size-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <RotateCw className="me-1.5 size-4" aria-hidden="true" />
+          )}
+          Check due reminders
+        </Button>
+      </div>
+
+      <div className="rounded-card border border-border bg-raised p-4 space-y-3">
+        <div className="flex items-start gap-2.5">
+          <ShieldAlert className="size-5 shrink-0 text-teal mt-0.5" aria-hidden="true" />
+          <div className="space-y-1">
+            <p className="text-label font-bold text-foreground">
+              External Channel Governance Gate (R3A Phase)
+            </p>
+            <p className="text-caption text-muted-foreground">
+              In-app reminders are active in your notification tray. External messaging delivery (Email, Telegram, WhatsApp, Messenger) remains strictly locked to mock sandbox adapters ($0 spend) pending external gateway certification.
+            </p>
+          </div>
+        </div>
+
+        {subs.loading && !subs.data ? (
+          <div className="space-y-2 py-4">
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+          </div>
+        ) : items.length === 0 ? (
+          <div className="rounded-control border border-dashed border-border p-6 text-center">
+            <p className="text-body font-semibold text-foreground">No active auction subscriptions</p>
+            <p className="mt-1 text-caption text-muted-foreground">
+              Follow upcoming auction events or run-list vehicles to receive automated 24h, 1h, and live start alerts.
+            </p>
+          </div>
+        ) : (
+          <ul className="divide-y divide-border/60 list-none p-0 m-0" aria-label="Auction Subscriptions">
+            {items.map((sub) => (
+              <li key={sub.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                <div className="min-w-0 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <StatusPill tone="good" size="xs">
+                      {sub.targetType.toUpperCase()}
+                    </StatusPill>
+                    <span className="text-label font-bold text-foreground truncate">
+                      {sub.title || `${sub.targetType} #${sub.targetId}`}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 text-caption text-muted-foreground">
+                    {sub.startsAt && <span>Starts: {formatDateTime(sub.startsAt)}</span>}
+                    <span className="text-border">·</span>
+                    <span>Reminders: {[sub.notify24h && "24h", sub.notify1h && "1h", sub.notifyLive && "Live"].filter(Boolean).join(", ")}</span>
+                    <span className="text-border">·</span>
+                    <span className="text-teal font-medium">In-app tray</span>
+                  </div>
+                </div>
+                <Button
+                  data-testid="comms-unsubscribe-btn"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-9"
+                  onClick={() => handleUnsubscribe(sub.targetType, sub.targetId)}
+                >
+                  Unsubscribe
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }

@@ -17,6 +17,42 @@ import { ensureCommsService } from "./services-spawn";
 
 const COMMS_BASE = process.env.COMMS_URL ?? "http://127.0.0.1:3005";
 
+const BANNED_LEGACY_SECRETS: ReadonlySet<string> = new Set([
+  "tgs_sec_internal_comms_default_k9102",
+  "secret",
+  "password",
+  "changeme",
+]);
+
+export function isSufficientEntropy(secret: string): boolean {
+  if (secret.length < 16) return false;
+  const uniqueChars = new Set(secret);
+  if (uniqueChars.size < 6) return false;
+  const lower = secret.toLowerCase();
+  const trivialPatterns = [
+    "1234567890123456",
+    "abcdefghijklmnop",
+    "password12345678",
+    "adminadminadmin1",
+    "aaaaaaaaaaaaaaaa",
+    "bbbbbbbbbbbbbbbb",
+    "0000000000000000",
+  ];
+  for (const p of trivialPatterns) {
+    if (lower.includes(p)) return false;
+  }
+  return true;
+}
+
+export function getInternalCommsSecret(): string | null {
+  const secret = process.env.INTERNAL_COMMS_SECRET;
+  if (!secret || typeof secret !== "string") return null;
+  const trimmed = secret.trim();
+  if (!isSufficientEntropy(trimmed)) return null;
+  if (BANNED_LEGACY_SECRETS.has(trimmed)) return null;
+  return trimmed;
+}
+
 const COMMS_TIMEOUT_MS = 10_000;
 
 export function commsJson(body: unknown, status = 200): NextResponse {
@@ -52,7 +88,18 @@ export async function commsProxy(
     );
   }
 
-  // ── 2. ensure the comms-service is alive (lazy spawn + health) ────
+  // ── 2. ensure internal service secret is configured & comms-service is alive ────
+  const secret = getInternalCommsSecret();
+  if (!secret) {
+    return commsJson(
+      {
+        ok: false,
+        error: "Internal communications service authentication is not configured.",
+      },
+      503,
+    );
+  }
+
   const healthy = await ensureCommsService();
   if (!healthy) {
     return commsJson(
@@ -72,6 +119,7 @@ export async function commsProxy(
     method,
     headers: {
       "x-tgs-user": user.username,
+      "x-tgs-internal-token": secret,
       ...(hasBody ? { "Content-Type": "application/json" } : {}),
     },
     signal: AbortSignal.timeout(COMMS_TIMEOUT_MS),
@@ -130,6 +178,17 @@ export async function adminCommsProxy(
     );
   }
 
+  const secret = getInternalCommsSecret();
+  if (!secret) {
+    return commsJson(
+      {
+        ok: false,
+        error: "Internal communications service authentication is not configured.",
+      },
+      503,
+    );
+  }
+
   const healthy = await ensureCommsService();
   if (!healthy) {
     return commsJson(
@@ -148,6 +207,7 @@ export async function adminCommsProxy(
     headers: {
       "x-tgs-user": user.username,
       "x-tgs-admin": "1",
+      "x-tgs-internal-token": secret,
       ...(hasBody ? { "Content-Type": "application/json" } : {}),
     },
     signal: AbortSignal.timeout(COMMS_TIMEOUT_MS),

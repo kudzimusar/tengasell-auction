@@ -449,6 +449,167 @@ const CONTENT: Record<string, { en: TemplateDef; ja: TemplateDef }> = {
       short: "🔎 保存検索「{searchName}」の一致：{auctionTitle} {amount}。{deepUrl}",
     },
   },
+  // ── Live Events & First-Party Reminders (R3A) ────────────────────────────
+  "auction.event.FollowConfirmed": {
+    en: {
+      subject: "Reminder set for “{title}”",
+      paragraphs: [
+        "You are following “{title}” on Tengasell.",
+        "First-party in-app reminders (24h, 1h, and live start) are active in your Notifications tray.",
+      ],
+      cta: "View event",
+      short: "🔔 Following “{title}” — in-app start reminders active. {deepUrl}",
+    },
+    ja: {
+      subject: "「{title}」のリマインダーを設定しました",
+      paragraphs: [
+        "「{title}」をフォローしました。",
+        "開始24時間前・1時間前・開始時のアプリ内通知を受け取ります。",
+      ],
+      cta: "イベントを見る",
+      short: "🔔 「{title}」をフォロー中 — アプリ内リマインダー有効。{deepUrl}",
+    },
+  },
+  "auction.event.Starting24h": {
+    en: {
+      subject: "Starts within 24 hours: “{title}”",
+      paragraphs: [
+        "“{title}” opens within the next 24 hours ({startsAt}).",
+        "Inspect vehicles in the run list and verify buyer qualification ahead of the live floor.",
+      ],
+      cta: "Open event",
+      short: "📅 Starts within 24h: “{title}” ({startsAt}). {deepUrl}",
+    },
+    ja: {
+      subject: "24時間以内に開始：「{title}」",
+      paragraphs: [
+        "「{title}」は24時間以内に開始します（{startsAt}）。",
+        "事前に入札資格と出品リストをご確認ください。",
+      ],
+      cta: "イベントを開く",
+      short: "📅 24時間以内に開始：「{title}」（{startsAt}）。{deepUrl}",
+    },
+  },
+  "auction.event.Starting1h": {
+    en: {
+      subject: "Starting within 1 hour: “{title}”",
+      paragraphs: [
+        "“{title}” goes live within 1 hour ({startsAt}).",
+        "Join the live auction room early to check synchronization and bidder capacity.",
+      ],
+      cta: "Enter live room",
+      short: "⏰ Starting within 1h: “{title}” ({startsAt}). {deepUrl}",
+    },
+    ja: {
+      subject: "1時間以内に開始：「{title}」",
+      paragraphs: [
+        "「{title}」は1時間以内にライブ開始します（{startsAt}）。",
+        "ライブ会場で事前に入室・資格確認を行ってください。",
+      ],
+      cta: "ライブ会場へ",
+      short: "⏰ 1時間以内に開始：「{title}」（{startsAt}）。{deepUrl}",
+    },
+  },
+  "auction.event.LiveNow": {
+    en: {
+      subject: "LIVE NOW: “{title}”",
+      paragraphs: [
+        "“{title}” is live now on Tengasell.",
+        "Enter the bidding floor to view the current lot and submit real-time proxy bids.",
+      ],
+      cta: "Join live room",
+      short: "🟢 LIVE NOW: “{title}” — join the bidding floor: {deepUrl}",
+    },
+    ja: {
+      subject: "ライブ配信開始：「{title}」",
+      paragraphs: [
+        "「{title}」のライブ競りが開始しました。",
+        "今すぐ会場に入室してリアルタイム入札に参加してください。",
+      ],
+      cta: "ライブに参加",
+      short: "🟢 ライブ開始：「{title}」— 会場へ：{deepUrl}",
+    },
+  },
+  "auction.lot.UpNext": {
+    en: {
+      subject: "Up next on the block: “{title}”",
+      paragraphs: [
+        "Your followed lot “{title}” is queued next on the live floor.",
+        "Open the live room so you do not miss opening calls.",
+      ],
+      cta: "Open live room",
+      short: "⏭ Up next: “{title}” on the live floor. {deepUrl}",
+    },
+    ja: {
+      subject: "まもなく開始：「{title}」",
+      paragraphs: [
+        "フォロー中のロット「{title}」が次に出品されます。",
+        "ライブ会場を開いて開始をお待ちください。",
+      ],
+      cta: "ライブ会場へ",
+      short: "⏭ まもなく開始：「{title}」。{deepUrl}",
+    },
+  },
+  "auction.lot.OpenNow": {
+    en: {
+      subject: "Bidding open now: “{title}”",
+      paragraphs: [
+        "Your followed lot “{title}” is open for live bidding now.",
+        "Submit your maximum proxy bid in the live room before the hammer falls.",
+      ],
+      cta: "Bid live now",
+      short: "🔨 Open now: “{title}” — bidding live! {deepUrl}",
+    },
+    ja: {
+      subject: "入札受付開始：「{title}」",
+      paragraphs: [
+        "フォロー中のロット「{title}」のライブ入札が開始しました。",
+        "ハンマーが落ちる前に上限額を入札してください。",
+      ],
+      cta: "今すぐ入札",
+      short: "🔨 入札開始：「{title}」— ライブ参加：{deepUrl}",
+    },
+  },
+  "auction.live.Outbid": {
+    en: {
+      subject: "Outbid in live room: “{title}”",
+      paragraphs: [
+        "Another qualified bidder topped your maximum bid on “{title}” (current {amount}).",
+        "Return to the live floor immediately before the 20-second clock closes.",
+      ],
+      cta: "Raise live bid",
+      short: "⚡ Outbid on “{title}” (now {amount}). {deepUrl}",
+    },
+    ja: {
+      subject: "ライブ競りで上回られました：「{title}」",
+      paragraphs: [
+        "「{title}」で他者の入札が上回りました（現在 {amount}）。",
+        "20秒カウントダウン終了前に再入札してください。",
+      ],
+      cta: "再入札する",
+      short: "⚡ 上回られました：「{title}」（現在 {amount}）。{deepUrl}",
+    },
+  },
+  "auction.live.Result": {
+    en: {
+      subject: "Live lot closed: “{title}”",
+      paragraphs: [
+        "Live bidding closed on “{title}” ({outcome}).",
+        "Open your notifications or order view for settlement details.",
+      ],
+      cta: "View result",
+      short: "🏁 Closed: “{title}” ({outcome}). {deepUrl}",
+    },
+    ja: {
+      subject: "ライブ結果：「{title}」",
+      paragraphs: [
+        "「{title}」のライブ競りが終了しました（{outcome}）。",
+        "詳細・注文状況はアプリ内でご確認ください。",
+      ],
+      cta: "結果を見る",
+      short: "🏁 終了：「{title}」（{outcome}）。{deepUrl}",
+    },
+  },
 };
 
 // ── {param} interpolation ─────────────────────────────────────────────────────
