@@ -568,7 +568,6 @@ export async function resolvePublicVehicleDocuments(
       throw err;
     }
   }
-
   if (viewDocs.length > 0) {
     return viewDocs.map((d) => ({
       vehicle_id: d.vehicle_id,

@@ -44,6 +44,8 @@ export class LocalStore {
   private seed = buildSeed();
   // ── Gap-8 demo stores (in-memory) ────
   private savedSearchRows: import("../types").SavedSearch[] = [];
+  private savedSearchFacetRows: import("../types").SavedSearchFacet[] = [];
+  private nextFacetId = 100;
   private offers: import("../types").Offer[] = [];
   private rooms: import("../types").LiveSession[] = [
     {
@@ -238,6 +240,18 @@ export class LocalStore {
     if (q.maxPrice != null) list = list.filter((a) => a.current_price <= q.maxPrice!);
     if (q.condition) list = list.filter((a) => a.condition === q.condition);
     if (q.city) list = list.filter((a) => a.city === q.city);
+    if (q.make) list = list.filter((a) => (a.make ? a.make.toLowerCase() === q.make?.toLowerCase() : a.title.toLowerCase().includes(q.make!.toLowerCase())));
+    if (q.model) list = list.filter((a) => (a.model ? a.model.toLowerCase() === q.model?.toLowerCase() : a.title.toLowerCase().includes(q.model!.toLowerCase())));
+    if (q.minYear != null) list = list.filter((a) => (a.year != null ? a.year >= q.minYear! : true));
+    if (q.maxYear != null) list = list.filter((a) => (a.year != null ? a.year <= q.maxYear! : true));
+    if (q.minKm != null) list = list.filter((a) => (a.mileage != null ? a.mileage >= q.minKm! : true));
+    if (q.maxKm != null) list = list.filter((a) => (a.mileage != null ? a.mileage <= q.maxKm! : true));
+    if (q.bodyType) list = list.filter((a) => a.body_type?.toLowerCase() === q.bodyType?.toLowerCase());
+    if (q.fuel) list = list.filter((a) => a.fuel?.toLowerCase() === q.fuel?.toLowerCase());
+    if (q.transmission) list = list.filter((a) => a.transmission?.toLowerCase() === q.transmission?.toLowerCase());
+    if (q.drivetrain) list = list.filter((a) => a.drivetrain?.toLowerCase() === q.drivetrain?.toLowerCase());
+    if (q.exteriorColour) list = list.filter((a) => a.exterior_colour?.toLowerCase() === q.exteriorColour?.toLowerCase());
+    if (q.inspectionGrade) list = list.filter((a) => a.inspection_grade?.toLowerCase() === q.inspectionGrade?.toLowerCase());
     if (q.featured) list = list.filter((a) => a.featured === 1);
     if (q.endingWithinMinutes != null) {
       const until = Date.now() + q.endingWithinMinutes * 60_000;
@@ -891,6 +905,8 @@ export class LocalStore {
       name: input.name.slice(0, 80),
       query: input.query?.trim() || null,
       category: input.category || null,
+      category_key: input.categoryKey || null,
+      product_category_id: input.productCategoryId ?? null,
       min_price: input.minPrice ?? null,
       max_price: input.maxPrice ?? null,
       alerts: input.alerts === false ? 0 : 1,
@@ -899,11 +915,283 @@ export class LocalStore {
       updated_at: now,
     };
     this.savedSearchRows.unshift(row);
+    if (input.facets && Array.isArray(input.facets)) {
+      for (const f of input.facets) {
+        this.savedSearchFacetRows.push({
+          id: this.nextFacetId++,
+          saved_search_id: row.id,
+          attribute_key: f.attributeKey,
+          operator: f.operator,
+          option_value: f.optionValue ?? null,
+          min_numeric: f.minNumeric ?? null,
+          max_numeric: f.maxNumeric ?? null,
+          boolean_value: f.booleanValue != null ? (f.booleanValue ? 1 : 0) : null,
+          text_value: f.textValue ?? null,
+          created_at: now,
+        });
+      }
+    }
     return row;
   }
 
   async deleteSearch(id: number): Promise<void> {
     this.savedSearchRows = this.savedSearchRows.filter((s) => s.id !== id);
+    this.savedSearchFacetRows = this.savedSearchFacetRows.filter((f) => f.saved_search_id !== id);
+  }
+
+  async savedSearchFacets(savedSearchId: number): Promise<import("../types").SavedSearchFacet[]> {
+    return this.savedSearchFacetRows.filter((f) => f.saved_search_id === savedSearchId);
+  }
+
+  async categoryFilters(categoryKey?: string): Promise<import("../types").CategoryFilterMetadata> {
+    const targetKey = categoryKey || "VEHICLE_PASSENGER_CAR";
+    const isPhone = targetKey.toUpperCase().includes("PHONE");
+    if (isPhone) {
+      return {
+        categoryKey: targetKey,
+        categoryId: 200,
+        schemaVersionId: 20,
+        filters: [
+          { attributeKey: "BRAND", label: "Brand", dataType: "STRING", filterClass: "PRIMARY", unit: null, options: ["Apple", "Samsung", "Google", "Xiaomi"], range: null, operators: ["EQ", "IN"] },
+          { attributeKey: "PHONE_MODEL", label: "Model", dataType: "STRING", filterClass: "PRIMARY", unit: null, options: ["iPhone 15 Pro", "Galaxy S24", "Pixel 8 Pro"], range: null, operators: ["EQ", "IN"] },
+          { attributeKey: "STORAGE_GB", label: "Storage", dataType: "INTEGER", filterClass: "PRIMARY", unit: "GB", options: null, range: { min: 64, max: 1024 }, operators: ["EQ", "MIN", "MAX"] },
+          { attributeKey: "RAM_GB", label: "RAM", dataType: "INTEGER", filterClass: "SECONDARY", unit: "GB", options: null, range: { min: 4, max: 24 }, operators: ["EQ", "MIN"] },
+          { attributeKey: "BATTERY_HEALTH_PCT", label: "Battery Health", dataType: "INTEGER", filterClass: "SECONDARY", unit: "%", options: null, range: { min: 50, max: 100 }, operators: ["MIN"] },
+          { attributeKey: "NETWORK_GENERATION", label: "Network", dataType: "ENUM", filterClass: "SECONDARY", unit: null, options: ["4G_LTE", "5G"], range: null, operators: ["EQ"] },
+        ],
+      };
+    }
+    return {
+      categoryKey: targetKey,
+      categoryId: 100,
+      schemaVersionId: 10,
+      filters: [
+        { attributeKey: "VEHICLE_CLASS", label: "Vehicle Class", dataType: "ENUM", filterClass: "PRIMARY", unit: null, options: ["PASSENGER_CAR", "LIGHT_COMMERCIAL", "HEAVY_VEHICLE", "MOTORCYCLE"], range: null, operators: ["EQ", "IN"] },
+        { attributeKey: "MAKE", label: "Make", dataType: "STRING", filterClass: "PRIMARY", unit: null, options: ["Toyota", "Nissan", "Honda", "Mercedes-Benz", "BMW", "Ford", "Isuzu", "Mazda"], range: null, operators: ["EQ", "IN"] },
+        { attributeKey: "MODEL", label: "Model", dataType: "STRING", filterClass: "PRIMARY", unit: null, options: ["Hilux", "Land Cruiser", "Corolla", "X-Trail", "Fit", "Ranger", "D-Max"], range: null, operators: ["EQ", "IN"] },
+        { attributeKey: "YEAR", label: "Year", dataType: "INTEGER", filterClass: "PRIMARY", unit: null, options: null, range: { min: 1995, max: 2026 }, operators: ["EQ", "MIN", "MAX", "BETWEEN"] },
+        { attributeKey: "ODOMETER_KM", label: "Mileage (km)", dataType: "INTEGER", filterClass: "PRIMARY", unit: "km", options: null, range: { min: 0, max: 500000 }, operators: ["MAX", "BETWEEN"] },
+        { attributeKey: "BODY_TYPE", label: "Body Type", dataType: "ENUM", filterClass: "PRIMARY", unit: null, options: ["SEDAN", "SUV", "HATCHBACK", "PICKUP", "COUPE", "WAGON", "VAN", "MINIVAN"], range: null, operators: ["EQ", "IN"] },
+        { attributeKey: "LOCATION", label: "Location", dataType: "STRING", filterClass: "PRIMARY", unit: null, options: ["Harare", "Bulawayo", "Mutare", "Gweru"], range: null, operators: ["EQ", "IN"] },
+        { attributeKey: "FUEL_TYPE", label: "Fuel Type", dataType: "ENUM", filterClass: "SECONDARY", unit: null, options: ["PETROL", "DIESEL", "HYBRID", "ELECTRIC"], range: null, operators: ["EQ", "IN"] },
+        { attributeKey: "TRANSMISSION", label: "Transmission", dataType: "ENUM", filterClass: "SECONDARY", unit: null, options: ["AUTOMATIC", "MANUAL", "CVT"], range: null, operators: ["EQ", "IN"] },
+        { attributeKey: "DRIVETRAIN", label: "Drivetrain", dataType: "ENUM", filterClass: "SECONDARY", unit: null, options: ["AWD_4WD", "FWD", "RWD"], range: null, operators: ["EQ", "IN"] },
+        { attributeKey: "EXTERIOR_COLOUR", label: "Exterior Colour", dataType: "STRING", filterClass: "SECONDARY", unit: null, options: ["White", "Silver", "Black", "Grey", "Blue", "Red"], range: null, operators: ["EQ", "IN"] },
+        { attributeKey: "INSPECTION_GRADE", label: "Inspection Grade", dataType: "ENUM", filterClass: "SECONDARY", unit: null, options: ["GRADE_A", "GRADE_B", "GRADE_C", "GRADE_D", "UNGRADED"], range: null, operators: ["EQ", "IN"] },
+        { attributeKey: "STEERING_SIDE", label: "Steering", dataType: "ENUM", filterClass: "ADVANCED", unit: null, options: ["RHD", "LHD"], range: null, operators: ["EQ"] },
+        { attributeKey: "ENGINE_DISPLACEMENT_CC", label: "Engine (cc)", dataType: "INTEGER", filterClass: "ADVANCED", unit: "cc", options: null, range: { min: 660, max: 6000 }, operators: ["MIN", "MAX"] },
+        { attributeKey: "IMPORT_STATE", label: "Import Status", dataType: "ENUM", filterClass: "ADVANCED", unit: null, options: ["DOMESTIC_REGISTERED", "BONDED_WAREHOUSE", "IN_TRANSIT", "DIRECT_IMPORT"], range: null, operators: ["EQ", "IN"] },
+        { attributeKey: "ACCIDENT_HISTORY", label: "Accident History", dataType: "ENUM", filterClass: "ADVANCED", unit: null, options: ["NO_ACCIDENTS_REPORTED", "MINOR_REPAIRED", "STRUCTURAL_DAMAGE_REPORTED"], range: null, operators: ["EQ"] },
+      ],
+    };
+  }
+
+  async compareProducts(auctionIds: number[]): Promise<import("../types").ProductComparisonResponse> {
+    const boundedIds = auctionIds.slice(0, 3);
+    const auctions = boundedIds.map((id) => this.findAuction(id)).filter((a): a is import("../types").Auction => Boolean(a));
+    const items = auctions.map((a) => {
+      const isVeh = a.category === "cars" || a.category === "vehicles" || a.product_category_id === 100;
+      return {
+        auctionId: a.id,
+        title: a.title,
+        categoryKey: isVeh ? "VEHICLE_PASSENGER_CAR" : "PHONE_SMARTPHONE",
+        categoryTitle: isVeh ? "Vehicles" : "Electronics",
+        imageUrl: a.images?.[0] || null,
+        currentPrice: a.current_price,
+        buyNowPrice: a.buy_now_price ?? null,
+        condition: a.condition,
+        location: a.city,
+        endsAt: a.ends_at,
+        reserveDisclosure: a.reserve_price ? (a.current_price >= a.reserve_price ? "RESERVE_MET" : "RESERVE_NOT_MET") : "NO_RESERVE",
+      };
+    });
+
+    const isAllVehicle = items.every((i) => i.categoryKey.startsWith("VEHICLE"));
+    const isAllPhone = items.every((i) => i.categoryKey.startsWith("PHONE"));
+    const scope: "SAME_LEAF" | "RELATED_FAMILY" | "UNRELATED" =
+      isAllVehicle || isAllPhone ? "SAME_LEAF" : "UNRELATED";
+
+    const sections: import("../types").ProductComparisonResponse["sections"] = [];
+
+    // Identity
+    if (scope === "SAME_LEAF" && isAllVehicle) {
+      sections.push({
+        name: "Identity",
+        rows: [
+          {
+            key: "YEAR",
+            label: "Year",
+            dataType: "INTEGER",
+            cells: auctions.map((a) => ({
+              auctionId: a.id,
+              status: a.year ? "KNOWN" : "UNKNOWN",
+              rawValue: a.year ?? null,
+              displayValue: a.year ? String(a.year) : "—",
+            })),
+          },
+          {
+            key: "MAKE",
+            label: "Make",
+            dataType: "STRING",
+            cells: auctions.map((a) => ({
+              auctionId: a.id,
+              status: a.make ? "KNOWN" : "UNKNOWN",
+              rawValue: a.make ?? null,
+              displayValue: a.make ?? "—",
+            })),
+          },
+          {
+            key: "MODEL",
+            label: "Model",
+            dataType: "STRING",
+            cells: auctions.map((a) => ({
+              auctionId: a.id,
+              status: a.model ? "KNOWN" : "UNKNOWN",
+              rawValue: a.model ?? null,
+              displayValue: a.model ?? "—",
+            })),
+          },
+        ],
+      });
+
+      sections.push({
+        name: "Configuration & Powertrain",
+        rows: [
+          {
+            key: "BODY_TYPE",
+            label: "Body Type",
+            dataType: "ENUM",
+            cells: auctions.map((a) => ({
+              auctionId: a.id,
+              status: a.body_type ? "KNOWN" : "UNKNOWN",
+              rawValue: a.body_type ?? null,
+              displayValue: a.body_type ?? "—",
+            })),
+          },
+          {
+            key: "ODOMETER_KM",
+            label: "Mileage",
+            dataType: "INTEGER",
+            unit: "km",
+            cells: auctions.map((a) => ({
+              auctionId: a.id,
+              status: a.mileage != null ? "KNOWN" : "UNKNOWN",
+              rawValue: a.mileage ?? null,
+              displayValue: a.mileage != null ? `${Number(a.mileage).toLocaleString()} km` : "—",
+            })),
+          },
+          {
+            key: "FUEL_TYPE",
+            label: "Fuel",
+            dataType: "ENUM",
+            cells: auctions.map((a) => ({
+              auctionId: a.id,
+              status: a.fuel ? "KNOWN" : "UNKNOWN",
+              rawValue: a.fuel ?? null,
+              displayValue: a.fuel ?? "—",
+            })),
+          },
+          {
+            key: "TRANSMISSION",
+            label: "Transmission",
+            dataType: "ENUM",
+            cells: auctions.map((a) => ({
+              auctionId: a.id,
+              status: a.transmission ? "KNOWN" : "UNKNOWN",
+              rawValue: a.transmission ?? null,
+              displayValue: a.transmission ?? "—",
+            })),
+          },
+          {
+            key: "DRIVETRAIN",
+            label: "Drivetrain",
+            dataType: "ENUM",
+            cells: auctions.map((a) => ({
+              auctionId: a.id,
+              status: a.drivetrain ? "KNOWN" : "UNKNOWN",
+              rawValue: a.drivetrain ?? null,
+              displayValue: a.drivetrain ?? "—",
+            })),
+          },
+        ],
+      });
+
+      sections.push({
+        name: "Condition & Provenance",
+        rows: [
+          {
+            key: "INSPECTION_GRADE",
+            label: "Inspection Grade",
+            dataType: "ENUM",
+            cells: auctions.map((a) => ({
+              auctionId: a.id,
+              status: a.inspection_grade ? "KNOWN" : "UNKNOWN",
+              rawValue: a.inspection_grade ?? null,
+              displayValue: a.inspection_grade ?? "Ungraded",
+            })),
+          },
+          {
+            key: "ROADWORTHY",
+            label: "Roadworthy",
+            dataType: "BOOLEAN",
+            cells: auctions.map((a) => ({
+              auctionId: a.id,
+              status: a.roadworthy != null ? "KNOWN" : "UNKNOWN",
+              rawValue: a.roadworthy ?? null,
+              displayValue: a.roadworthy != null ? (a.roadworthy ? "Yes" : "No") : "—",
+            })),
+          },
+        ],
+      });
+    }
+
+    // Commercial section (always present)
+    sections.push({
+      name: "Commercial & Bidding",
+      rows: [
+        {
+          key: "CURRENT_PRICE",
+          label: "Current Bid",
+          dataType: "CURRENCY",
+          unit: "USD",
+          cells: auctions.map((a) => ({
+            auctionId: a.id,
+            status: "KNOWN",
+            rawValue: a.current_price,
+            displayValue: `US$${a.current_price.toLocaleString()}`,
+          })),
+        },
+        {
+          key: "LOCATION",
+          label: "Location",
+          dataType: "STRING",
+          cells: auctions.map((a) => ({
+            auctionId: a.id,
+            status: a.city ? "KNOWN" : "UNKNOWN",
+            rawValue: a.city,
+            displayValue: a.city || "—",
+          })),
+        },
+        {
+          key: "SALE_CONDITION",
+          label: "Condition",
+          dataType: "STRING",
+          cells: auctions.map((a) => ({
+            auctionId: a.id,
+            status: a.condition ? "KNOWN" : "UNKNOWN",
+            rawValue: a.condition,
+            displayValue: a.condition || "—",
+          })),
+        },
+      ],
+    });
+
+    return {
+      scope,
+      categoryKey: isAllVehicle ? "VEHICLE_PASSENGER_CAR" : isAllPhone ? "PHONE_SMARTPHONE" : "GENERAL",
+      items,
+      sections,
+    };
   }
 
   async setSearchAlerts(id: number, on: boolean): Promise<void> {

@@ -349,7 +349,17 @@ export function LoadingGrid({ count = 8 }: { count?: number }) {
 }
 
 /** Marketplace listing card (grid). */
-export function AuctionCard({ auction, showSeller = true }: { auction: Auction; showSeller?: boolean }) {
+export function AuctionCard({
+  auction,
+  showSeller = true,
+  selectedForCompare = false,
+  onToggleCompare,
+}: {
+  auction: Auction;
+  showSeller?: boolean;
+  selectedForCompare?: boolean;
+  onToggleCompare?: () => void;
+}) {
   const v = toAuctionView(auction)
   const link = useLinkProps(`#/item/${auction.id}`)
   const now = useNow(5000)
@@ -357,48 +367,81 @@ export function AuctionCard({ auction, showSeller = true }: { auction: Auction; 
   const sev = remainingMs <= 0 ? "ended" : remainingSeverity(remainingMs)
   const img = v.imageList[0]
   return (
-    <a
-      {...link}
-      className="group block overflow-hidden rounded-card border border-border bg-card transition hover:border-teal/40 hover:shadow-md focus-visible:outline-2 focus-visible:outline-ring"
-    >
-      <div className="relative aspect-square overflow-hidden bg-muted">
-        {img ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={img} alt={auction.title} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" loading="lazy" />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-teal/10 to-gold/20 text-3xl" aria-hidden>🧭</div>
-        )}
-        {auction.status !== "live" && (
-          <span className="absolute left-2 top-2 rounded-pill bg-foreground/80 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-background">
-            {auction.status === "sold" ? "Sold" : "Ended"}
-          </span>
-        )}
-        {v.endingSoon && auction.status === "live" && (
-          <span className="absolute right-2 top-2 rounded-pill bg-danger px-2 py-0.5 text-[11px] font-bold text-white">Ends soon</span>
-        )}
-      </div>
-      <div className="space-y-1.5 p-3">
-        <p className="line-clamp-2 min-h-9 text-label text-foreground">{auction.title}</p>
-        <div className="flex items-baseline justify-between gap-2">
-          <PriceTag amount={auction.current_price} size="md" />
-          {auction.buy_now_price != null && (
-            <PriceTag amount={auction.buy_now_price} size="sm" tone="gold" className="shrink-0" />
+    <div className="relative group block overflow-hidden rounded-card border border-border bg-card transition hover:border-teal/40 hover:shadow-md focus-within:outline-2 focus-within:outline-ring">
+      <a
+        {...link}
+        className="block focus-visible:outline-none"
+      >
+        <div className="relative aspect-square overflow-hidden bg-muted">
+          {img ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={img} alt={auction.title} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" loading="lazy" />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-teal/10 to-gold/20 text-3xl" aria-hidden>🧭</div>
+          )}
+          {auction.status !== "live" && (
+            <span className="absolute left-2 top-2 rounded-pill bg-foreground/80 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-background">
+              {auction.status === "sold" ? "Sold" : "Ended"}
+            </span>
+          )}
+          {v.endingSoon && auction.status === "live" && (
+            <span className="absolute right-2 top-2 rounded-pill bg-danger px-2 py-0.5 text-[11px] font-bold text-white">Ends soon</span>
           )}
         </div>
-        <div className="flex items-center justify-between gap-2">
-          <span className={cn("ts-numeric text-caption font-semibold", sev === "urgent" ? "text-danger" : sev === "soon" ? "text-warn" : "text-muted-foreground")}>
-            {remainingMs <= 0 ? "Ended" : formatRemaining(remainingMs)}
-          </span>
-          <span className="ts-numeric text-caption text-muted-foreground">{auction.bid_count} bids</span>
-        </div>
-        {showSeller && (
-          <div className="flex items-center gap-1.5 border-t border-border pt-2">
-            <Avatar username={auction.seller_username} size={18} />
-            <span className="truncate text-caption text-muted-foreground">{auction.seller_username}</span>
+        <div className="space-y-1.5 p-3">
+          <p className="line-clamp-2 min-h-9 text-label text-foreground">{auction.title}</p>
+          {(auction.year != null || auction.mileage != null || auction.fuel || auction.transmission || auction.inspection_grade) && (
+            <div className="flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground pb-0.5">
+              {auction.year != null && <span className="font-semibold text-foreground">{auction.year}</span>}
+              {auction.mileage != null && <span>· {Number(auction.mileage).toLocaleString()} km</span>}
+              {auction.fuel && <span>· {auction.fuel}</span>}
+              {auction.transmission && <span>· {auction.transmission}</span>}
+              {auction.inspection_grade && (
+                <span className="ms-auto rounded-pill bg-teal/15 px-1.5 py-0.2 text-[10px] font-bold text-teal">
+                  {auction.inspection_grade.replace("GRADE_", "Grade ")}
+                </span>
+              )}
+            </div>
+          )}
+          <div className="flex items-baseline justify-between gap-2">
+            <PriceTag amount={auction.current_price} size="md" />
+            {auction.buy_now_price != null && (
+              <PriceTag amount={auction.buy_now_price} size="sm" tone="gold" className="shrink-0" />
+            )}
           </div>
-        )}
-      </div>
-    </a>
+          <div className="flex items-center justify-between gap-2">
+            <span className={cn("ts-numeric text-caption font-semibold", sev === "urgent" ? "text-danger" : sev === "soon" ? "text-warn" : "text-muted-foreground")}>
+              {remainingMs <= 0 ? "Ended" : formatRemaining(remainingMs)}
+            </span>
+            <span className="ts-numeric text-caption text-muted-foreground">{auction.bid_count} bids</span>
+          </div>
+          {showSeller && (
+            <div className="flex items-center gap-1.5 border-t border-border pt-2">
+              <Avatar username={auction.seller_username} size={18} />
+              <span className="truncate text-caption text-muted-foreground">{auction.seller_username}</span>
+            </div>
+          )}
+        </div>
+      </a>
+      {onToggleCompare && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onToggleCompare();
+          }}
+          className={cn(
+            "absolute left-2 top-2 rounded-pill px-2 py-0.5 text-[11px] font-bold transition-all shadow-sm z-10",
+            selectedForCompare
+              ? "bg-teal text-white ring-2 ring-white"
+              : "bg-background/90 text-foreground hover:bg-background hover:text-teal backdrop-blur"
+          )}
+        >
+          {selectedForCompare ? "✓ Compare" : "+ Compare"}
+        </button>
+      )}
+    </div>
   )
 }
 

@@ -56,6 +56,8 @@ export function ResultsSection({
   onClearFilters,
   onCountChange,
   popularCategories,
+  selectedCompareIds,
+  onToggleCompare,
 }: {
   query: AuctionQuery;
   queryKey: string;
@@ -65,6 +67,8 @@ export function ResultsSection({
   onClearFilters: () => void;
   onCountChange: (count: number) => void;
   popularCategories: PopularCategory[];
+  selectedCompareIds?: number[];
+  onToggleCompare?: (id: number) => void;
 }) {
   const [limit, setLimit] = useState(PAGE_SIZE);
 
@@ -173,7 +177,12 @@ export function ResultsSection({
       ) : view === "grid" ? (
         <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-4">
           {shown.map((a) => (
-            <AuctionCard key={a.id} auction={a} />
+            <AuctionCard
+              key={a.id}
+              auction={a}
+              selectedForCompare={selectedCompareIds?.includes(a.id)}
+              onToggleCompare={onToggleCompare ? () => onToggleCompare(a.id) : undefined}
+            />
           ))}
         </div>
       ) : (

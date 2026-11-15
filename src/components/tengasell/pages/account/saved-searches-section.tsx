@@ -43,18 +43,38 @@ import { api } from "@/lib/tengasell/api";
 import { formatUSD } from "@/lib/tengasell/format";
 import { useCategories, useResource } from "@/lib/tengasell/hooks";
 import { useI18n } from "@/lib/tengasell/i18n";
-import type { SavedSearch } from "@/lib/tengasell/types";
+import type { SavedSearch, SavedSearchFacet } from "@/lib/tengasell/types";
 import { cn } from "@/lib/utils";
 
 /** Deep link for "Run search" — param names match the browse page's own
  *  query-param parsing (q + ending as props; cat/min/max read from the
  *  route query). Only set criteria become params. */
-function buildRunHref(s: SavedSearch): string {
+function buildRunHref(s: SavedSearch, facets: SavedSearchFacet[] = []): string {
   const params = new URLSearchParams();
   if (s.query) params.set("q", s.query);
   if (s.category) params.set("cat", s.category);
   if (s.min_price != null) params.set("min", String(s.min_price));
   if (s.max_price != null) params.set("max", String(s.max_price));
+  for (const f of facets) {
+    const textVal = f.value_text ?? f.option_value ?? f.text_value;
+    const minVal = f.value_min ?? f.min_numeric ?? (f.operator === "MIN" ? f.value_number : null);
+    const maxVal = f.value_max ?? f.max_numeric ?? (f.operator === "MAX" ? f.value_number : null);
+    if (f.attribute_key === "MAKE" && textVal) params.set("make", textVal);
+    if (f.attribute_key === "MODEL" && textVal) params.set("model", textVal);
+    if (f.attribute_key === "YEAR" || f.attribute_key === "MODEL_YEAR") {
+      if (minVal != null) params.set("minYear", String(minVal));
+      if (maxVal != null) params.set("maxYear", String(maxVal));
+    }
+    if (f.attribute_key === "ODOMETER_KM" && maxVal != null) {
+      params.set("maxKm", String(maxVal));
+    }
+    if (f.attribute_key === "BODY_TYPE" && textVal) params.set("bodyType", textVal);
+    if (f.attribute_key === "FUEL_TYPE" && textVal) params.set("fuel", textVal);
+    if (f.attribute_key === "TRANSMISSION" && textVal) params.set("transmission", textVal);
+    if (f.attribute_key === "DRIVETRAIN" && textVal) params.set("drivetrain", textVal);
+    if (f.attribute_key === "INSPECTION_GRADE" && textVal)
+      params.set("inspectionGrade", textVal);
+  }
   const qs = params.toString();
   return qs ? `/search?${qs}` : "/search";
 }
@@ -197,7 +217,9 @@ function SavedSearchCard({
   onDelete: () => void;
 }) {
   const { t } = useI18n();
-  const runHref = buildRunHref(saved);
+  const facetRes = useResource(() => api.savedSearchFacets(saved.id), [saved.id]);
+  const facets = facetRes.data ?? [];
+  const runHref = buildRunHref(saved, facets);
 
   return (
     <article className="flex min-w-0 flex-col gap-3 rounded-card border border-border bg-raised p-4">
@@ -240,6 +262,34 @@ function SavedSearchCard({
             <span className="ts-numeric">{priceLabel}</span>
           </li>
         )}
+        {facets.map((f) => {
+          const textVal = f.value_text ?? f.option_value ?? f.text_value ?? "";
+          const minVal = f.value_min ?? f.min_numeric ?? (f.operator === "MIN" ? f.value_number : null);
+          const maxVal = f.value_max ?? f.max_numeric ?? (f.operator === "MAX" ? f.value_number : null);
+          let text = `${f.attribute_key}: ${textVal}`;
+          if (f.attribute_key === "MAKE") text = `Make: ${textVal}`;
+          if (f.attribute_key === "MODEL") text = `Model: ${textVal}`;
+          if (f.attribute_key === "YEAR" || f.attribute_key === "MODEL_YEAR") {
+            text =
+              minVal != null && maxVal != null
+                ? `Year: ${minVal}–${maxVal}`
+                : minVal != null
+                  ? `Year: ${minVal}+`
+                  : `Year: Up to ${maxVal}`;
+          }
+          if (f.attribute_key === "ODOMETER_KM") text = `Max km: ${maxVal?.toLocaleString()}`;
+          if (f.attribute_key === "BODY_TYPE") text = `Body: ${textVal}`;
+          if (f.attribute_key === "FUEL_TYPE") text = `Fuel: ${textVal}`;
+          if (f.attribute_key === "TRANSMISSION") text = `Trans: ${textVal}`;
+          if (f.attribute_key === "DRIVETRAIN") text = `Drive: ${textVal}`;
+          if (f.attribute_key === "INSPECTION_GRADE") text = `Grade: ${textVal.replace("GRADE_", "")}`;
+          return (
+            <li key={f.id ?? `${f.attribute_key}-${text}`} className={cn(CHIP, "border-teal/30 bg-teal/5 text-foreground")}>
+              <Tag className="size-3 shrink-0 text-teal" aria-hidden="true" />
+              <span className="max-w-56 truncate">{text}</span>
+            </li>
+          );
+        })}
       </ul>
 
       {/* new-match alert toggle */}
