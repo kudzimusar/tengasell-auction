@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { spawn, type ChildProcess } from "node:child_process";
+import { execSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
@@ -231,7 +231,7 @@ beforeAll(async () => {
   fs.cpSync(TEMPLATE_DEPOT, depotDir, { recursive: true });
   if (ADMIN_PASSWORD && fs.existsSync(TRAIL_BIN)) {
     try {
-      require("node:child_process").execSync(
+      execSync(
         `"${TRAIL_BIN}" --depot "${depotDir}" user change-password admin "${ADMIN_PASSWORD}"`,
         { stdio: "ignore" },
       );

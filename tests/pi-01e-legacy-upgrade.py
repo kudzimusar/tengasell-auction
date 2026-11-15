@@ -609,6 +609,13 @@ def run_full_u16_to_u25_upgrade_test() -> None:
         db_path = depot_dir / "data/main.db"
         baseline = seed_historical_u16_data(db_path)
 
+        if ADMIN_PASSWORD:
+            subprocess.run(
+                [str(TRAIL_BIN), "--depot", str(depot_dir), "user", "change-password", "admin", ADMIN_PASSWORD],
+                check=True,
+                capture_output=True,
+            )
+
         # Also add a legacy saved search to U16 db
         conn = sqlite3.connect(str(db_path))
         seller_row = conn.execute("SELECT id FROM _user WHERE username = ?", (baseline["seller_username"],)).fetchone()
