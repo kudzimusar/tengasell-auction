@@ -68,6 +68,7 @@ server.log
 /tool-results/
 /Cache/
 /download/
+/.artifacts/
 
 # CI helper database
 /ci.db

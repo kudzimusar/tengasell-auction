@@ -2,6 +2,8 @@
 // All writes are mediated by the canonical trade engine admin session; browser
 // clients have no direct TrailBase ACL to these collections.
 
+import { appendProductFact } from "./product-intelligence"
+
 export interface VehicleIdentity {
   id: string
   username: string
@@ -13,6 +15,7 @@ export interface VehicleStore {
   get(table: string, id: number | string): Promise<any | null>
   list(table: string, params: string): Promise<any[]>
   update(table: string, id: number | string, patch: unknown): Promise<boolean>
+  remove?(table: string, id: number | string): Promise<boolean>
 }
 
 export type VehicleAudit = (
@@ -40,15 +43,53 @@ export type VehicleIntakeInput = {
   modelYear: number
   engineNumber?: string | null
   engineDisplacementCc?: number | null
-  fuelType: "PETROL" | "DIESEL" | "HYBRID" | "ELECTRIC" | "LPG" | "OTHER"
-  transmission: "MANUAL" | "AUTOMATIC" | "CVT" | "DCT" | "OTHER"
-  drivetrain: "FWD" | "RWD" | "AWD" | "4WD" | "OTHER"
+  fuelType: "PETROL" | "DIESEL" | "HYBRID" | "ELECTRIC" | "LPG" | "OTHER" | "UNKNOWN"
+  transmission: "MANUAL" | "AUTOMATIC" | "CVT" | "DCT" | "OTHER" | "UNKNOWN"
+  drivetrain: "FWD" | "RWD" | "AWD" | "4WD" | "OTHER" | "UNKNOWN"
   odometerKm: number
   locationCity: string
   locationCountry?: string
   ownershipStatus: "DECLARED_OWNER" | "FINANCED" | "THIRD_PARTY" | "UNKNOWN"
   customsStatus: "LOCAL" | "CLEARED" | "PENDING" | "NOT_APPLICABLE" | "UNKNOWN"
   requestedDurationHours: number
+  vehicleClass?: string | null
+  bodyType?: string | null
+  modelCode?: string | null
+  generationSeries?: string | null
+  trim?: string | null
+  manufactureYear?: number | null
+  firstRegistrationDate?: string | null
+  steeringSide?: string | null
+  doors?: number | null
+  seats?: number | null
+  cabType?: string | null
+  primaryExteriorColour?: string | null
+  manufacturerColourName?: string | null
+  manufacturerColourCode?: string | null
+  interiorColour?: string | null
+  interiorMaterial?: string | null
+  engineCode?: string | null
+  powerKw?: number | null
+  torqueNm?: number | null
+  gearCount?: number | null
+  hybridType?: string | null
+  evBatteryCapacityKwh?: number | null
+  evRangeKm?: number | null
+  ownerCount?: number | null
+  originCountry?: string | null
+  firstRegistrationCountry?: string | null
+  importSourceCountry?: string | null
+  serviceHistoryClass?: string | null
+  accidentHistory?: string | null
+  repairHistory?: string | null
+  structuralRepairHistory?: string | null
+  modificationStatus?: string | null
+  numberOfKeys?: number | null
+  spareKey?: boolean | null
+  spareWheel?: boolean | null
+  toolKit?: boolean | null
+  manuals?: boolean | null
+  serviceBook?: boolean | null
 }
 
 const nowIso = () => new Date().toISOString().replace(/\.\d+Z$/, "Z")
@@ -101,6 +142,12 @@ function validateIntake(input: VehicleIntakeInput): string | null {
   }
   const hours = Number(input.requestedDurationHours)
   if (!Number.isInteger(hours) || hours < 1 || hours > 720) return "Auction duration is invalid."
+  if (input.manufactureYear != null && (!Number.isInteger(Number(input.manufactureYear)) || Number(input.manufactureYear) < 1900 || Number(input.manufactureYear) > maxYear)) {
+    return "Manufacture year is invalid."
+  }
+  if (input.doors != null && (!Number.isInteger(Number(input.doors)) || Number(input.doors) < 0 || Number(input.doors) > 20)) return "Door count is invalid."
+  if (input.seats != null && (!Number.isInteger(Number(input.seats)) || Number(input.seats) < 1 || Number(input.seats) > 200)) return "Seat count is invalid."
+  if (input.numberOfKeys != null && (!Number.isInteger(Number(input.numberOfKeys)) || Number(input.numberOfKeys) < 0 || Number(input.numberOfKeys) > 20)) return "Key count is invalid."
   return null
 }
 
@@ -161,6 +208,44 @@ export async function saveVehicleIntake(
     ownership_status: input.ownershipStatus,
     customs_status: input.customsStatus,
     requested_duration_hours: Number(input.requestedDurationHours),
+    vehicle_class: nullable(input.vehicleClass, 40),
+    body_type: nullable(input.bodyType, 40),
+    model_code: nullable(input.modelCode, 80),
+    generation_series: nullable(input.generationSeries, 100),
+    trim: nullable(input.trim, 100),
+    manufacture_year: input.manufactureYear == null ? null : Number(input.manufactureYear),
+    first_registration_date: nullable(input.firstRegistrationDate, 40),
+    steering_side: nullable(input.steeringSide, 20),
+    doors: input.doors == null ? null : Number(input.doors),
+    seats: input.seats == null ? null : Number(input.seats),
+    cab_type: nullable(input.cabType, 30),
+    primary_exterior_colour: nullable(input.primaryExteriorColour, 30),
+    manufacturer_colour_name: nullable(input.manufacturerColourName, 100),
+    manufacturer_colour_code: nullable(input.manufacturerColourCode, 60),
+    interior_colour: nullable(input.interiorColour, 30),
+    interior_material: nullable(input.interiorMaterial, 40),
+    engine_code: nullable(input.engineCode, 80),
+    power_kw: input.powerKw == null ? null : Number(input.powerKw),
+    torque_nm: input.torqueNm == null ? null : Number(input.torqueNm),
+    gear_count: input.gearCount == null ? null : Number(input.gearCount),
+    hybrid_type: nullable(input.hybridType, 40),
+    ev_battery_capacity_kwh: input.evBatteryCapacityKwh == null ? null : Number(input.evBatteryCapacityKwh),
+    ev_range_km: input.evRangeKm == null ? null : Number(input.evRangeKm),
+    owner_count: input.ownerCount == null ? null : Number(input.ownerCount),
+    origin_country: nullable(input.originCountry, 100),
+    first_registration_country: nullable(input.firstRegistrationCountry, 100),
+    import_source_country: nullable(input.importSourceCountry, 100),
+    service_history_class: nullable(input.serviceHistoryClass, 40),
+    accident_history: nullable(input.accidentHistory, 40),
+    repair_history: nullable(input.repairHistory, 40),
+    structural_repair_history: nullable(input.structuralRepairHistory, 50),
+    modification_status: nullable(input.modificationStatus, 40),
+    number_of_keys: input.numberOfKeys == null ? null : Number(input.numberOfKeys),
+    spare_key: input.spareKey == null ? null : input.spareKey ? 1 : 0,
+    spare_wheel: input.spareWheel == null ? null : input.spareWheel ? 1 : 0,
+    tool_kit: input.toolKit == null ? null : input.toolKit ? 1 : 0,
+    manuals: input.manuals == null ? null : input.manuals ? 1 : 0,
+    service_book: input.serviceBook == null ? null : input.serviceBook ? 1 : 0,
     declaration_accepted_at: nowIso(),
     lifecycle: "INTAKE",
     updated_at: nowIso(),
@@ -191,6 +276,64 @@ export async function saveVehicleIntake(
       created_at: nowIso(),
     })
   }
+  const factMap: Record<string, unknown> = {
+    VIN: row.vin,
+    CHASSIS_NUMBER: row.chassis_number,
+    REGISTRATION_NUMBER: row.registration_number,
+    MAKE: row.make,
+    MODEL: row.model,
+    VARIANT: row.variant,
+    TRIM: row.trim,
+    MODEL_YEAR: row.model_year,
+    MANUFACTURE_YEAR: row.manufacture_year,
+    FIRST_REGISTRATION_DATE: row.first_registration_date,
+    VEHICLE_CLASS: row.vehicle_class,
+    BODY_TYPE: row.body_type,
+    FUEL_TYPE: row.fuel_type,
+    TRANSMISSION: row.transmission,
+    DRIVETRAIN: row.drivetrain,
+    ODOMETER_KM: { value: row.odometer_km, unit: "km" },
+    ENGINE_DISPLACEMENT_CC: row.engine_displacement_cc,
+    ENGINE_CODE: row.engine_code,
+    ENGINE_NUMBER: row.engine_number,
+    POWER_KW: row.power_kw,
+    TORQUE_NM: row.torque_nm,
+    GEAR_COUNT: row.gear_count,
+    STEERING_SIDE: row.steering_side,
+    DOORS: row.doors,
+    SEATS: row.seats,
+    EXTERIOR_COLOUR: row.primary_exterior_colour,
+    INTERIOR_COLOUR: row.interior_colour,
+    SERVICE_HISTORY_CLASS: row.service_history_class,
+    ACCIDENT_HISTORY: row.accident_history,
+    REPAIR_HISTORY: row.repair_history,
+    STRUCTURAL_REPAIR_HISTORY: row.structural_repair_history,
+    MODIFICATION_STATUS: row.modification_status,
+    OWNERSHIP_STATUS: row.ownership_status,
+    CUSTOMS_STATUS: row.customs_status,
+    NUMBER_OF_KEYS: row.number_of_keys,
+    SPARE_KEY: row.spare_key,
+    SPARE_WHEEL: row.spare_wheel,
+    TOOL_KIT: row.tool_kit,
+    MANUALS: row.manuals,
+    SERVICE_BOOK: row.service_book,
+  }
+  for (const [attributeKey, value] of Object.entries(factMap)) {
+    if (value == null || (typeof value === "string" && !value)) continue
+    const fact = await appendProductFact(store, {
+      vehicleId,
+      attributeKey,
+      value,
+      sourceClass: "SELLER_DECLARED",
+      verificationState: "UNVERIFIED",
+      actorId: me.id,
+      sourceRefType: "vehicles",
+      sourceRefId: vehicleId,
+      supersedePriorFromSameSource: true,
+      note: "Seller intake assertion",
+    })
+    if (!fact.ok) return { ok: false, error: fact.error }
+  }
   await audit(me.id, "vehicle:intake", "vehicles", vehicleId, "trade-engine", {
     auctionId,
     declaration: true,
@@ -208,6 +351,16 @@ export async function vehicleBundle(
   )[0]
   const permissions = await vehiclePermissions(store, viewer)
   if (!vehicle) return { vehicle: null, permissions }
+  const operationGrants = viewer
+    ? await store.list("auction_operation_grants", params({ "filter[user][$eq]": viewer.id, "filter[active][$eq]": 1, limit: 20 }))
+    : []
+  const authorised = !!viewer && (
+    viewer.admin || permissions.inspect || permissions.review ||
+    String(vehicle.seller_user) === String(viewer.id) || operationGrants.length > 0
+  )
+  if (!authorised) {
+    return { vehicle: null, permissions, errorCode: viewer ? "VEHICLE_INTERNAL_AUTH_REQUIRED" : "AUTH_REQUIRED" }
+  }
 
   const [documents, inspections, eligibility] = await Promise.all([
     store.list("vehicle_documents", params({ "filter[vehicle_id][$eq]": vehicle.id, order: "-id", limit: 100 })),
@@ -269,6 +422,147 @@ async function ownedVehicle(store: VehicleStore, me: VehicleIdentity, vehicleId:
   return { vehicle, error: null }
 }
 
+export async function addVehicleHistoryEvent(
+  store: VehicleStore,
+  audit: VehicleAudit,
+  me: VehicleIdentity,
+  vehicleId: number,
+  input: any,
+) {
+  const owned = await ownedVehicle(store, me, vehicleId)
+  if (!owned.vehicle) return { ok: false, error: owned.error }
+  const allowed = new Set([
+    "SERVICE","MAINTENANCE","ACCIDENT","DAMAGE","REPAIR","STRUCTURAL_REPAIR","PAINTWORK",
+    "OWNERSHIP_CHANGE","REGISTRATION","IMPORT","CUSTOMS_CLEARANCE","MILEAGE_RECORD","OTHER",
+  ])
+  const eventType = clean(input?.eventType, 40).toUpperCase()
+  if (!allowed.has(eventType)) return { ok: false, error: "Unsupported vehicle history event type." }
+  const title = clean(input?.title, 160)
+  if (title.length < 3) return { ok: false, error: "History event title is required." }
+  const odometer = input?.odometerKm == null || input?.odometerKm === "" ? null : Math.round(Number(input.odometerKm))
+  if (odometer != null && (!Number.isInteger(odometer) || odometer < 0)) return { ok: false, error: "History odometer is invalid." }
+  const id = await store.create("vehicle_history_events", {
+    vehicle_id: vehicleId,
+    event_type: eventType,
+    occurred_on: nullable(input?.occurredOn, 40),
+    odometer_km: odometer,
+    title,
+    description: clean(input?.description, 1200),
+    provider_name: nullable(input?.providerName, 160),
+    country_code: nullable(input?.countryCode, 8)?.toUpperCase() ?? null,
+    source_class: "SELLER_DECLARED",
+    source_fact_assertion_id: null,
+    created_by: me.id,
+    created_at: nowIso(),
+  })
+  if (id == null) return { ok: false, error: "Vehicle history event could not be recorded." }
+  const derived: Record<string, { attributeKey: string; value: unknown }> = {
+    ACCIDENT: { attributeKey: "ACCIDENT_HISTORY", value: "ACCIDENT_DECLARED" },
+    DAMAGE: { attributeKey: "ACCIDENT_HISTORY", value: "DAMAGE_DECLARED" },
+    REPAIR: { attributeKey: "REPAIR_HISTORY", value: "REPAIRED" },
+    PAINTWORK: { attributeKey: "REPAIR_HISTORY", value: "PAINTWORK" },
+    STRUCTURAL_REPAIR: { attributeKey: "STRUCTURAL_REPAIR_HISTORY", value: "STRUCTURAL_REPAIR_DECLARED" },
+  }
+  if (derived[eventType]) {
+    const fact = await appendProductFact(store, {
+      vehicleId,
+      ...derived[eventType],
+      sourceClass: "SELLER_DECLARED",
+      verificationState: "UNVERIFIED",
+      actorId: me.id,
+      sourceRefType: "vehicle_history_events",
+      sourceRefId: id,
+      supersedePriorFromSameSource: true,
+      note: `Structured ${eventType.toLowerCase()} history assertion`,
+    })
+    if (!fact.ok) return { ok: false, error: fact.error }
+  }
+  await audit(me.id, "vehicle:history:add", "vehicle_history_events", id, "trade-engine", { vehicleId, eventType })
+  return { ok: true, historyEvent: await store.get("vehicle_history_events", id) }
+}
+
+export async function addVehicleModification(
+  store: VehicleStore,
+  audit: VehicleAudit,
+  me: VehicleIdentity,
+  vehicleId: number,
+  input: any,
+) {
+  const owned = await ownedVehicle(store, me, vehicleId)
+  if (!owned.vehicle) return { ok: false, error: owned.error }
+  const allowed = new Set(["ENGINE","DRIVETRAIN","SUSPENSION","BRAKES","WHEELS_TYRES","BODY","INTERIOR","ELECTRICAL","SAFETY","ACCESSIBILITY","COMMERCIAL_CONVERSION","OTHER"])
+  const category = clean(input?.category, 50).toUpperCase()
+  if (!allowed.has(category)) return { ok: false, error: "Unsupported modification category." }
+  const title = clean(input?.title, 160)
+  if (title.length < 3) return { ok: false, error: "Modification title is required." }
+  const id = await store.create("vehicle_modifications", {
+    vehicle_id: vehicleId,
+    modification_category: category,
+    title,
+    description: clean(input?.description, 1200),
+    installed_on: nullable(input?.installedOn, 40),
+    installer: nullable(input?.installer, 160),
+    approval_reference: nullable(input?.approvalReference, 160),
+    reversible: input?.reversible == null ? null : input.reversible ? 1 : 0,
+    status: "DECLARED",
+    source_fact_assertion_id: null,
+    created_by: me.id,
+    created_at: nowIso(),
+    updated_at: nowIso(),
+  })
+  if (id == null) return { ok: false, error: "Vehicle modification could not be recorded." }
+  const fact = await appendProductFact(store, {
+    vehicleId,
+    attributeKey: "MODIFICATION_STATUS",
+    value: "MODIFIED",
+    sourceClass: "SELLER_DECLARED",
+    verificationState: "UNVERIFIED",
+    actorId: me.id,
+    sourceRefType: "vehicle_modifications",
+    sourceRefId: id,
+    supersedePriorFromSameSource: true,
+    note: "Structured modification declaration",
+  })
+  if (!fact.ok) return { ok: false, error: fact.error }
+  await audit(me.id, "vehicle:modification:add", "vehicle_modifications", id, "trade-engine", { vehicleId, category })
+  return { ok: true, modification: await store.get("vehicle_modifications", id) }
+}
+
+export async function addVehicleEquipment(
+  store: VehicleStore,
+  audit: VehicleAudit,
+  me: VehicleIdentity,
+  vehicleId: number,
+  input: any,
+) {
+  const owned = await ownedVehicle(store, me, vehicleId)
+  if (!owned.vehicle) return { ok: false, error: owned.error }
+  const allowed = new Set(["FACTORY_OPTION","AFTERMARKET_EQUIPMENT","INCLUDED_ACCESSORY","DOCUMENT","TOOL","OTHER_EQUIPMENT"])
+  const equipmentType = clean(input?.equipmentType, 50).toUpperCase()
+  if (!allowed.has(equipmentType)) return { ok: false, error: "Unsupported equipment type." }
+  const label = clean(input?.label, 160)
+  if (label.length < 2) return { ok: false, error: "Equipment label is required." }
+  const quantity = Math.round(Number(input?.quantity ?? 1))
+  if (!Number.isInteger(quantity) || quantity < 1) return { ok: false, error: "Equipment quantity is invalid." }
+  const id = await store.create("vehicle_equipment", {
+    vehicle_id: vehicleId,
+    equipment_type: equipmentType,
+    equipment_key: nullable(input?.equipmentKey, 120),
+    label,
+    description: clean(input?.description, 800),
+    quantity,
+    included: input?.included === false ? 0 : 1,
+    condition_state: nullable(input?.conditionState, 30),
+    source_fact_assertion_id: null,
+    created_by: me.id,
+    created_at: nowIso(),
+    updated_at: nowIso(),
+  })
+  if (id == null) return { ok: false, error: "Vehicle equipment could not be recorded." }
+  await audit(me.id, "vehicle:equipment:add", "vehicle_equipment", id, "trade-engine", { vehicleId, equipmentType })
+  return { ok: true, equipment: await store.get("vehicle_equipment", id) }
+}
+
 export async function addVehicleDocument(
   store: VehicleStore,
   audit: VehicleAudit,
@@ -281,6 +575,8 @@ export async function addVehicleDocument(
     issuedAt?: string | null
     expiresAt?: string | null
     storageRef?: string | null
+    documentNumber?: string | null
+    artifactRequired?: boolean
   },
 ) {
   const owned = await ownedVehicle(store, me, vehicleId)
@@ -290,6 +586,8 @@ export async function addVehicleDocument(
   const ref = clean(input.documentRef, 120)
   if (ref.length < 2) return { ok: false, error: "Document reference is required." }
 
+  const artifactRequired = input.artifactRequired ?? ["REGISTRATION","OWNERSHIP","CUSTOMS_CLEARANCE","IDENTITY"].includes(input.documentType)
+  const storageRef = nullable(input.storageRef, 240)
   const id = await store.create("vehicle_documents", {
     vehicle_id: vehicleId,
     document_type: input.documentType,
@@ -297,8 +595,14 @@ export async function addVehicleDocument(
     issuer: nullable(input.issuer, 120),
     issued_at: nullable(input.issuedAt, 40),
     expires_at: nullable(input.expiresAt, 40),
-    storage_ref: nullable(input.storageRef, 240),
-    status: input.storageRef ? "UPLOADED" : "DECLARED",
+    storage_ref: storageRef,
+    status: storageRef ? "UPLOADED" : "DECLARED",
+    document_number: nullable(input.documentNumber, 120),
+    artifact_required: artifactRequired ? 1 : 0,
+    artifact_state: artifactRequired ? (storageRef ? "STORED" : "MISSING") : "NOT_REQUIRED",
+    visibility_policy_key: "DOCUMENT_REFERENCE_CLASSIFIED",
+    verified_artifact_hash: null,
+    historic_review_required: 0,
     uploaded_by: me.id,
     verified_by: null,
     verified_at: null,
@@ -321,6 +625,7 @@ export async function reviewVehicleDocument(
   documentId: number,
   action: "VERIFY" | "REJECT",
   reason?: string | null,
+  derivedFact?: { attributeKey: string; value: unknown; extractionPath: string } | null,
 ) {
   const permissions = await vehiclePermissions(store, me)
   if (!permissions.inspect && !permissions.review) {
@@ -334,6 +639,9 @@ export async function reviewVehicleDocument(
   if (action === "REJECT" && clean(reason, 240).length < 5) {
     return { ok: false, error: "Give a rejection reason." }
   }
+  if (action === "VERIFY" && Number(doc.artifact_required) === 1 && !doc.storage_ref) {
+    return { ok: false, error: "The required document artefact must be stored before verification." }
+  }
   const expired = doc.expires_at && Date.parse(doc.expires_at) <= Date.now()
   const status = expired ? "EXPIRED" : action === "VERIFY" ? "VERIFIED" : "REJECTED"
   const ok = await store.update("vehicle_documents", documentId, {
@@ -341,6 +649,7 @@ export async function reviewVehicleDocument(
     verified_by: action === "VERIFY" && !expired ? me.id : null,
     verified_at: action === "VERIFY" && !expired ? nowIso() : null,
     rejection_reason: action === "REJECT" ? clean(reason, 240) : expired ? "Document expired." : null,
+    artifact_state: action === "REJECT" ? "REJECTED" : status === "VERIFIED" && doc.storage_ref ? "VERIFIED" : doc.artifact_state,
     updated_at: nowIso(),
   })
   if (!ok) return { ok: false, error: "Document review could not be saved." }
@@ -357,6 +666,29 @@ export async function reviewVehicleDocument(
       verified_at: nowIso(),
       created_at: nowIso(),
     })
+    if (derivedFact) {
+      const fact = await appendProductFact(store, {
+        vehicleId: Number(doc.vehicle_id),
+        attributeKey: clean(derivedFact.attributeKey, 120).toUpperCase(),
+        value: derivedFact.value,
+        sourceClass: "DOCUMENT_DERIVED",
+        verificationState: "VERIFIED",
+        actorId: String(doc.uploaded_by),
+        verifierId: me.id,
+        sourceRefType: "vehicle_documents",
+        sourceRefId: documentId,
+        supersedePriorFromSameSource: false,
+        note: `Derived from ${clean(derivedFact.extractionPath, 200)}`,
+      })
+      if (!fact.ok || !fact.assertion) return { ok: false, error: fact.error ?? "Document fact could not be recorded." }
+      await store.create("pi_document_fact_assertions", {
+        document_id: documentId,
+        fact_assertion_id: Number(fact.assertion.id),
+        extraction_path: clean(derivedFact.extractionPath, 240),
+        created_by: me.id,
+        created_at: nowIso(),
+      })
+    }
   }
   await audit(me.id, "vehicle:document:review", "vehicle_documents", documentId, "trade-engine", {
     status,
@@ -506,6 +838,25 @@ export async function submitVehicleInspection(
     verified_at: nowIso(),
     created_at: nowIso(),
   })
+  for (const productFact of [
+    { attributeKey: "ODOMETER_KM", value: { value: odometerKm, unit: "km" } },
+    { attributeKey: "ROADWORTHY", value: !!input.roadworthy },
+    { attributeKey: "INSPECTION_STATUS", value: "SUBMITTED" },
+  ]) {
+    const fact = await appendProductFact(store, {
+      vehicleId: Number(inspection.vehicle_id),
+      ...productFact,
+      sourceClass: "INSPECTOR_VERIFIED",
+      verificationState: "VERIFIED",
+      actorId: me.id,
+      verifierId: me.id,
+      sourceRefType: "vehicle_inspections",
+      sourceRefId: inspectionId,
+      supersedePriorFromSameSource: true,
+      note: "Tengasell inspection assertion",
+    })
+    if (!fact.ok) return { ok: false, error: fact.error }
+  }
   await audit(me.id, "vehicle:inspection:submit", "vehicle_inspections", inspectionId, "trade-engine", {
     roadworthy: !!input.roadworthy,
     odometerKm,
@@ -556,6 +907,21 @@ export async function reviewVehicleInspection(
   if (command.status !== "accepted") {
     return { ok: false, error: `Vehicle review rejected: ${command.error_code ?? "UNKNOWN"}`, command }
   }
+  const inspectedVehicle = await store.get("vehicles", Number(inspection.vehicle_id))
+  const gradeFact = await appendProductFact(store, {
+    vehicleId: Number(inspection.vehicle_id),
+    attributeKey: "INSPECTION_GRADE",
+    value: command.result_grade,
+    sourceClass: "INSPECTOR_VERIFIED",
+    verificationState: "VERIFIED",
+    actorId: me.id,
+    verifierId: me.id,
+    sourceRefType: "vehicle_review_commands",
+    sourceRefId: Number(command.id),
+    supersedePriorFromSameSource: true,
+    note: "Controlled inspection review grade",
+  })
+  if (!gradeFact.ok) return { ok: false, error: gradeFact.error }
   await audit(me.id, "vehicle:review:ack", "vehicle_review_commands", Number(command.id), "trade-engine", {
     inspectionId,
     resultGrade: command.result_grade,
@@ -564,7 +930,7 @@ export async function reviewVehicleInspection(
   return {
     ok: true,
     command,
-    bundle: await vehicleBundle(store, Number((await store.get("vehicles", Number(inspection.vehicle_id)))?.auction_id), me),
+    bundle: await vehicleBundle(store, Number(inspectedVehicle?.auction_id), me),
   }
 }
 

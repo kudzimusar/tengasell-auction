@@ -105,6 +105,7 @@ import { SellerFeedback } from "./seller-feedback";
 import { ShareMenu } from "./share-menu";
 import { ReportItemButton } from "./report-item-button";
 import { VehicleDetails } from "./vehicle-details";
+import { VehicleProductIntelligence } from "./vehicle-product-intelligence";
 
 // ── Gap-8 F2 helpers ─────────────────────────────────────────────────
 /** Engine offer-broadcast payload (trade-engine emits { auctionId, offer }).
@@ -391,6 +392,12 @@ export default function ItemPage({ id }: { id: number }) {
         </div>
       )}
 
+      {auction.asset_kind === "vehicle" && (
+        <div className="mb-6">
+          <VehicleProductIntelligence auctionId={auction.id} compact />
+        </div>
+      )}
+
       <div className="grid lg:grid-cols-[minmax(0,11fr)_minmax(0,9fr)] gap-6 lg:gap-8 items-start">
         {/* ── left: gallery + tabs ─────────────────────────────────── */}
         <div className="min-w-0 space-y-6">
@@ -491,7 +498,10 @@ export default function ItemPage({ id }: { id: number }) {
 
             {auction.asset_kind === "vehicle" && (
               <TabsContent value="vehicle" className="pt-4">
-                <VehicleDetails auctionId={auction.id} />
+                <div className="space-y-8">
+                  <VehicleProductIntelligence auctionId={auction.id} />
+                  {user && <VehicleDetails auctionId={auction.id} />}
+                </div>
               </TabsContent>
             )}
 
