@@ -1,5 +1,10 @@
 # TengaSell — Zimbabwe's Online Auction Marketplace
 
+## Mandatory Agent Governance
+
+All implementation, review and handoff agents must read [`AGENTS.md`](AGENTS.md) and [the two global 11-11 Tech standards](docs/governance/GLOBAL_AGENT_RULES.md) before acting. [Download the central governance PDF](https://github.com/kudzimusar/11-11-tech/blob/917c16f6d64d7f29d442fec562021dd11687228d/governance/global-moderator/11-11-TECH-GLOBAL-AGENT-GOVERNANCE-v1.0.pdf). This is process guidance; product architecture, formal stage gates and release authority remain project-specific.
+
+
 TengaSell is a full-stack auction marketplace for the Zimbabwean market: sellers list items with
 location-aware pickup, buyers bid in live rooms or place best offers, and orders settle through
 Paynow with commission, trust and governance controls built in.
