@@ -1,7 +1,8 @@
 # TENGASELL-PULSE-DESIGN-01 — Delivery, Agent, Decision and Continuity Register
 
 **Version:** 1.0.0  
-**Programme stage:** P0 PLAN_PROPOSED / DESIGN_ONLY  
+**Programme stage:** P0 PLAN_PROPOSED / DESIGN_ONLY
+**Governing proposal:** Draft PR #23 — https://github.com/kudzimusar/tengasell-auction/pull/23 (docs-only, open/unmerged; exact head must be re-read before each moderation action)  
 **Verified at:** 2026-11-24 (Asia/Tokyo, live GitHub read before creating this branch)  
 **Accepted coverage:** NOT_BASELINED — there is no Owner-accepted package denominator. No percentages of feature completion are claimed.  
 **Controlling plan:** MASTER_PLAN.md  
@@ -124,7 +125,7 @@ Current accepted packages: NOT_BASELINED (Owner has not accepted numerator/denom
 
 **Owner goal:** Pulse Hybrid homepage across 5 surfaces, role-aware discover/live/sell/ads/AI assistance, with tangible monetization potential and critical-information communication. Moderator reviews/patches/controls; specialist designs/implements when assigned.
 
-**Controlling source status:** plan proposal branch docs/tengasell-pulse-design-01-master-plan-r1; SHA, Draft PR and state to be recorded upon publication. This document is not product acceptance.
+**Controlling source status:** plan proposal branch docs/tengasell-pulse-design-01-master-plan-r1; GitHub Draft PR #23 at https://github.com/kudzimusar/tengasell-auction/pull/23; no acceptance/merge, re-fetch current HEAD each session. This document is not product acceptance.
 
 **Existing source:** main current web hero/home; existing native Expo PR #21 and unmerged PI/Comms branches as in MASTER_PLAN.md §1. Refresh every SHA and CI before new task.
 
