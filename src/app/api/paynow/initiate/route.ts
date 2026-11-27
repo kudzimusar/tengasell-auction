@@ -3,26 +3,29 @@
 // Request JSON:  { orderId: number, method: "ecocash"|"innbucks"|"card",
 //                  phone?: string }
 // Auth:          Authorization: Bearer <trailbase auth_token> (the buyer)
-// Response JSON: { ok, reference, redirectUrl, pollUrl, mock, orderId, error? }
+// Response JSON: { ok, redirectUrl, mode, orderId, error? } — minimal,
+//                 customer-safe: no gateway pollUrl, no merchant reference,
+//                 no hash material leaves the server (R7).
 //
 // The order is fetched WITH THE BUYER'S TOKEN (the TrailBase ACL lets the
 // buyer and seller read the row, so a hit proves party access) and the
 // buyer_username is matched against the token user resolved via
 // /api/auth/v1/status. Only pending_payment orders can start a session.
 //
-// Mock/sandbox mode (no PAYNOW_INTEGRATION_* env): redirectUrl points at
-// our hosted sandbox page #/pay/{reference}. Production: it is Paynow's
-// hosted checkout URL (absolute).
+// Mock/sandbox mode (no PAYNOW_INTEGRATION_* env): allowed in development
+// or with PAYNOW_ALLOW_MOCK=1; in a production deployment without
+// credentials the route FAILS CLOSED (503 — no sandbox session is ever
+// created, so mock approval cannot fake a paid order on prod). Production
+// with credentials: Paynow's hosted checkout URL (absolute).
 
 import { NextRequest, NextResponse } from "next/server";
-import { initiateTransaction, isMockMode } from "@/lib/server/paynow";
+import { credentialsConfigured, initiateTransaction, isMockMode, mockPaymentsAllowed } from "@/lib/server/paynow";
 import {
   fetchOrderWithUserToken,
   makeReference,
   paynowUrls,
   resolveUserFromToken,
   sandboxRedirectUrl,
-  toOrderRow,
 } from "@/lib/server/paynow-order";
 import { nowIso, tbCreate } from "@/lib/server/trailbase-admin";
 
@@ -91,6 +94,21 @@ export async function POST(req: NextRequest) {
       return json({ ok: false, error: "Invalid order amount." }, 400);
     }
 
+    // ── R6 mock/live safety: credentials absent but mock payments not
+    // allowed on this deployment → fail closed. No sandbox session is
+    // ever created in production without the real gateway (or an
+    // explicit PAYNOW_ALLOW_MOCK=1 opt-in).
+    if (!credentialsConfigured() && !mockPaymentsAllowed()) {
+      return json(
+        {
+          ok: false,
+          error:
+            "The payment gateway is not configured on this deployment — please try again later.",
+        },
+        503,
+      );
+    }
+
     // ── 4. open the gateway session (real or sandbox) ────────────────
     const reference = makeReference(orderId);
     const origin = req.headers.get("origin") ?? new URL(req.url).origin;
@@ -115,20 +133,21 @@ export async function POST(req: NextRequest) {
 
     // sandbox redirect carries display hints as query params — the page
     // re-verifies the true state through /api/paynow/poll, so these cannot
-    // spoof anything. Production keeps Paynow's absolute redirect URL.
+    // spoof anything. The raw phone number is NOT carried in the URL (the
+    // page gets a masked hint from the authenticated poll response).
+    // Production keeps Paynow's absolute redirect URL.
     const mock = isMockMode();
     const redirectUrl = mock
       ? sandboxRedirectUrl({
           reference,
           amount: order.final_price,
           method,
-          phone,
           title: order.auction_title,
           orderId,
         })
       : result.redirectUrl || result.browserUrl;
 
-    // ── 5. persist the session (admin token) ─────────────────────────
+    // ── 5. persist the session (admin token) ─────────────────────
     const now = nowIso();
     const sessionId = await tbCreate("paynow_sessions", {
       order_id: orderId,
@@ -148,12 +167,11 @@ export async function POST(req: NextRequest) {
       return json({ ok: false, error: "Could not open the payment session." }, 500);
     }
 
+    // R7 — minimal customer-safe response: where to continue the payment,
+    // nothing else (no pollUrl, no reference, no hash material).
     return json({
       ok: true,
-      reference,
       redirectUrl,
-      pollUrl: result.pollUrl,
-      mock,
       mode: mock ? "sandbox" : "live",
       orderId,
     });
