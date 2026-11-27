@@ -25,7 +25,7 @@ export function tokenFor(username: string, admin = false): string {
 function decodeToken(token: string): { username?: string; admin?: boolean } {
   const part = token.split(".")[1] ?? "";
   try {
-    return JSON.parse(Buffer.from(part, "base64url").toString("utf8"));
+    return JSON.parse(Buffer.from(part, "base64").toString("utf8"));
   } catch {
     return {};
   }
