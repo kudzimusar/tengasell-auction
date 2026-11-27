@@ -48,9 +48,42 @@ const INITIATE_FIELD_ORDER = [
   "status",
 ] as const;
 
+/** Live credentials present (both integration id and key). */
+export function credentialsConfigured(): boolean {
+  return !!process.env.PAYNOW_INTEGRATION_ID && !!process.env.PAYNOW_INTEGRATION_KEY;
+}
+
 /** Sandbox mode — activates when env credentials are absent. */
 export function isMockMode(): boolean {
-  return !process.env.PAYNOW_INTEGRATION_ID || !process.env.PAYNOW_INTEGRATION_KEY;
+  return !credentialsConfigured();
+}
+
+function readFlag(name: string): boolean | null {
+  const v = process.env[name];
+  if (v == null || v === "") return null;
+  const t = String(v).trim().toLowerCase();
+  if (t === "1" || t === "true" || t === "yes" || t === "on") return true;
+  if (t === "0" || t === "false" || t === "no" || t === "off") return false;
+  return null;
+}
+
+/**
+ * MOCK PAYMENT SAFETY — whether the sandbox adapter may create/settle
+ * sessions on this deployment at all. Fail closed:
+ *   · live credentials configured → never (the real gateway is the only
+ *     settlement authority);
+ *   · credentials missing + production (NODE_ENV) → only with an explicit
+ *     PAYNOW_ALLOW_MOCK=1 opt-in (e.g. a demo deployment);
+ *   · credentials missing + development/CI → sandbox allowed (dev default).
+ * Without this gate a production deployment with missing Fly secrets would
+ * silently serve the sandbox page and approve REAL orders as paid with no
+ * money — the mock must never be the fallback for a misconfigured prod.
+ */
+export function mockPaymentsAllowed(): boolean {
+  if (credentialsConfigured()) return false;
+  const explicit = readFlag("PAYNOW_ALLOW_MOCK");
+  if (explicit != null) return explicit;
+  return process.env.NODE_ENV !== "production";
 }
 
 /** Mock credentials — only ever used to sign sandbox-mode responses. */
@@ -100,6 +133,28 @@ function parseForm(body: string): Record<string, string> {
   return out;
 }
 
+// ── gateway trust boundary ────────────────────────────────────────────
+
+/** Hosts we will ever call for gateway polling (or store as poll URLs). */
+const GATEWAY_HOSTS = new Set(["www.paynow.co.zw", "paynow.co.zw"]);
+
+/**
+ * Safe destination check for gateway-supplied URLs (pollurl from the
+ * initiate response or the resulturl webhook): the sandbox adapter's
+ * mock:// scheme, or an https:// URL on a Paynow host. Anything else —
+ * http, file, an internal host, a look-alike domain — is rejected and the
+ * stored poll URL is left untouched (fail closed: we never fetch it).
+ */
+export function isSafeGatewayUrl(url: string): boolean {
+  if (url.startsWith("mock://")) return true; // sandbox adapter, no network
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" && GATEWAY_HOSTS.has(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
 // ── initiate ──────────────────────────────────────────────────────────
 
 export interface InitiateTransactionParams {
@@ -129,11 +184,28 @@ export interface InitiateTransactionResult {
 /**
  * Start a Paynow transaction (real gateway, or the sandbox adapter when
  * credentials are absent). The response hash is verified in real mode.
+ *
+ * Fail closed: when credentials are absent but mock payments are NOT
+ * allowed on this deployment (production), the call declines instead of
+ * silently opening a sandbox session.
  */
 export async function initiateTransaction(
   params: InitiateTransactionParams,
 ): Promise<InitiateTransactionResult> {
-  if (isMockMode()) return mockInitiate(params);
+  if (isMockMode()) {
+    if (!mockPaymentsAllowed()) {
+      return {
+        ok: false,
+        status: "error",
+        browserUrl: "",
+        redirectUrl: "",
+        pollUrl: "",
+        error: "The payment gateway is not configured on this deployment.",
+        raw: {},
+      };
+    }
+    return mockInitiate(params);
+  }
 
   const fields: Record<string, string> = {
     id: integrationId(),
