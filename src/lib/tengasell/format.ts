@@ -185,7 +185,7 @@ export const SLA = {
 export function parseImages(json: string): string[] {
   try {
     const v = JSON.parse(json || "[]");
-    return Array.isArray(v) ? v.filter((x) => typeof x === "string") : v;
+    return Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
   } catch {
     return [];
   }
