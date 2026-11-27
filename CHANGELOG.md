@@ -33,6 +33,14 @@ Conformance to the 11-11 Tech **MSCS 1.0** (609 controls) + **UDPCS 1.0** standa
 - Ops evidence: nightly-capable backup script (SQLite backup API + manifest with SHA-256), **restore test executed with evidence (BCP-005: 48/48 table-count checks ok)**, SBOM (ops/sbom.json), synthetic smoke checks, runbooks (on-call, credential compromise, break-glass, RPO 24h / RTO 1h, DR), `robots.txt` + `sitemap.xml`.
 - `git tag v0.9.0-mcs` to be cut at certification (12-f).
 
+### Added — Paynow completion (payment reliability)
+- Webhook-independent settlement for the live gateway: a 60s reconciliation sweep (`paynow-reconcile.ts`, started from instrumentation) re-polls pending `paynow_sessions` on Paynow and settles paid orders — a dropped `resulturl` webhook can no longer strand a paid buyer into the 48h payment-SLA cancellation.
+- Return-path closure: `POST /api/paynow/poll` now also accepts `{ orderId }` (latest session for an order); the order detail page polls it every 4s while an order awaits payment, so the page flips to Paid the moment Paynow confirms — also picks up sandbox approvals from another tab in mock mode (inline status banner + toast + auto-reload).
+- Callback hardening: `disputed`/`refunded` webhooks map to a `disputed` session status (visible to support), an already-paid session is never downgraded by late repeats, the pollurl is refreshed per delivery, and state transitions are audited (`paynow:callback` / `paynow:reconcile`; repeats that change nothing write nothing).
+- Finance parity: Paynow settlement now emits the `order.paid` event to the finance service (same shape as the engine's `order:pay`) — escrow funds instantly instead of waiting for the finance sweep backfill.
+- Privacy/UX polish: `phone` is redacted from poll responses (the sandbox page shows its masked hint); payments history labels Paynow channels (`Paynow · EcoCash` …) with proper icons; in-process settle lock prevents double notifications from concurrent webhook/poll/sweep.
+- `docs/PAYNOW.md` — full integration runbook: architecture, protocol details, merchant onboarding, completion guarantees (webhook → return poll → sweep → finance backfill) and go-live checklist; `.env.example` documents all four `PAYNOW_*` vars.
+
 ### Changed
 - Admin "Comms Console" renamed to **Operations Console** — six control-plane groups (Communications · Finance · Support & Trust · Governance · Compliance · Platform), 28 sections.
 - Sign-in session adoption now mirrors into the API in-memory state (no reload needed after gated sign-in).
