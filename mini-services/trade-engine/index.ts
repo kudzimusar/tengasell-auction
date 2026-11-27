@@ -46,7 +46,7 @@ type Ack = (response: unknown) => void;
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME ?? "admin";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "Tengasell#2025";
 
-// ── TrailBase REST helpers ─────────────────────────────────────────
+// ── TrailBase REST helpers ───────────────────────────────────────────
 let adminToken: string | null = null;
 
 async function tbLogin(): Promise<string> {
@@ -1237,7 +1237,7 @@ io.on("connection", (socket: Socket) => {
           "Your offer was declined",
           `${auction.title}: the seller declined US$${offer.amount}.`,
           `#/item/${auction.id}`,
-        );
+        });
         commsEvent({
           userId: offer.buyer_username,
           eventKey: "offer.responded",
@@ -2118,7 +2118,7 @@ io.on("connection", (socket: Socket) => {
   });
 });
 
-// ── boot ─────────────────────────────────────────────────────────
+// ── boot ─────────────────────────────────────────────────────────────
 httpServer.listen(PORT, "0.0.0.0", () => {
   console.log(`[trade-engine] listening on :${PORT}`);
   void (async () => {
