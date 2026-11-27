@@ -71,7 +71,7 @@ export default function OrdersPage({ orderId }: { orderId?: number }) {
   return <OrdersListPage />;
 }
 
-// ── helpers ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+// ── helpers ──────────────────────────────────────────────────────────
 
 function orderRole(order: Order, user: CurrentUser): "buyer" | "seller" | "other" {
   if (order.buyer_user === user.id || order.buyer_username === user.username) return "buyer";
@@ -93,7 +93,7 @@ function useRatedSet(): [Set<number>, (id: number) => void] {
   return [ratedIds, mark];
 }
 
-// ── list view (#/orders) ──────────────────────────────────────────────────────────────────────────────────────────────────────────
+// ── list view (#/orders) ─────────────────────────────────────────────
 
 function OrdersListPage() {
   const { user, loading: authLoading } = useAuth();
@@ -209,7 +209,7 @@ function SignInGate() {
   );
 }
 
-// ── order row ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+// ── order row ────────────────────────────────────────────────────────
 
 type CtaAction = "pay" | "deliver" | "ship" | "rate" | "view";
 
@@ -405,7 +405,7 @@ function OrderRow({
   );
 }
 
-// ── detail view (#/orders/{id}) ───────────────────────────────────────────────────────────────────────────────────────
+// ── detail view (#/orders/{id}) ──────────────────────────────────────
 
 function OrderDetailPage({ orderId }: { orderId: number }) {
   const { user, loading: authLoading } = useAuth();
@@ -599,7 +599,7 @@ function OrderDetailBody({
   );
 }
 
-// ── role-aware action panel ─────────────────────────────────────────────────────────────────────────────
+// ── role-aware action panel ──────────────────────────────────────────
 
 /** Delivery tracking map — seller city → buyer city with a simulated live
  *  courier position. Renders once the order is dispatched. */
@@ -873,7 +873,7 @@ function ActionPanel({
   );
 }
 
-// ── timeline (vertical stepper) ─────────────────────────────────────────────────────────────────────────────────────
+// ── timeline (vertical stepper) ──────────────────────────────────────
 
 interface TimelineStep {
   key: string;
@@ -1025,7 +1025,7 @@ function TimelineStepView({ step }: { step: TimelineStep }) {
   );
 }
 
-// ── item summary card ─────────────────────────────────────────────────────────────────────────────────────────────────────────
+// ── item summary card ────────────────────────────────────────────────
 
 function ItemSummaryCard({ order }: { order: Order }) {
   const { auction, loading } = useCachedAuction(order.auction_id);
@@ -1067,7 +1067,7 @@ function ItemSummaryCard({ order }: { order: Order }) {
   );
 }
 
-// ── payments history card ─────────────────────────────────────────────────────────────────────────────────────────────────────
+// ── payments history card ────────────────────────────────────────────
 
 function PaymentsCard({
   payments,
@@ -1113,7 +1113,7 @@ function PaymentsCard({
   );
 }
 
-// ── skeletons ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+// ── skeletons ────────────────────────────────────────────────────────
 
 function OrdersListSkeleton() {
   return (
