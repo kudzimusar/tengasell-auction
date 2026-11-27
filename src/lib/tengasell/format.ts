@@ -141,6 +141,14 @@ export function orderStatusLabel(status: string): string {
 
 export function paymentMethodLabel(method: string): string {
   switch (method) {
+    case "paynow":
+      return "Paynow";
+    case "paynow-ecocash":
+      return "Paynow · EcoCash";
+    case "paynow-innbucks":
+      return "Paynow · InnBucks";
+    case "paynow-card":
+      return "Paynow · Visa / Mastercard";
     case "ecocash":
       return "EcoCash";
     case "visa":
@@ -177,7 +185,7 @@ export const SLA = {
 export function parseImages(json: string): string[] {
   try {
     const v = JSON.parse(json || "[]");
-    return Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
+    return Array.isArray(v) ? v.filter((x) => typeof x === "string") : v;
   } catch {
     return [];
   }
