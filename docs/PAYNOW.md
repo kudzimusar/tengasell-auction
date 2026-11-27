@@ -172,3 +172,33 @@ runs in production — only the endpoint differs.
 - [ ] Refund path exercised once via the finance console (credit note +
       ledger stays balanced)
 - [ ] ZIMRA: Paynow transaction reports exported for the VAT pack
+
+---
+
+## 7. Verifying the build lane locally (CI mirror)
+
+The `CI` workflow ("Build and smoke test") can be mirrored step-for-step on a
+workstation before pushing:
+
+```bash
+npm ci --no-audit --no-fund
+npx prisma generate
+DATABASE_URL="file:$PWD/ci.db" npx prisma db push --skip-generate
+DATABASE_URL="file:$PWD/ci.db" npm run build
+DATABASE_URL="file:$PWD/ci.db" PORT=3100 HOSTNAME=127.0.0.1 node .next/standalone/server.js &
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3100/                  # 200
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3100/api/public/status # 200
+curl -s http://127.0.0.1:3100/api/public/status | grep -q '"ok":true'            # contract
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3100/api/v1/listings   # 401
+```
+
+Two points where a local run can silently diverge from CI:
+
+- `DATABASE_URL` must be an **absolute** `file:` path for **both** the
+  `prisma db push` and the server boot — a relative path resolves against
+  `prisma/schema.prisma` for the push but against the standalone server's
+  working directory at runtime, so the server opens an empty database and
+  `/api/public/status` fails with `P2021 — table does not exist`.
+- Use `npm ci`, not `bun install`: `package-lock.json` pins the `next`
+  version CI builds with; a `bun.lock`-resolved tree can carry a different
+  `next` minor and is not what the lane verifies.
