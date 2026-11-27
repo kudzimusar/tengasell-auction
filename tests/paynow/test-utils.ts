@@ -25,7 +25,7 @@ export function tokenFor(username: string, admin = false): string {
 function decodeToken(token: string): { username?: string; admin?: boolean } {
   const part = token.split(".")[1] ?? "";
   try {
-    return JSON.parse(Buffer.from(part, "base64").toString("utf8"));
+    return JSON.parse(Buffer.from(part, "base64url").toString("utf8"));
   } catch {
     return {};
   }
@@ -130,7 +130,7 @@ type Op = "$eq" | "$lte" | "$gte" | "$gt";
 function applyFilters(rows: Record<string, unknown>[], search: URLSearchParams) {
   let out = [...rows];
   for (const [key, value] of search.entries()) {
-    const m = /^(\w+)\[(\w+)\] \[(\$eq|\$lte|\$gte|\$gt)\]$/.exec(key);
+    const m = /^filter\[(\w+)\]\[(\$eq|\$lte|\$gte|\$gt)\]$/.exec(key);
     if (!m) continue;
     const [, field, op] = m;
     out = out.filter((row) => {
