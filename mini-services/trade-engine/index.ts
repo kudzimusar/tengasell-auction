@@ -35,6 +35,7 @@
 
 import { createServer } from "node:http";
 import { Server, type Socket } from "socket.io";
+import { simulatedPaymentsAllowed } from "./pay-gate";
 
 const PORT = 3002;
 const TRAILBASE = "http://localhost:3001";
@@ -45,7 +46,7 @@ type Ack = (response: unknown) => void;
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME ?? "admin";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "Tengasell#2025";
 
-// ── TrailBase REST helpers ───────────────────────────────────────────
+// ── TrailBase REST helpers ─────────────────────────────────────────
 let adminToken: string | null = null;
 
 async function tbLogin(): Promise<string> {
@@ -1915,6 +1916,15 @@ io.on("connection", (socket: Socket) => {
     try {
       const user = await requireAuth();
       if (!user) return ack?.({ ok: false, error: "Sign in to pay." });
+      // R6 mock/live safety — simulated settlement must be explicitly
+      // allowed on this deployment; production orders settle through the
+      // Paynow gateway only.
+      if (!simulatedPaymentsAllowed()) {
+        return ack?.({
+          ok: false,
+          error: "Payments settle through the Paynow gateway — direct settlement is disabled on this deployment.",
+        });
+      }
       const orderId = Number(data?.orderId);
       const order = await getRecord("orders", orderId);
       if (!order) return ack?.({ ok: false, error: "Order not found." });
@@ -2108,7 +2118,7 @@ io.on("connection", (socket: Socket) => {
   });
 });
 
-// ── boot ─────────────────────────────────────────────────────────────
+// ── boot ─────────────────────────────────────────────────────────
 httpServer.listen(PORT, "0.0.0.0", () => {
   console.log(`[trade-engine] listening on :${PORT}`);
   void (async () => {
