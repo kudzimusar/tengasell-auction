@@ -128,7 +128,7 @@ export function useCachedAuction(id: number): { auction: Auction | null; loading
   return state;
 }
 
-// ── status chip (orderStatusLabel with NXS state colors) ─────────
+// ── status chip (orderStatusLabel with NXS state colors) ─────────────
 
 const STATUS_ICONS: Record<OrderStatus, LucideIcon> = {
   pending_payment: Clock,
@@ -166,7 +166,7 @@ export function OrderStatusChip({ status, className }: { status: OrderStatus; cl
   );
 }
 
-// ── pay-by SLA countdown ("Pay within 43h 12m", urgent < 6h) ─────
+// ── pay-by SLA countdown ("Pay within 43h 12m", urgent < 6h) ─────────
 
 export function PayByCountdown({
   payBy,
@@ -203,7 +203,7 @@ export function PayByCountdown({
   );
 }
 
-// ── payment method icon map (payments history rows) ─────────
+// ── payment method icon map (payments history rows) ──────────────────
 
 const METHOD_ICONS: Record<string, LucideIcon> = {
   paynow: ShieldCheck,
@@ -256,7 +256,7 @@ export function paymentStatusLabel(status: string): ReactNode {
   }
 }
 
-// ── rated-order bookkeeping (localStorage ts_rated_orders) ──────────
+// ── rated-order bookkeeping (localStorage ts_rated_orders) ───────────
 
 const RATED_KEY = "ts_rated_orders";
 
@@ -720,7 +720,7 @@ export function ShipDialog({
   );
 }
 
-// ── RatingDialog — rate the counterparty ─────────────────────────
+// ── RatingDialog — rate the counterparty ─────────────────────────────
 
 const SCORE_LABELS: Record<number, string> = {
   1: "Poor",
