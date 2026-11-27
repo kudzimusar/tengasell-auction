@@ -10,11 +10,30 @@
 //   · notifications insert for the seller ("Payment received … dispatch
 //     within 3 days (SLA)")
 //   · audit_events insert (action "order:pay", source "web")
+//   · finance "order.paid" event (fire-and-forget — same shape the trade
+//     engine sends; the finance 60s sweep backfills if it is missed)
 
 import { tbCreate, tbGet, tbList, tbPatch, nowIso } from "./trailbase-admin";
 import { isMockMode } from "./paynow";
 
 const TRAILBASE = process.env.TRAILBASE_URL ?? "http://localhost:3001";
+const FINANCE_URL = process.env.FINANCE_URL ?? "http://localhost:3006";
+
+// ── finance bridge (parity with the trade engine's order:pay) ────────
+
+/**
+ * Fire-and-forget lifecycle event to the finance-service (:3006) — 2s
+ * timeout, errors swallowed: settlement NEVER waits on finance (the 60s
+ * finance sweep backfills escrow for paid orders regardless).
+ */
+function financeEvent(type: string, payload: Record<string, unknown>): void {
+  void fetch(`${FINANCE_URL}/events`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ type, ...payload }),
+    signal: AbortSignal.timeout(2000),
+  }).catch(() => undefined);
+}
 
 // ── row shapes (mirror the SQLite schema) ─────────────────────────────
 
@@ -166,6 +185,23 @@ export async function loadSessionByReference(
   return toSessionRow(rows[0] ?? null);
 }
 
+/**
+ * Newest session row for an order — the return-page poll loop (after the
+ * buyer comes back from paynow.co.zw) and the reconciliation sweep key
+ * off the order, not the merchant reference (the buyer's browser only
+ * knows the orderId from the return URL).
+ */
+export async function loadLatestSessionForOrder(
+  orderId: number,
+): Promise<PaynowSessionRow | null> {
+  const rows = await tbList("paynow_sessions", {
+    "filter[order_id][$eq]": orderId,
+    order: "-id",
+    limit: 1,
+  });
+  return toSessionRow(rows[0] ?? null);
+}
+
 export async function patchSession(
   session: PaynowSessionRow,
   patch: Partial<PaynowSessionRow>,
@@ -173,6 +209,10 @@ export async function patchSession(
   await tbPatch("paynow_sessions", session.id, patch as Record<string, unknown>);
   return { ...session, ...patch, updated_at: nowIso() };
 }
+
+/** In-process settle guard — keeps concurrent webhook / sweep / poll from
+ *  double-writing notifications for the same order at the same instant. */
+const settling = new Set<number>();
 
 /**
  * Settle a paid session — MIRRORS the trade engine's `order:pay` handler.
@@ -182,6 +222,20 @@ export async function patchSession(
  * unchanged (no duplicate payments/notifications/audit rows).
  */
 export async function settlePaidOrder(
+  session: PaynowSessionRow,
+): Promise<OrderRow | null> {
+  if (settling.has(session.order_id)) {
+    return toOrderRow(await tbGet("orders", session.order_id));
+  }
+  settling.add(session.order_id);
+  try {
+    return await settlePaidOrderInner(session);
+  } finally {
+    settling.delete(session.order_id);
+  }
+}
+
+async function settlePaidOrderInner(
   session: PaynowSessionRow,
 ): Promise<OrderRow | null> {
   const order = toOrderRow(await tbGet("orders", session.order_id));
@@ -237,6 +291,20 @@ export async function settlePaidOrder(
       gateway: "paynow",
     }),
     created_at: now,
+  });
+
+  // Finance (12-b parity with the engine's order:pay): fund escrow for this
+  // payment — item price + the auction's shipping fee. Fire-and-forget; the
+  // finance 60s sweep backfills if this call is missed.
+  const auction = await tbGet("auctions", order.auction_id).catch(() => null);
+  financeEvent("order.paid", {
+    orderId: order.id,
+    buyer: order.buyer_username,
+    seller: order.seller_username,
+    itemPrice: Number(order.final_price ?? 0),
+    shipping: Number((auction as { shipping_fee?: number } | null)?.shipping_fee ?? 0),
+    method: `paynow-${session.method}`,
+    reference: session.reference,
   });
 
   return toOrderRow(await tbGet("orders", order.id));
