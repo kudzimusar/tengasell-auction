@@ -23,7 +23,7 @@ describe("R5 — poll decision table (never claims success on error)", () => {
     expect(decidePoll({ http: 0, body: null })).toEqual({ kind: "retry" });
   });
 
-  it("a 5xx response carrying a PAID body must NOT confirm the payment", async () => {
+  it("a 5xx response carrying a PAID body must NOT confirm the payment", () => {
     const decision = decidePoll({ http: 500, body: { ok: true, status: "paid", amount: 10 } });
     expect(decision.kind).toBe("retry"); // never "paid"
   });
