@@ -123,6 +123,17 @@ record_apis: [
     update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
   },
   {
+    # Paynow settlement journal — durable idempotency for order settlement
+    # (unique reference = atomic claim). Internal bookkeeping for the
+    # /api/paynow/* routes and the reconcile sweep: admin token only.
+    name: "paynow_settlements"
+    table_name: "paynow_settlements"
+    acl_authenticated: [CREATE, READ, UPDATE]
+    read_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+    update_access_rule: "EXISTS(SELECT 1 FROM _user WHERE id = _USER_.id AND admin = TRUE)"
+  },
+  {
     # Public feedback (Yahoo Auctions-style ratings)
     name: "ratings"
     table_name: "ratings"
