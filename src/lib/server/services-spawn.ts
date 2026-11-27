@@ -16,6 +16,7 @@ import { spawn } from "node:child_process";
 import net from "node:net";
 import fs from "node:fs";
 import path from "node:path";
+import { mockPaymentsAllowed } from "./paynow";
 
 const HOME = process.env.HOME ?? "/home/z";
 const PROJECT = process.cwd();
@@ -32,6 +33,8 @@ interface ServiceSpec {
   logFile?: string;
   /** Skip (and warn once) while the service folder does not exist yet. */
   requireDir?: boolean;
+  /** Extra env for this service only (merged over process.env). */
+  extraEnv?: Record<string, string>;
 }
 
 function trailBinary(): string {
@@ -63,6 +66,10 @@ const SERVICES: ServiceSpec[] = [
     command: "bun",
     args: ["--hot", "index.ts"],
     bootTimeoutMs: 15_000,
+    // R6 payment safety: make the engine's simulated-settlement gate
+    // explicit instead of env-inheritance luck — allowed exactly when
+    // the app itself runs mock payments (dev/demo), forced off otherwise.
+    extraEnv: { ALLOW_SIMULATED_PAYMENTS: mockPaymentsAllowed() ? "1" : "0" },
   },
   {
     // TUCS comms-service (Task 11-a) — user header x-tgs-user set by BFF.
@@ -146,7 +153,7 @@ async function spawnService(spec: ServiceSpec): Promise<void> {
       cwd: spec.cwd,
       detached: true,
       stdio: ["ignore", fd, fd],
-      env: { ...process.env },
+      env: { ...process.env, ...(spec.extraEnv ?? {}) },
     });
     child.unref();
     for (let i = 0; i < Math.ceil(spec.bootTimeoutMs / 500); i++) {

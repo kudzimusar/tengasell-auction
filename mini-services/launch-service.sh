@@ -4,6 +4,14 @@
 # Usage: launch-service.sh <service-folder-name> <port> [entry]
 set -u
 
+# R6 payment safety (dev sandbox convenience): the trade engine's simulated
+# order settlement (order:pay for the classic methods) is allowed in the
+# dev sandbox by default — production deployments must NOT set this (the
+# engine then fails closed and orders settle through the Paynow gateway
+# only; see docs/PAYNOW.md §6).
+ALLOW_SIMULATED_PAYMENTS="${ALLOW_SIMULATED_PAYMENTS:-1}"
+export ALLOW_SIMULATED_PAYMENTS
+
 FOLDER_NAME="${1:?usage: launch-service.sh <folder> <port> [entry]}"
 PORT="${2:?port required}"
 ENTRY="${3:-index.ts}"
