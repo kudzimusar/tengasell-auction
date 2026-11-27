@@ -8,20 +8,28 @@
 // seconds — and if it is dropped entirely, only polling finishes the job.
 //
 // While an order sits in pending_payment, usePaynowReturn polls
-// POST /api/paynow/poll { orderId } every 4s:
-//   · paid   → toast + onSettled(order) — the caller reloads the order,
+// POST /api/paynow/poll { orderId } every 4s WITH THE SESSION CREDENTIALS
+// (the server authenticates and authorizes the caller as an order party):
+//   · paid   → toast + onSettled() — the caller reloads the order,
 //              payments and receipts
 //   · cancelled / failed → stop; the buyer can retry from the payment
 //     panel (a note is shown)
 //   · none  → stop (no gateway session for this order — nothing to watch)
 //   · disputed → stop (support path; the order stays pending per ops)
+//   · 401   → stop ("signin") — the buyer must sign in again to watch the
+//     payment (never a fake success)
+//   · 5xx / network / malformed response → TRANSIENT: keep retrying (up
+//     to MAX_TRANSIENT_ERRORS consecutive failures) and then stop with
+//     "unreachable" + a manual re-check action — never claim success and
+//     never permanently stop on the first hiccup (R5).
 // In mock mode the same loop picks up sandbox approvals from another tab,
 // so the orders page updates live even without the trade engine socket.
 
-import { useEffect, useRef, useState } from "react";
-import { RefreshCw, XCircle } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { RefreshCw, XCircle, WifiOff } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { formatUSD } from "@/lib/tengasell/format";
+import { postPaynowPoll, type PaynowPollOutcome } from "@/lib/tengasell/paynow-client";
 import type { Order } from "@/lib/tengasell/types";
 
 export type PaynowReturnState =
@@ -30,21 +38,60 @@ export type PaynowReturnState =
   | "pending" // a gateway session is open — polling
   | "paid" // settled this poll (transient — reload flips the order)
   | "cancelled" // the attempt failed/was cancelled
-  | "none"; // no session for this order
+  | "none" // no session for this order
+  | "unreachable" // transient errors exhausted — manual re-check offered
+  | "signin"; // session expired — sign in to watch this payment
 
-interface PollResponse {
-  ok?: boolean;
-  status?: string;
-  amount?: number;
-  orderId?: number;
-  order?: Order | null;
-  error?: string;
+/** Consecutive transient failures tolerated before "unreachable". */
+export const MAX_TRANSIENT_ERRORS = 6;
+
+// ── the decision table (pure — exported for unit tests) ────────────────
+
+export interface PollSignal {
+  /** HTTP status (0 = network failure). */
+  http: number;
+  /** Parsed body (null on network error / malformed JSON). */
+  body: PaynowPollOutcome["body"];
 }
+
+export type PollDecision =
+  | { kind: "paid"; amount: number }
+  | { kind: "terminal"; state: "cancelled" | "none" }
+  | { kind: "signin" }
+  | { kind: "retry" }
+  | { kind: "pending" };
+
+/**
+ * Classify one poll result. NEVER returns "paid" unless the server said
+ * paid with ok:true — errors of every kind map to retry/stop states, so
+ * a failing network can never be mistaken for a completed payment.
+ */
+export function decidePoll(signal: PollSignal): PollDecision {
+  const { http, body } = signal;
+  if (http === 401) return { kind: "signin" };
+  if (http === 0 || http >= 500) return { kind: "retry" }; // transient
+  if (!body?.ok) {
+    // 400/404 and malformed bodies — no session or bad input: stop
+    // quietly; there is nothing this client can do about it by polling.
+    return { kind: "terminal", state: "none" };
+  }
+  const s = String(body.status ?? "pending");
+  if (s === "paid") return { kind: "paid", amount: Number(body.amount ?? 0) };
+  if (s === "cancelled" || s === "failed") {
+    return { kind: "terminal", state: "cancelled" };
+  }
+  if (s === "none" || s === "disputed") return { kind: "terminal", state: "none" };
+  return { kind: "pending" };
+}
+
+// ── the hook ──────────────────────────────────────────────────────────
 
 /**
  * Poll the latest Paynow session for an order while it awaits payment.
- * `onSettled` fires once, with the freshly-settled order row, when the
- * payment completes (keep it side-effect-light — it re-renders the page).
+ * `onSettled` fires once, with null (the minimal DTO carries no order row —
+ * the caller reloads the authoritative order), when the payment completes.
+ * Returns the display state for the banner. Back-compatible with the
+ * original completion-PR wiring (`onSettled(order | null)`).
  */
 export function usePaynowReturn(
   orderId: number,
@@ -54,80 +101,106 @@ export function usePaynowReturn(
   const [polled, setPolled] = useState<PaynowReturnState>("idle");
   const settledRef = useRef(onSettled);
   const firedRef = useRef(false);
+  const firstRef = useRef(true);
+  const errorsRef = useRef(0);
+  const aliveRef = useRef(true);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     settledRef.current = onSettled;
   }, [onSettled]);
 
+  const apply = useCallback((next: PaynowReturnState) => {
+    if (aliveRef.current) setPolled(next);
+  }, []);
+
+  const check = useCallback(async () => {
+    if (!aliveRef.current || firedRef.current) return;
+    if (firstRef.current) {
+      firstRef.current = false;
+      apply("checking");
+    }
+    const outcome = await postPaynowPoll({ orderId });
+    if (!aliveRef.current || firedRef.current) return;
+
+    const decision = decidePoll({ http: outcome.http, body: outcome.body });
+    switch (decision.kind) {
+      case "paid": {
+        firedRef.current = true;
+        setPolled("paid");
+        toast({
+          title: "Payment confirmed",
+          description: `Order #${orderId} · ${formatUSD(decision.amount)} — the seller has been notified and dispatches within 3 days.`,
+        });
+        settledRef.current?.(null); // caller reloads the authoritative row
+        return;
+      }
+      case "terminal":
+        firedRef.current = true;
+        apply(decision.state);
+        return;
+      case "signin":
+        firedRef.current = true;
+        apply("signin");
+        return;
+      case "retry":
+        errorsRef.current += 1;
+        if (errorsRef.current > MAX_TRANSIENT_ERRORS) {
+          // Transient failures exhausted — stop the loop, keep the
+          // recovery experience (manual re-check) alive.
+          firedRef.current = true;
+          apply("unreachable");
+        } else {
+          apply("pending");
+        }
+        return;
+      case "pending":
+      default:
+        errorsRef.current = 0;
+        apply("pending");
+        return;
+    }
+  }, [apply, orderId]);
+
   useEffect(() => {
     // Nothing to watch unless the order is awaiting payment.
     if (orderStatus !== "pending_payment") return;
 
-    let alive = true;
+    aliveRef.current = true;
     firedRef.current = false;
+    firstRef.current = true;
+    errorsRef.current = 0;
 
-    const apply = (next: PaynowReturnState) => {
-      if (alive) setPolled(next);
-    };
-
-    const check = async () => {
-      if (!alive || firedRef.current) return;
-      apply("checking");
-      try {
-        const res = await fetch("/api/paynow/poll", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ orderId }),
-        });
-        const body = (await res.json().catch(() => null)) as PollResponse | null;
-        if (!alive || firedRef.current) return;
-        if (!res.ok || !body?.ok) {
-          // 404/400 — no session or bad input: stop quietly.
-          firedRef.current = true;
-          apply("none");
-          return;
-        }
-        const s = String(body.status ?? "pending");
-        if (s === "paid") {
-          firedRef.current = true;
-          setPolled("paid");
-          toast({
-            title: "Payment confirmed",
-            description: `Order #${orderId} · ${formatUSD(Number(body.amount ?? 0))} — the seller has been notified and dispatches within 3 days.`,
-          });
-          settledRef.current?.(body.order ?? null);
-        } else if (s === "cancelled" || s === "failed") {
-          firedRef.current = true;
-          apply("cancelled");
-        } else if (s === "none" || s === "disputed") {
-          firedRef.current = true;
-          apply("none");
-        } else {
-          apply("pending");
-        }
-      } catch {
-        // transient network error — the interval retries while alive
-      }
-    };
-
-    void check();
-    const timer = setInterval(() => void check(), 4000);
+    const initial = setTimeout(() => void check(), 0);
+    timerRef.current = setInterval(() => void check(), 4000);
     return () => {
-      alive = false;
-      clearInterval(timer);
+      aliveRef.current = false;
+      clearTimeout(initial);
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = null;
     };
-  }, [orderId, orderStatus]);
+  }, [check, orderStatus]);
 
   // Derived: once the order leaves pending_payment nothing is watchable.
   return orderStatus !== "pending_payment" ? "idle" : polled;
 }
 
+// ── the banner ─────────────────────────────────────────────────────────
+
 /**
  * Inline status banner for the order detail page: "payment in progress"
- * while polling, a retry note after a cancelled/failed attempt.
- * Returns null when there is nothing to say.
+ * while polling, a retry note after a cancelled/failed attempt, a
+ * recovery note with a manual re-check after connectivity problems, and a
+ * sign-in prompt when the session expired. Returns null when there is
+ * nothing to say.
  */
-export function PaynowReturnBanner({ state }: { state: PaynowReturnState }) {
+export function PaynowReturnBanner({
+  state,
+  onRecheck,
+}: {
+  state: PaynowReturnState;
+  onRecheck?: () => void;
+}) {
   if (state === "checking") {
     return (
       <div
@@ -180,6 +253,48 @@ export function PaynowReturnBanner({ state }: { state: PaynowReturnState }) {
           The last Paynow attempt was cancelled or failed. Payment can be
           retried from the payment panel below — Paynow (EcoCash, InnBucks,
           card) or another method.
+        </p>
+      </div>
+    );
+  }
+
+  if (state === "unreachable") {
+    return (
+      <div
+        role="note"
+        className="flex items-start gap-2.5 rounded-card border border-border bg-muted/50 p-3.5 sm:p-4"
+      >
+        <WifiOff className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <div className="min-w-0">
+          <p className="text-caption font-medium text-foreground">
+            Couldn&apos;t reach the payment status check. Your payment may
+            still have completed — no money state is changed by this page.
+          </p>
+          {onRecheck ? (
+            <button
+              type="button"
+              onClick={onRecheck}
+              className="mt-1.5 inline-flex min-h-9 items-center gap-1.5 rounded-control text-caption font-semibold text-teal hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              <RefreshCw className="size-3.5" aria-hidden="true" />
+              Check the payment status again
+            </button>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  if (state === "signin") {
+    return (
+      <div
+        role="note"
+        className="flex items-start gap-2.5 rounded-card border border-border bg-muted/50 p-3.5 sm:p-4"
+      >
+        <WifiOff className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <p className="text-caption font-medium text-foreground">
+          Your session expired while watching this payment — sign in again
+          to see its status. The payment itself is unaffected.
         </p>
       </div>
     );
