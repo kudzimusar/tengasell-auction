@@ -141,6 +141,14 @@ export function orderStatusLabel(status: string): string {
 
 export function paymentMethodLabel(method: string): string {
   switch (method) {
+    case "paynow":
+      return "Paynow";
+    case "paynow-ecocash":
+      return "Paynow · EcoCash";
+    case "paynow-innbucks":
+      return "Paynow · InnBucks";
+    case "paynow-card":
+      return "Paynow · Visa / Mastercard";
     case "ecocash":
       return "EcoCash";
     case "visa":

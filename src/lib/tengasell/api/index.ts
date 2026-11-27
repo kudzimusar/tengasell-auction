@@ -4,6 +4,7 @@
 // 3001) when reachable, else falls back to the local demo store so the
 // experience degrades gracefully (NXS offline state) instead of breaking.
 
+import { useEffect, useState } from "react";
 import { LocalStore } from "./local";
 import { RemoteApi } from "./remote";
 import type { Auction, AuctionQuery, Bid, BidResult, Category, CurrentUser, LiveSession, Message, Notification, Offer, Order, Paginated, Payment, Profile, Question, Rating, SavedSearch, SaveSearchInput, Thread } from "../types";
@@ -128,6 +129,13 @@ export async function initApi(): Promise<ApiMode> {
 
 export function getApiMode(): ApiMode {
   return mode;
+}
+
+/** Reactive mode hook — updates when initApi() resolves the probe. */
+export function useApiMode(): ApiMode {
+  const [m, setM] = useState<ApiMode>(mode);
+  useEffect(() => onApiMode(setM), []);
+  return m;
 }
 
 export function onApiMode(fn: (m: ApiMode) => void): () => void {

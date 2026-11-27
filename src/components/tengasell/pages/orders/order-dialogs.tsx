@@ -206,6 +206,10 @@ export function PayByCountdown({
 // ── payment method icon map (payments history rows) ──────────────────
 
 const METHOD_ICONS: Record<string, LucideIcon> = {
+  paynow: ShieldCheck,
+  "paynow-ecocash": ShieldCheck,
+  "paynow-innbucks": ShieldCheck,
+  "paynow-card": CreditCard,
   ecocash: Phone,
   zipit: Landmark,
   visa: CreditCard,

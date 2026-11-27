@@ -42,6 +42,8 @@ import {
 import { toAuctionView, type CurrentUser, type Order, type OrderStatus, type Payment } from "@/lib/tengasell/types";
 import { DisputeButton } from "./dispute-button";
 import { ReceiptsCard } from "./receipts-card";
+import { PaynowReturnBanner, usePaynowReturn } from "./paynow-return";
+import { bus } from "@/lib/tengasell/bus";
 import { Avatar, EmptyState, ErrorState, PriceTag } from "@/components/tengasell/ui";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -523,6 +525,16 @@ function OrderDetailBody({
   const counterparty = isBuyer ? order.seller_username : order.buyer_username;
   const profileLink = useLinkProps(`/u/${counterparty}`);
 
+  // Paynow return handling: while the order awaits payment, poll the latest
+  // gateway session (by orderId — the return URL only carries the order) so
+  // the page settles the moment Paynow confirms, even when the resulturl
+  // webhook trails the buyer's redirect. Works for mock mode too (sandbox
+  // approvals from another tab land here).
+  const paynowState = usePaynowReturn(order.id, order.status, (settledOrder) => {
+    if (settledOrder) bus.emit("order:update", { order: settledOrder });
+    onRefresh();
+  });
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 sm:py-8">
       <a
@@ -554,6 +566,8 @@ function OrderDetailBody({
           </span>
         </p>
       </header>
+
+      <PaynowReturnBanner state={paynowState} />
 
       <div className="mt-6 grid items-start gap-4 sm:gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         {/* action panel first on mobile, right column on desktop */}
